@@ -51,5 +51,3 @@ That is managed by tools, wich are part of executor, not task manager. Task mana
 The task manager constructs the semantically sorted list. 
 It is constructed via UMAP ing the descriptions embeddings into 2D vectors, and then hilbert curve mapping them to a 1D list. 
 The 1D list is the semantically sorted information base. 
-
-

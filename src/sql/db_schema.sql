@@ -84,4 +84,3 @@ CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     RETURN new_id;
 END;
 $$ LANGUAGE plpgsql;
-

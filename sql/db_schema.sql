@@ -11,15 +11,16 @@ CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     name TEXT REFERENCES addrs(name),
     content TEXT NOT NULL,
+    desc TEXT NOT NULL, -- used for semantic similarity search
     embedding vector() -- TODO: ADD DIMENSIONS
 );
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     name TEXT REFERENCES addrs(name),
-    desc TEXT NOT NULL,
-    header TEXT NOT NULL,
-    body TEXT,
+    desc TEXT NOT NULL, -- used for semantic similarity search
+    header TEXT NOT NULL, -- the usage manual (imperative)
+    body TEXT NOT NULL,
     head_emb vector() -- TODO: ADD DIMENSIONS
 );
 
@@ -32,8 +33,22 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name)
+    name TEXT REFERENCES addrs(name),
+    window_position INT,
+    window_size_r INT,
+    window_size_l INT,
+    CONSTRAINT CHECK ( 
+        (window_position IS NULL AND window_size_l IS NULL and window_size_r IS NULL) 
+        OR 
+        (window_position IS NOT NULL AND window_size_l IS NOT NULL and window_size_r IS NOT NULL)
+    )
 );
+
+CREATE TABLE master_load(
+    master_addr BIGINT REFERENCES masters(addr),
+    item_addr BIGINT REFERENCES addrs(addr),
+    PRIMARY KEY (master_addr, item_addr)
+)
 
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,

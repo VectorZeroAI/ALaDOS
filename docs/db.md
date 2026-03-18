@@ -2,4 +2,4 @@
 
 PostgreSQL.
 
-Schema is located in the sql/db_schema.sql
+Schema is located in [here](./../sql/db_schema.sql)

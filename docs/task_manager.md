@@ -1,6 +1,7 @@
 # Task manager
-Is basically a module exposing a bunch of methods.
-The methods are the following:
+Exposes a bunch of methods for manipulating tasks, and keeps track of the Task context.
+
+the methods are the following:
 
 1. slave.insert(position relative to the currently executed slave goal, upwards only, slave_goal_json.)
 2. master.add(master_goal_json)
@@ -32,5 +33,23 @@ Master goal json is:
     "instruction": "", // instruction text
     "name": "name" // optional
 }
-
 ```
+
+## Task context tracker
+
+The task manager keeps a bunch of data about the tasks context around.
+
+Each task, e.g. master goal has a task shared context window. It consists of:
+- sliding context window
+- loaded addrs
+- owned entires
+
+That is managed by tools, wich are part of executor, not task manager. Task manager just loads them from the DB. 
+
+### On startup 
+
+The task manager constructs the semantically sorted list. 
+It is constructed via UMAP ing the descriptions embeddings into 2D vectors, and then hilbert curve mapping them to a 1D list. 
+The 1D list is the semantically sorted information base. 
+
+

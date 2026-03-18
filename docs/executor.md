@@ -64,4 +64,4 @@ for i in json["tool_calls"]:
 ```
 
 > [!NOTE]
-> I dont use Async coroutine, or Async green thread executor, because when a thread waits for the LLM to finish, it doesnt hammer the API with new calls, while an Async system would do that, else what is the actual differense? If I dont use await api_call , then yeah, it wont wait it and just to others and hammer the API to trigger ratelimits, but whats the point then? + python is actively trying to make threads truly paralel, removing GIL, so this is the best start in the longterm
+> I dont use Async coroutine, or Async green thread executor, because when a thread waits for the LLM to finish, it doesnt hammer the API with new calls, while an Async system would do that, else what is the actual differense? If I dont use await api_call , then yeah, it wont wait it and just to others and hammer the API to trigger ratelimits, but whats the point then? + python is actively trying to make threads truly paralel, removing GIL, so this is the best start in the long term.

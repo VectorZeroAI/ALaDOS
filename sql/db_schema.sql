@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS slaves (
 CREATE TABLE IF NOT EXISTS slave_req (
     slave_addr BIGINT REFERENCES slaves(addr) ON DELETE CASCADE,
     req_addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE,
-PRIMARY KEY (slave_addr, req_addr)
+    PRIMARY KEY (slave_addr, req_addr)
 );
 
 CREATE TABLE IF NOT EXISTS ownership(
@@ -85,70 +85,3 @@ CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
 END;
 $$ LANGUAGE plpgsql;
 
--- new slave function definition
-
-CREATE OR REPLACE FUNCTION new_slave(
-    p_master_addr BIGINT,
-    p_name TEXT,
-    p_instruction TEXT,
-    p_requires BIGINT[],
-    p_results_addr BIGINT DEFAULT NULL,
-    p_result_name TEXT DEFAULT NULL
-    )
-
-    RETURNS BIGINT AS $$
-    DECLARE
-        new_slave_addr BIGINT;
-        req BIGINT;
-    BEGIN
-        INSERT INTO slaves (master_addr, name, instruction, results_addr, result_name)
-        VALUES (p_master_addr, p_name, p_instruction, p_results_addr, p_result_name)
-    RETURNING addr INTO new_slave_addr;
-
-    FOREACH req IN ARRAY p_requires LOOP
-        INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
-    END LOOP;
-
-    RETURN new_slave_addr;
-END;
-$$ LANGUAGE plpgsql;
-
--- Notifier for the sceduler
-CREATE OR REPLACE FUNCTION notify_result_inserted()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        PERFORM pg_notify('new_result', NEW.addr::TEXT);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_notify_result
-AFTER INSERT ON results
-FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
-
-CREATE OR REPLACE FUNCTION notify_context_changed()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        PERFORM pg_notify('context', NEW.);   
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_notify_context
-AFTER UPDATE ON masters
-FOR EACH ROW EXECUTE FUNCTION notify_context_changed();
-
-CREATE OR REPLACE FUNCTION resolve_name(p_name TEXT)
-RETURNS BIGINT AS $$
-DECLARE
-    v_addr BIGINT;
-BEGIN
-    SELECT addr INTO v_addr FROM addr_names WHERE name = p_name;
-
-    IF v_addr IS NULL THEN
-        RAISE EXCEPTION 'Unknown name: %', p_name;
-    END IF;
-
-    RETURN v_addr;
-END;
-$$ LANGUAGE plpgsql;

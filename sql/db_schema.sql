@@ -4,12 +4,15 @@ CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
 CREATE TABLE IF NOT EXISTS addrs (
     addr BIGINT DEFAULT nextval('global_next_id') PRIMARY KEY,
-    name TEXT UNIQUE
 );
+
+CREATE TABLE IF NOT EXISTS names(
+    name TEXT PRIMARY KEY,
+    addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE
+)
 
 CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name),
     content TEXT NOT NULL,
     desc TEXT NOT NULL, -- used for semantic similarity search
     embedding vector() -- TODO: ADD DIMENSIONS
@@ -17,7 +20,6 @@ CREATE TABLE IF NOT EXISTS knowledge (
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name),
     desc TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
@@ -33,7 +35,6 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name),
     window_position INT,
     window_size_r INT,
     window_size_l INT,
@@ -52,14 +53,12 @@ CREATE TABLE master_load(
 
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name),
     content_json JSONB,
     content_str TEXT
 );
 
 CREATE TABLE IF NOT EXISTS slaves (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    name TEXT REFERENCES addrs(name),
     master_addr BIGINT REFERENCES masters(addr),
     instruction TEXT NOT NULL,
     results_addr BIGINT REFERENCES results(addr),
@@ -127,14 +126,29 @@ CREATE TRIGGER trg_notify_result
 AFTER INSERT ON results
 FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
 
-CREATE OR REPLACE FUNCTION notify_context_changed()-- TODO : NOT DONE YET.
-    RETURNS TRIGGER AS $$-- TODO : NOT DONE YET.
-    BEGIN-- TODO : NOT DONE YET.
-        PERFORM pg_notify('context', NEW.);   -- TODO : NOT DONE YET.
-    RETURN NEW;-- TODO : NOT DONE YET.
-END;-- TODO : NOT DONE YET.
-$$ LANGUAGE plpgsql;-- TODO : NOT DONE YET.
+CREATE OR REPLACE FUNCTION notify_context_changed()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        PERFORM pg_notify('context', NEW.);   
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_notify_context-- TODO : NOT DONE YET.
-AFTER UPDATE ON masters-- TODO : NOT DONE YET.
-FOR EACH ROW EXECUTE FUNCTION notify_context_changed();-- TODO : NOT DONE YET.
+CREATE TRIGGER trg_notify_context
+AFTER UPDATE ON masters
+FOR EACH ROW EXECUTE FUNCTION notify_context_changed();
+
+CREATE OR REPLACE FUNCTION resolve_name(p_name TEXT)
+RETURNS BIGINT AS $$
+DECLARE
+    v_addr BIGINT;
+BEGIN
+    SELECT addr INTO v_addr FROM addr_names WHERE name = p_name;
+
+    IF v_addr IS NULL THEN
+        RAISE EXCEPTION 'Unknown name: %', p_name;
+    END IF;
+
+    RETURN v_addr;
+END;
+$$ LANGUAGE plpgsql;

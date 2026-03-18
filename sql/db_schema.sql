@@ -48,7 +48,7 @@ CREATE TABLE master_load(
     master_addr BIGINT REFERENCES masters(addr),
     item_addr BIGINT REFERENCES addrs(addr),
     PRIMARY KEY (master_addr, item_addr)
-)
+);
 
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
@@ -126,3 +126,15 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_notify_result
 AFTER INSERT ON results
 FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
+
+CREATE OR REPLACE FUNCTION notify_context_changed()-- TODO : NOT DONE YET.
+    RETURNS TRIGGER AS $$-- TODO : NOT DONE YET.
+    BEGIN-- TODO : NOT DONE YET.
+        PERFORM pg_notify('context', NEW.);   -- TODO : NOT DONE YET.
+    RETURN NEW;-- TODO : NOT DONE YET.
+END;-- TODO : NOT DONE YET.
+$$ LANGUAGE plpgsql;-- TODO : NOT DONE YET.
+
+CREATE TRIGGER trg_notify_context-- TODO : NOT DONE YET.
+AFTER UPDATE ON masters-- TODO : NOT DONE YET.
+FOR EACH ROW EXECUTE FUNCTION notify_context_changed();-- TODO : NOT DONE YET.

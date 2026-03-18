@@ -1,17 +1,33 @@
-# ZeroDigyLab
-An advanced AI powered analysis and suggestions tool. 
+# ALaDOS
 
----
+[A]rtificial [L]anguage [a]nd [D]isk [O]perating [S]ystem
 
-The system works in 2 modes: 
+This is an agentic system capable of continous self improvement, persistanse, Autonomus task execution, True Paralelism, and Out Of Order Execution.
 
-1. analysis
-2. improovement
+## Architecture
+
+The architecture is structured roughly like this:
+1. DB 
+2. Executor
+3. Sceduler
+4. Task Manager
+5. Interrupt System
+6. User interface
+ 
+Each component is explained in its own section of the docs more precisely. 
+
+## Overview
+
+The workflow is something like this: 
+1. user initialises it with a purpose
+2. the system decomposes it into tasks
+3. Each of the tasks is decomposed into ReAct steps
+4. ReAct steps are executed in paralel.
+
+Or this:
+1. User pushes task 
+2. its decomposed into ReAct steps
+3. Steps are executed
+4. User gets results
 
 
-
-The analysis section is just recursive LLM calls with some other statistics, with the results saved to RESULT.json file. 
-
-The analysis by the recursive LLM calls is based on wethods saved in METHODS.json .
-
-The improovement mode is recursivly analysing the logs from the analysis mode, in order to create new, better methods, as well as update the effectiveness of methods. 

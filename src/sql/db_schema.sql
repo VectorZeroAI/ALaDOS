@@ -35,16 +35,13 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    window_position INT,
-    window_size_r INT,
-    window_size_l INT,
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
     addr BIGINT PRIMARY KEY REFERENCES masters(addr) ON DELETE CASCADE,
     window_position INT,
     window_size_r INT,
-    window_site_l INT,
+    window_size_l INT,
     CONSTRAINT CHECK ( 
         (window_position IS NULL AND window_size_l IS NULL and window_size_r IS NULL) 
         OR 

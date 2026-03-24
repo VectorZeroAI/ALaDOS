@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS addrs (
 CREATE TABLE IF NOT EXISTS names(
     name TEXT PRIMARY KEY,
     addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE
-)
+);
 
 CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
@@ -43,13 +43,13 @@ CREATE TABLE IF NOT EXISTS master_context (
     window_size_r INT,
     window_size_l INT,
     CONSTRAINT CHECK ( 
-        (window_position IS NULL AND window_size_l IS NULL and window_size_r IS NULL) 
-        OR 
+        (window_position IS NULL AND window_size_l IS NULL and window_size_r IS NULL)
+        OR
         (window_position IS NOT NULL AND window_size_l IS NOT NULL and window_size_r IS NOT NULL)
-    ),
-)
+    )
+);
 
-CREATE TABLE master_load(
+CREATE TABLE IF NOT EXISTS master_load (
     master_addr BIGINT REFERENCES masters(addr) ON DELETE CASCADE,
     item_addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE,
     PRIMARY KEY (master_addr, item_addr)
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS slaves (
 
 CREATE TABLE IF NOT EXISTS slave_req (
     slave_addr BIGINT REFERENCES slaves(addr) ON DELETE CASCADE,
-    req_addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE,
+    req_addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE
     PRIMARY KEY (slave_addr, req_addr)
 );
 

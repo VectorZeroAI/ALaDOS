@@ -12,13 +12,15 @@ CREATE OR REPLACE FUNCTION new_slave(
         new_slave_addr BIGINT;
         req BIGINT;
     BEGIN
-        INSERT INTO slaves (master_addr, name, instruction, results_addr, result_name)
+        INSERT INTO slaves (master_addr, instruction, results_addr, result_name)
         VALUES (p_master_addr, p_name, p_instruction, p_results_addr, p_result_name)
-    RETURNING addr INTO new_slave_addr;
+        RETURNING addr INTO new_slave_addr;
 
-    FOREACH req IN ARRAY p_requires LOOP
-        INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
-    END LOOP;
+        INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
+
+        FOREACH req IN ARRAY p_requires LOOP
+            INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
+        END LOOP;
 
     RETURN new_slave_addr;
 END;

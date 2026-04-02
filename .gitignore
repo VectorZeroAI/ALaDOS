@@ -1,0 +1,4 @@
+diagnostics.db
+diagnostics.db-shm
+diagnostics.db-wal
+uv.lock

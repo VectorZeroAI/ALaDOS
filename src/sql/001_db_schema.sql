@@ -23,13 +23,13 @@ CREATE TABLE IF NOT EXISTS names(
 CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    desc TEXT NOT NULL,
+    description TEXT NOT NULL,
     embedding vector(384)
 );
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    desc TEXT NOT NULL, -- used for semantic similarity search
+    description TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
     emb vector(384)

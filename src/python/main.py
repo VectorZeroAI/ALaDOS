@@ -8,7 +8,7 @@ def main():
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 
     """
     conn = psycopg2.connect(
-            host="localhost",
+            host="127.0.0.1",
             port=5432,
             dbname="postgres",
             user="u0_a453"
@@ -22,14 +22,9 @@ def main():
 
     sql_dir = main_file.parent.parent / "sql"
 
-    if sql_dir.is_dir():
-        print("sql dir found.")
-    else:
-        print("sql dir not found")
-
     for i in sorted(sql_dir.glob("*.sql")):
         print(f"executing file {i.name} ...")
-        curr.executemany(i.read_text(), ())
+        curr.execute(i.read_text())
     
 if __name__ == "__main__":
     main()

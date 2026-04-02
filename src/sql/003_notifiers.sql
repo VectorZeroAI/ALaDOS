@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION notify_result_inserted()
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_notify_result
+CREATE OR REPLACE TRIGGER trg_notify_result
 AFTER INSERT ON results
 FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
 
@@ -28,6 +28,6 @@ CREATE OR REPLACE FUNCTION notify_context_changed()
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_notify_context
+CREATE OR REPLACE TRIGGER trg_notify_context
 AFTER UPDATE ON master_context
 FOR EACH ROW EXECUTE FUNCTION notify_context_changed();

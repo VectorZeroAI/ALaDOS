@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION new_slave(
         req BIGINT;
     BEGIN
         INSERT INTO slaves (master_addr, instruction, results_addr, result_name)
-        VALUES (p_master_addr, p_name, p_instruction, p_results_addr, p_result_name)
+        VALUES (p_master_addr, p_instruction, p_results_addr, p_result_name)
         RETURNING addr INTO new_slave_addr;
 
         INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);

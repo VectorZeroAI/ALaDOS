@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+
 import asyncio
 from types import FunctionType
 import functools
+
+from python.utils.uqueue import Uqueue
 
 INTERRUPT_TABLE = {}
 
@@ -15,7 +18,7 @@ def interrupt(name: str|None = None) -> FunctionType:
         return func
     return decorator
 
-def interruptable(*q: asyncio.Queue[str]) -> FunctionType:
+def interruptable(*q: Uqueue[str]) -> FunctionType:
     """
     @interruptible(queue1, queue2)
     """

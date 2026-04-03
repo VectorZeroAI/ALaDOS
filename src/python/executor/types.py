@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from typing import Sequence, TypedDict, Optional, Union
+from typing import TypeAlias, TypedDict, Optional, Union
 
-JsonSerialisable = Union[str, int, float, bool, None]
+JsonSerialisable: TypeAlias = Union[str, int, float, bool, None, dict[str, "JsonSerialisable"], list["JsonSerialisable"]]
 
 class api(TypedDict):
     """ An api endpoint representation """

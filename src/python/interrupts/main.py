@@ -38,7 +38,7 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
                 """ The point at wich the function is interruptable by an interrupt. """
                 await pause_event.wait()
 
-            async def listen_to(q: asyncio.Queue):
+            async def listen_to(q: Uqueue[str]):
                 while True:
                     name = await q.get()
                     pause_event.clear()

@@ -6,7 +6,7 @@ from pathlib import Path
 def config_dir_resolver():
     match os.name:
         case "posix":
-            config_dir = Path("~/.config/ALaDOS")
+            config_dir = Path("~/.config/ALaDOS").expanduser()
         case "nt":
             config_dir = Path(f"{os.getenv("APPDATA")}/ALaDOS")
         case _:

@@ -14,5 +14,6 @@ class instr_json(TypedDict):
     result_addr: int
     instruction: str
     master_addr: int
+    context: str
 
 

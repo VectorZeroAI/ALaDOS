@@ -104,3 +104,27 @@ def startup(conn: psycopg2.extensions.connection) -> None:
                 args=(core, executor_queue, config["apis"], conn),
                 daemon=True
                 ).start()
+    print("startup of the executor finished")
+
+
+"""
+
+config structure is the following: 
+    executor.toml,
+    sceduler.toml,
+    db.toml,
+    permissions.toml
+    main.toml
+    IO.toml
+    etc.
+
+
+An example of an expected executor.toml is:
+
+´´´
+cores_number = 12
+[apis]
+
+´´´
+
+"""

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-from typing import TypedDict, Optional
+from typing import Sequence, TypedDict, Optional, Union
+
+JsonSerialisable = Union[str, int, float, bool, None]
 
 class api(TypedDict):
     """ An api endpoint representation """
@@ -16,4 +18,11 @@ class instr_json(TypedDict):
     master_addr: int
     context: str
 
+class tool_call(TypedDict):
+    """ A single tool call, directly executable """
+    tool: str
+    args: dict[str, JsonSerialisable]
 
+class tool_calls_block(TypedDict):
+    """ The full tool block class, directly extracted from LLM output """
+    tool_calls: list[tool_call]

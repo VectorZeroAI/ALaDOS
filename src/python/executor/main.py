@@ -2,22 +2,18 @@
 
 import asyncio
 import threading
-from types import FunctionType
 from typing import Callable, Coroutine, Sequence, Any
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
 import tomllib
 from queue import Queue
-import json
 import httpx
 from .types import api, instr_json
 import psycopg2
 import psycopg2.extensions
-import collections.abc
 
 def execute(slave_json: instr_json) -> None:
     executor_queue.put(slave_json)
-
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
@@ -60,18 +56,20 @@ def llm_call(api: api, prompt: str) -> str:
 @interruptable()
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
-        queue: Queue,
+        queue: Queue[instr_json],
         apis: Sequence[api],
         conn: psycopg2.extensions.connection
         ) -> None:
     while True:
         await checkpoint()
         instr = queue.get()
+
+        str_instr = " ".join((instr["context"], instr["instruction"]))
         
-        for api in apis:
+        for api_sps in apis:
             await checkpoint()
             try:
-                result = llm_call(api, str_instr)
+                result = llm_call(api_sps, str_instr)
                 await checkpoint()
             except httpx.HTTPStatusError:
                 await checkpoint()
@@ -91,6 +89,7 @@ def core_thread(coroutine, queue: Queue, apis: Sequence[api], conn: psycopg2.ext
         loop.close()
 
 def startup(conn: psycopg2.extensions.connection) -> None:
+    """ The startup function that starts up the whole executor system """
     global executor_queue
     executor_queue = Queue()
 
@@ -123,8 +122,15 @@ An example of an expected executor.toml is:
 
 ´´´
 cores_number = 12
-[apis]
-
+[[apis]]
+url = "http://example.com/v1/completions/example"
+key = "example-api-key"
+model = "IAMSTUPIDMODELEXAMPLE"
+[[apis]]
+url = "lazy me"
+key = "lazy me"
+model = sonnet
+claude = true
 ´´´
 
 """

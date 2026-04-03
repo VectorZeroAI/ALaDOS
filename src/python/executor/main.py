@@ -4,20 +4,17 @@ import asyncio
 import queue
 import threading
 from typing import Callable, Coroutine, Sequence, Any
-
-from python.utils.aqueue import Uqueue
+from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.llm_to_json import llm_to_json
+from ..uqueue import global_interrupt_queue
 import tomllib
 from queue import Queue
 import httpx
 from .types import api, instr_json, tool_call
 import psycopg2
 import psycopg2.extensions
-
-global executor_interrupt
-executor_interrupt = Uqueue()
 
 def execute_instruction(slave_json: instr_json) -> None:
     executor_queue.put(slave_json)
@@ -60,7 +57,7 @@ def llm_call(api: api, prompt: str) -> str:
     else:
         return _llm_call_openai(api, prompt)
 
-@interruptable(executor_interrupt) # TODO : figure out how to get global interrupt chanell working and get it to work.
+@interruptable(executor_interrupt_queue, global_interrupt_queue) # TODO : figure out how to get global interrupt chanell working and get it to work.
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Queue[instr_json],

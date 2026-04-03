@@ -31,11 +31,5 @@ def main():
         except Exception as e:
             raise psycopg2.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
     
-    global global_interrupt
-    global_interrupt = asyncio.Queue[str]()
-    
-    
-
-    
 if __name__ == "__main__":
     main()

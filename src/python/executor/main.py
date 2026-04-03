@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
 import asyncio
-import queue
 import threading
 from typing import Callable, Coroutine, Sequence, Any
 from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.llm_to_json import llm_to_json
-from ..uqueue import global_interrupt_queue
+from ..queue import global_interrupt_queue
+from ..utils.uqueue import Uqueue
 import tomllib
-from queue import Queue
 import httpx
 from .types import api, instr_json, tool_call
 import psycopg2
@@ -60,7 +59,7 @@ def llm_call(api: api, prompt: str) -> str:
 @interruptable(executor_interrupt_queue, global_interrupt_queue) # TODO : figure out how to get global interrupt chanell working and get it to work.
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
-        queue: Queue[instr_json],
+        queue: Uqueue[instr_json],
         apis: Sequence[api],
         conn: psycopg2.extensions.connection
         ) -> None:
@@ -91,7 +90,7 @@ async def core(
 
 
 
-def core_thread(coroutine, queue: Queue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:
+def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(coroutine(queue, apis, conn)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
@@ -103,7 +102,7 @@ def core_thread(coroutine, queue: Queue, apis: Sequence[api], conn: psycopg2.ext
 def startup(conn: psycopg2.extensions.connection) -> None:
     """ The startup function that starts up the whole executor system """
     global executor_queue
-    executor_queue = Queue()
+    executor_queue = Uqueue()
 
     config_dir = config_dir_resolver()
     config_file = config_dir / "executor.toml"

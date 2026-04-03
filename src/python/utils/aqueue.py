@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
+from typing import TypeVar, Generic
 import queue
 import asyncio
 
-class AQueue[T]:
+T = TypeVar('T')
+
+class Uqueue(Generic[T]):
     """
 
     """
@@ -16,7 +19,7 @@ class AQueue[T]:
     
     async def get(self) -> T:
         """ Awaitable, non-blocking to the event loop """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._queue.get)
     
     def get_blocking(self) -> T:

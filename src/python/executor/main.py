@@ -3,7 +3,7 @@
 import asyncio
 import threading
 from types import FunctionType
-from typing import Sequence
+from typing import Callable, Coroutine, Sequence, Any
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
 import tomllib
@@ -13,13 +13,13 @@ import httpx
 from .types import api, instr_json
 import psycopg2
 import psycopg2.extensions
+import collections.abc
 
-
-def execute(slave_json: dict): # TODO : ADD a slave json typed dict
+def execute(slave_json: instr_json) -> None:
     executor_queue.put(slave_json)
 
 
-def _llm_call_claude(api: api, instr: str) -> str:
+def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
 #    with httpx.Client() as client:
 #        response = client.post(
@@ -33,7 +33,7 @@ def _llm_call_claude(api: api, instr: str) -> str:
 #        response.raise_for_status()
 #        return response.json()["choices"][0]["message"]["content"]
 
-def _llm_call_openai(api: api, instr: str) -> str:
+def _llm_call_openai(api: api, prompt: str) -> str:
     """
     This is the function that calls an openai compatable endpoint.  
     THE FULL ENDPOINT URL MUST BE PROVIDED, INCLUDING THE v1/completions whatever path.
@@ -44,25 +44,30 @@ def _llm_call_openai(api: api, instr: str) -> str:
                 headers={"Authorization": f"Bearer {api["key"]}"},
                 json={
                     "model": api["model"],
-                    "messages": instr
+                    "messages": prompt
                     }
                 )
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
 
 
-def llm_call(api: api, instr: str) -> str:
+def llm_call(api: api, prompt: str) -> str:
     if api.get('claude'):
-        return _llm_call_claude(api, instr)
+        return _llm_call_claude(api, prompt)
     else:
-        return _llm_call_openai(api, instr)
+        return _llm_call_openai(api, prompt)
 
 @interruptable()
-async def core(checkpoint: FunctionType, queue: Queue, apis: Sequence[api], conn: psycopg2.extensions.connection):
+async def core(
+        checkpoint: Callable[[], Coroutine[Any, Any, None]],
+        queue: Queue,
+        apis: Sequence[api],
+        conn: psycopg2.extensions.connection
+        ) -> None:
     while True:
         await checkpoint()
         instr = queue.get()
-        str_instr = json.dumps(instr)
+        
         for api in apis:
             await checkpoint()
             try:
@@ -75,12 +80,17 @@ async def core(checkpoint: FunctionType, queue: Queue, apis: Sequence[api], conn
                 await checkpoint()
                 break
 
-def core_thread(coroutine: , queue: Queue, apis: Sequence[api], conn:psycopg2.extensions.connection):
+
+def core_thread(coroutine, queue: Queue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:
     loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(coroutine(queue))
+        loop.run_until_complete(coroutine(queue, apis, conn)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
+    except Exception as e:
+        print(f"CORE THREAD ERRORED OUT: {e}")
+    finally:
+        loop.close()
 
-def startup(conn: psycopg2.extensions.connection):
+def startup(conn: psycopg2.extensions.connection) -> None:
     global executor_queue
     executor_queue = Queue()
 
@@ -88,5 +98,9 @@ def startup(conn: psycopg2.extensions.connection):
     config_file = config_dir / "executor.toml"
     config = tomllib.loads(config_file.read_text())
 
-    core_thread = threading.Thread(target=core, args=(executor_queue, config["apis"], conn), daemon=True).start()
     for _ in range(config["cores_number"]):
+        threading.Thread(
+                target=core_thread,
+                args=(core, executor_queue, config["apis"], conn),
+                daemon=True
+                ).start()

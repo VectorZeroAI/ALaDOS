@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+from json_repair import repair_json
 
 
 
@@ -20,4 +21,12 @@ def llm_to_json(input_str: str) -> dict:
                     break
     if last_match is None:
         raise ValueError("No JSON object found in model output")
-    return json.loads(last_match)
+    try:
+        return json.loads(last_match)
+    except json.JSONDecodeError as e:
+        print(f"The following error was encoutered during loading of llm toolcalls json: {e}")
+        try:
+            return json.loads(repair_json(last_match))
+        except Exception as e:
+            print(f"The following error was encoutered during loading of llm toolcalls repaired json: {e}")
+            # TODO : RAISE AN ERROR RECOVERY INTERRUPT.

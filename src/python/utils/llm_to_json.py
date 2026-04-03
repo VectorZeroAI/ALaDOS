@@ -2,6 +2,7 @@
 import json
 from json_repair import repair_json
 from ..executor.types import tool_calls_block
+from pydantic import TypeAdapter, ValidationError
 
 def llm_to_json(input_str: str) -> tool_calls_block:
     """ Find the last {...} block, accounting for nested braces """
@@ -19,13 +20,18 @@ def llm_to_json(input_str: str) -> tool_calls_block:
                     break
     if last_match is None:
         raise ValueError("No JSON object found in model output")
+
+    validator = TypeAdapter(tool_calls_block)
     try:
-        return json.loads(last_match)
+        return validator.validate_json(last_match)
     except json.JSONDecodeError as e:
-        print(f"The following error was encoutered during loading of llm toolcalls json: {e}")
+        print(f"The following error was encountered during loading of llm toolcalls json: {e}")
         try:
-            return json.loads(repair_json(last_match))
+            return validator.validate_json(repair_json(last_match))
         except Exception as e:
             print(f"The following error was encoutered during loading of llm toolcalls repaired json: {e}")
             raise NotImplementedError("tool call error recovery not yet implemented", e) from e
             # TODO : RAISE AN ERROR RECOVERY INTERRUPT.
+    except ValidationError as e:
+        print(f"The following error was encountered during loading of llm toolcalls json: {e}")
+        raise NotImplementedError("tool call error recovery not yet implemented", e) from e

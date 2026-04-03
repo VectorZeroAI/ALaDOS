@@ -2,6 +2,8 @@
 
 from typing import TypeAlias, TypedDict, Optional, Union
 
+from pydantic import BaseModel
+
 JsonSerialisable: TypeAlias = Union[str, int, float, bool, None, dict[str, "JsonSerialisable"], list["JsonSerialisable"]]
 
 class api(TypedDict):

@@ -3,6 +3,8 @@
 import asyncio
 import threading
 from typing import Callable, Coroutine, Sequence, Any
+
+from python.executor.execute_tool import execute_tool
 from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
@@ -56,6 +58,7 @@ def llm_call(api: api, prompt: str) -> str:
     else:
         return _llm_call_openai(api, prompt)
 
+
 @interruptable(executor_interrupt_queue, global_interrupt_queue) # TODO : figure out how to get global interrupt chanell working and get it to work.
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
@@ -85,10 +88,7 @@ async def core(
             raise RuntimeError("All the APIS failed")
         tool_calls = llm_to_json(result)
         for call in tool_calls:
-            
-
-
-
+            execute_tool(call)
 
 def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:
     loop = asyncio.new_event_loop()

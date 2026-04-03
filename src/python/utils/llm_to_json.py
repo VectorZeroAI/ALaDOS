@@ -2,9 +2,6 @@
 import json
 from json_repair import repair_json
 
-
-
-
 def llm_to_json(input_str: str) -> dict:
     """ Find the last {...} block, accounting for nested braces """
     last_match = None
@@ -29,4 +26,5 @@ def llm_to_json(input_str: str) -> dict:
             return json.loads(repair_json(last_match))
         except Exception as e:
             print(f"The following error was encoutered during loading of llm toolcalls repaired json: {e}")
+            raise NotImplementedError("tool call error recovery not yet implemented", e) from e
             # TODO : RAISE AN ERROR RECOVERY INTERRUPT.

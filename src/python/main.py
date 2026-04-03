@@ -1,6 +1,7 @@
 ### the main entry point, and the starter of the application
 import psycopg2
 from pathlib import Path
+import asyncio
 
 def main():
     """
@@ -30,6 +31,8 @@ def main():
         except Exception as e:
             raise psycopg2.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
     
+    global global_interrupt
+    global_interrupt = asyncio.Queue[str]()
     
     
 

@@ -15,7 +15,7 @@ def interrupt(name: str|None = None) -> FunctionType:
         return func
     return decorator
 
-def interruptable(*q: asyncio.Queue) -> FunctionType:
+def interruptable(*q: asyncio.Queue[str]) -> FunctionType:
     """
     @interruptible(queue1, queue2)
     """

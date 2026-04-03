@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import json
 from json_repair import repair_json
+from ..executor.types import tool_calls_block
 
-def llm_to_json(input_str: str) -> dict:
+def llm_to_json(input_str: str) -> tool_calls_block:
     """ Find the last {...} block, accounting for nested braces """
     last_match = None
     for i, char in enumerate(input_str):

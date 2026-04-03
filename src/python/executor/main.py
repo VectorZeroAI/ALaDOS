@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 
 import asyncio
+import queue
 import threading
 from typing import Callable, Coroutine, Sequence, Any
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
+from ..utils.llm_to_json import llm_to_json
 import tomllib
 from queue import Queue
 import httpx
-from .types import api, instr_json
+from .types import api, instr_json, tool_call
 import psycopg2
 import psycopg2.extensions
 
-def execute(slave_json: instr_json) -> None:
+global executor_interrupt
+executor_interrupt = asyncio.Queue[str]()
+
+def execute_instruction(slave_json: instr_json) -> None:
     executor_queue.put(slave_json)
 
 def _llm_call_claude(api: api, prompt: str) -> str:
@@ -53,7 +58,7 @@ def llm_call(api: api, prompt: str) -> str:
     else:
         return _llm_call_openai(api, prompt)
 
-@interruptable()
+@interruptable((executor_interrupt))
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Queue[instr_json],
@@ -77,6 +82,14 @@ async def core(
             else:
                 await checkpoint()
                 break
+        else:
+            print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
+            raise RuntimeError("All the APIS failed")
+        tool_calls = llm_to_json(result)
+        for call in tool_calls:
+            
+
+
 
 
 def core_thread(coroutine, queue: Queue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:

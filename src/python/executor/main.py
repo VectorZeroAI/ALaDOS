@@ -58,7 +58,8 @@ def llm_call(api: api, prompt: str) -> str:
     else:
         return _llm_call_openai(api, prompt)
 
-@interruptable((executor_interrupt))
+global global_interurpt
+@interruptable(executor_interrupt, global_interrupt)
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Queue[instr_json],

@@ -15,7 +15,7 @@ def interrupt(name: str|None = None) -> FunctionType:
         return func
     return decorator
 
-def interruptible(*q: asyncio.Queue) -> FunctionType:
+def interruptable(*q: asyncio.Queue) -> FunctionType:
     """
     @interruptible(queue1, queue2)
     """
@@ -51,7 +51,7 @@ def interruptible(*q: asyncio.Queue) -> FunctionType:
     
             listeners = [asyncio.create_task(listen_to(que)) for que in q]
             try:
-                return await input_func(*args, **kwargs)
+                return await input_func(checkpoint, *args, **kwargs)
             finally:
                 for i in listeners:
                     i.cancel()

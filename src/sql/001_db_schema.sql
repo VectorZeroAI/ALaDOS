@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS slaves (
 
 CREATE TABLE IF NOT EXISTS slave_req (
     slave_addr BIGINT REFERENCES slaves(addr) ON DELETE CASCADE,
-    req_addr BIGINT REFERENCES addrs(addr) ON DELETE CASCADE,
+    req_addr BIGINT REFERENCES results(addr) ON DELETE CASCADE,
     PRIMARY KEY (slave_addr, req_addr)
 );
 

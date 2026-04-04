@@ -40,3 +40,43 @@ BEGIN
     RETURN v_addr;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- new result function
+CREATE OR REPLACE FUNCTION new_result(
+    p_content TEXT,
+    p_addr BIGINT DEFAULT NULL,
+    p_name TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+DECLARE 
+    unblocked BIGINT;
+    v_addr BIGINT;
+BEGIN
+    -- resolve results addr from result name or from 
+    IF p_addr IS NOT NULL THEN
+        v_addr := p_addr;
+    ELSIF p_name IS NOT NULL THEN
+        SELECT result_addr INTO v_addr FROM slaves WHERE result_name = p_name;
+    ELSE
+        RAISE EXCEPTION 'one of p_addr or p_name is required. None were given.';
+    END IF;
+
+    -- Mark result ready
+    UPDATE results SET ready = TRUE, content_str = p_content WHERE addr = v_addr;
+
+    -- Find and notify newly unblocked slaves
+    FOR unblocked IN
+        SELECT s.addr FROM slaves s
+        JOIN slave_req sr ON sr.slave_addr = s.addr
+        WHERE sr.req_addr = v_addr
+        AND NOT EXISTS (
+            SELECT 1 FROM slave_req sr2
+            JOIN results r ON r.addr = sr2.req_addr
+            WHERE sr2.slave_addr = s.addr AND r.ready = FALSE
+        )
+    LOOP
+        PERFORM pg_notify('slaves_ready', unblocked::TEXT);
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;

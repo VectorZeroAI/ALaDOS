@@ -3,7 +3,6 @@
 Main entrypoint, and the first file to start. 
 """
 
-import psycopg2
 from pathlib import Path
 import asyncio
 from .utils.conn_factory import conn_factory
@@ -14,11 +13,9 @@ def main():
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 
     """
     conn = conn_factory()
-    
     curr = conn.cursor()
 
     main_file = Path(__file__)
-
     sql_dir = main_file.parent.parent / "sql"
 
     for i in sorted(sql_dir.glob("*.sql")):

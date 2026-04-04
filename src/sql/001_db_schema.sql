@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     content TEXT NOT NULL,
     description TEXT NOT NULL,
-    embedding vector(384)
+    emb vector(384)
 );
 
 CREATE TABLE IF NOT EXISTS executables (

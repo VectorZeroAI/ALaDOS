@@ -11,3 +11,9 @@ class SlaveObj(TypedDict):
     instruction: str
     master_addr: MasterAddr
     result_name: str
+
+class WindowDataRaw(TypedDict):
+    master_addr: MasterAddr
+    window_position: int
+    window_size_r: int 
+    window_size_l: int

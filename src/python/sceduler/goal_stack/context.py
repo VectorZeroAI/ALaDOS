@@ -38,7 +38,7 @@ def create_index():
         emd_addr_lists_tuple[1].append(i[1])
     
     reducer = umap.UMAP(random_state=42)
-    points_2d = reducer.fit_transform(np.array(emd_addr_lists_tuple[0]))
+    points_2d: np.ndarray = reducer.fit_transform(np.array(emd_addr_lists_tuple[0]))
 
     mins = points_2d.min(axis=0)
     maxs = points_2d.max(axis=0)

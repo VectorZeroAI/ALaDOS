@@ -16,5 +16,7 @@ def setup():
     curr = conn.cursor()
 
     curr.execute("""
-    SELECT 
+    
+
+
                  """)

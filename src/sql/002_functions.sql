@@ -26,6 +26,7 @@ CREATE OR REPLACE FUNCTION new_slave(
 END;
 $$ LANGUAGE plpgsql;
 
+-- resolves name
 CREATE OR REPLACE FUNCTION resolve_name(p_name TEXT)
 RETURNS BIGINT AS $$
 DECLARE
@@ -80,3 +81,5 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
+
+

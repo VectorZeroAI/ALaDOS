@@ -15,8 +15,14 @@ def setup():
     conn = conn_factory()
     curr = conn.cursor()
 
-    curr.execute("""
-    
-
-
-                 """)
+    slaves_to_execute = curr.execute("""
+SELECT s.addr FROM slaves s
+WHERE NOT EXISTS (
+    SELECT 1 FROM slave_req sr
+    JOIN results r ON sr.req_addr = r.addr
+    WHERE sr.slave_addr = s.addr
+    AND r.ready IS FALSE
+)
+                 """).fetchall()
+    for slave in slaves_to_execute:
+        

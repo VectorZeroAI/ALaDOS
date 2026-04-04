@@ -1,23 +1,19 @@
-### the main entry point, and the starter of the application
+#!/usr/bin/env python3
+"""
+Main entrypoint, and the first file to start. 
+"""
+
 import psycopg2
 from pathlib import Path
 import asyncio
+from .utils.conn_factory import conn_factory
 
 def main():
     """
     The main function that starts everything 
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 
     """
-    try:
-        conn = psycopg2.connect(
-                host="127.0.0.1",
-                port=5432,
-                dbname="postgres",
-                user="u0_a453"
-                )
-        conn.autocommit = True
-    except Exception as e:
-        raise ConnectionError(f"Connection to the posgres database failed. Reason: {e}") from e
+    conn = conn_factory()
     
     curr = conn.cursor()
 

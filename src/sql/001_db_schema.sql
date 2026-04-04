@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS slaves (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     master_addr BIGINT REFERENCES masters(addr),
     instruction TEXT NOT NULL,
-    results_addr BIGINT REFERENCES results(addr),
+    result_addr BIGINT REFERENCES results(addr),
     result_name TEXT
 );
 

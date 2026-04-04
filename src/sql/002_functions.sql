@@ -31,7 +31,7 @@ RETURNS BIGINT AS $$
 DECLARE
     v_addr BIGINT;
 BEGIN
-    SELECT addr INTO v_addr FROM addr_names WHERE name = p_name;
+    SELECT addr INTO v_addr FROM names WHERE name = p_name;
 
     IF v_addr IS NULL THEN
         RAISE EXCEPTION 'Unknown name: %', p_name;

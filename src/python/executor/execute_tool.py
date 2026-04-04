@@ -12,5 +12,5 @@ def register_tool(name: str|None = None):
     return decorator
 
 def execute_tool(call: tool_call) -> None:
-    TOOL_REGISTRY[call["tool"]](**call.get("args"))
+    TOOL_REGISTRY[call["tool"]](**call["args"])
 

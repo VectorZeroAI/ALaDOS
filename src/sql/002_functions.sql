@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION new_slave(
     p_name TEXT,
     p_instruction TEXT,
     p_requires BIGINT[],
-    p_results_addr BIGINT DEFAULT NULL,
+    p_result_addr BIGINT DEFAULT NULL,
     p_result_name TEXT DEFAULT NULL
     )
 
@@ -12,8 +12,8 @@ CREATE OR REPLACE FUNCTION new_slave(
         new_slave_addr BIGINT;
         req BIGINT;
     BEGIN
-        INSERT INTO slaves (master_addr, instruction, results_addr, result_name)
-        VALUES (p_master_addr, p_instruction, p_results_addr, p_result_name)
+        INSERT INTO slaves (master_addr, instruction, result_addr, result_name)
+        VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name)
         RETURNING addr INTO new_slave_addr;
 
         INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);

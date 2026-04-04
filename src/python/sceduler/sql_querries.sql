@@ -7,4 +7,9 @@ WHERE NOT EXISTS (
     JOIN results r ON sr.req_addr = r.addr
     WHERE sr.slave_addr = s.addr
     AND r.ready IS FALSE
-)
+);
+
+
+-- The SQL querry to get the master context of a master goal
+SELECT window_position, window_size_r, window_size_l FROM master_context WHERE addr = ?;
+SELECT item_addr FROM master_loads WHERE master_addr = ?;

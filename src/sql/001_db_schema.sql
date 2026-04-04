@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS master_load (
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
     content_json JSONB,
-    content_str TEXT
+    content_str TEXT,
+    CHECK ( content_json IS NOT NULL OR content_str IS NOT NULL )
 );
 
 CREATE TABLE IF NOT EXISTS slaves (

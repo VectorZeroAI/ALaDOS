@@ -66,14 +66,8 @@ CREATE TABLE IF NOT EXISTS master_load (
 
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE,
-    content_json JSONB,
-    content_str TEXT,
+    content_str TEXT NOT NULL,
     ready BOOLEAN NOT NULL,
-    CHECK ( 
-        ( ready IS TRUE AND content_json IS NOT NULL OR content_str IS NOT NULL )
-        OR
-        ( ready IS FALSE AND content_json IS NULL AND content_str IS NULL )
-    )
 );
 
 CREATE TABLE IF NOT EXISTS slaves (
@@ -95,3 +89,8 @@ CREATE TABLE IF NOT EXISTS ownership(
     owner BIGINT REFERENCES masters(addr) NOT NULL
 );
 
+CREATE OR REPLACE VIEW viewing_window AS
+    SELECT *, 'knowledge' AS type FROM knowledge
+    UNION ALL
+    SELECT *, 'executable' AS type FROM executables
+    UNION ALL;

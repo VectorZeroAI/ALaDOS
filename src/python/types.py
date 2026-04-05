@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import LiteralString, Optional, TypedDict, TypeAlias, Union, Literal
+from typing import Optional, TypedDict, TypeAlias, Union, Literal
 
 ValidTables: TypeAlias = Union[Literal['executables'],
                                Literal['knowledge'],
@@ -8,10 +8,14 @@ ValidTables: TypeAlias = Union[Literal['executables'],
                                Literal['results'],
                                Literal['slaves'],
                                Literal['masters'],
-                               Literal[''],
+                               Literal['slave_req'],
+                               Literal['names'],
+                               Literal['logs'],
+                               Literal['master_context'],
+                               Literal['master_load'],
                                ]
 
 class ReferenceTo(TypedDict):
     addr: int
     ref_addr: int
-    ref_table: Optional[str]
+    ref_table: Optional[ValidTables]

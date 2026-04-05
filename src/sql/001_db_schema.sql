@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS addrs (
 );
 
 CREATE TABLE IF NOT EXISTS names(
-    addr BIGINT REFERENCES addrs(addr)
+    addr BIGINT UNIQUE REFERENCES addrs(addr)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     name TEXT PRIMARY KEY
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     content TEXT NOT NULL,
     description TEXT NOT NULL,
     position INT,
-    emb vector(384)
+    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS executables (
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS executables (
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
     position INT,
-    emb vector(384)
+    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -134,7 +134,20 @@ CREATE TABLE IF NOT EXISTS ownership(
 );
 
 CREATE OR REPLACE VIEW viewing_window AS
-    SELECT *, 'knowledge' AS type FROM knowledge
+    SELECT addr, description, emb, 'knowledge' AS type FROM knowledge
     UNION ALL
-    SELECT *, 'executable' AS type FROM executables
+    SELECT addr, description, emb, 'executable' AS type FROM executables
     ORDER BY position;
+
+CREATE OR REPLACE VIEW addrs_tables AS
+    SELECT addr, 'knowledge' AS type FROM knowledge
+    UNION ALL
+    SELECT addr, 'executables' AS type FROM executables
+    UNION ALL
+    SELECT addr, 'logs' AS type FROM logs
+    UNION ALL
+    SELECT addr, 'masters' AS type FROM masters
+    UNION ALL
+    SELECT addr, 'slaves' AS type FROM slaves
+    UNION ALL
+    SELECT addr, 'results' AS type FROM results;

@@ -1,22 +1,10 @@
 -- notifiers
-
-CREATE OR REPLACE FUNCTION notify_result_inserted()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        PERFORM pg_notify('new_result', NEW.addr::TEXT);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER trg_notify_result
-AFTER INSERT ON results
-FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
-
 CREATE OR REPLACE FUNCTION count_updates()
     RETURNS TRIGGER AS $$
     BEGIN
         IF nextval('update_counter_window') IS 1000 THEN
-            PERFORM pg_notify('window', 'TRUE'::TEXT);
+            PERFORM pg_notify('window_recreate', 'TRUE'::TEXT);
+            PERMORM setval('update_counter_window', 0);
         END IF;
 
     RETURN NEW;

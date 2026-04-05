@@ -2,6 +2,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
+CREATE SEQUENCE IF NOT EXISTS update_counter_window;
+
 CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     DECLARE
         new_id BIGINT;
@@ -70,10 +72,12 @@ CREATE TABLE IF NOT EXISTS master_context (
         ON UPDATE CASCADE,
     window_size_r INT,
     window_size_l INT,
-    CONSTRAINT window_full_or_none CHECK ( 
-        (window_anchor_exe IS NULL OR window_anchor_knowledge IS NULL AND window_size_l IS NULL AND window_size_r IS NULL)
+    CONSTRAINT window_full_or_none CHECK (
+        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NULL AND window_size_l IS NULL AND window_size_r IS NULL)
         OR
-        (window_anchor_exe IS NOT NULL OR window_anchor_knowledge IS NOT NULL AND window_size_l IS NOT NULL and window_size_r IS NOT NULL)
+        (window_anchor_exe IS NOT NULL AND window_anchor_knowledge IS NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
+        OR
+        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NOT NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
     )
 );
 
@@ -92,7 +96,7 @@ CREATE TABLE IF NOT EXISTS results (
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     content_str TEXT NOT NULL,
-    ready BOOLEAN NOT NULL,
+    ready BOOLEAN NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS slaves (
@@ -132,5 +136,4 @@ CREATE TABLE IF NOT EXISTS ownership(
 CREATE OR REPLACE VIEW viewing_window AS
     SELECT *, 'knowledge' AS type FROM knowledge
     UNION ALL
-    SELECT *, 'executable' AS type FROM executables
-    UNION ALL;
+    SELECT *, 'executable' AS type FROM executables;

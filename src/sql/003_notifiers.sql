@@ -1,7 +1,5 @@
 -- notifiers
 
-
-
 CREATE OR REPLACE FUNCTION notify_result_inserted()
     RETURNS TRIGGER AS $$
     BEGIN
@@ -14,22 +12,21 @@ CREATE OR REPLACE TRIGGER trg_notify_result
 AFTER INSERT ON results
 FOR EACH ROW EXECUTE FUNCTION notify_result_inserted();
 
-CREATE OR REPLACE FUNCTION notify_context_changed()
+CREATE OR REPLACE FUNCTION count_updates()
     RETURNS TRIGGER AS $$
     BEGIN
-        PERFORM pg_notify(
-            'context',
-            json_build_object(
-                'addr', NEW.addr,
-                'window_position', NEW.window_position,
-                'window_size_l', NEW.window_size_l,
-                'window_size_r', NEW.window_size_r
-            )::TEXT
-        );
+        IF nextval('update_counter_window') IS 1000 THEN
+            PERFORM pg_notify('window', 'TRUE'::TEXT);
+        END IF;
+
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$, LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER trg_notify_context
-AFTER UPDATE ON master_context
-FOR EACH ROW EXECUTE FUNCTION notify_context_changed();
+CREATE OR REPLACE TRIGGER trg_knowledge_update
+AFTER UPDATE ON knowledge
+FOR EACH ROW EXECUTE FUNCTION increment_update_count();
+
+CREATE OR REPLACE TRIGGER trg_executable_update
+AFTER UPDATE ON executables
+FOR EACH ROW EXECUTE FUNCTION increment_update_count();

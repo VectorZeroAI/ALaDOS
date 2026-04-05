@@ -71,9 +71,9 @@ CREATE TABLE IF NOT EXISTS master_context (
     window_size_r INT,
     window_size_l INT,
     CONSTRAINT window_full_or_none CHECK ( 
-        (window_position IS NULL AND window_size_l IS NULL and window_size_r IS NULL)
+        (window_anchor_exe IS NULL OR window_anchor_knowledge IS NULL AND window_size_l IS NULL AND window_size_r IS NULL)
         OR
-        (window_position IS NOT NULL AND window_size_l IS NOT NULL and window_size_r IS NOT NULL)
+        (window_anchor_exe IS NOT NULL OR window_anchor_knowledge IS NOT NULL AND window_size_l IS NOT NULL and window_size_r IS NOT NULL)
     )
 );
 

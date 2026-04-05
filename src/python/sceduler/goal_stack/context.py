@@ -11,34 +11,32 @@ def resolve_context(slave_obj: SlaveObj):
 
     all_window_data = conn.execute("""
     SELECT window_position, window_size_r, window_size_l FROM master_context WHERE addr = $1;
-                 """, (slave_obj['master_addr'],)).fetchall()
+                 """, (slave_obj['master_addr'],)).fetchone()
 
     all_load_data = conn.execute("""
     SELECT item_addr FROM master_load WHERE master_addr = $1;
-                             """, (slave_obj['master_addr'],)).fetchall()
+                             """, (slave_obj['master_addr'],)).fetchone()
 
 
 
 def resolve_window(window_data: WindowDataRaw):
     """ This function resolves a window from raw window data from the DB. It resolves to a list of addrs wich is the window itself """
 
+
     
 def create_index():
-    """ Creates and index and writes it to the DB. """
+    """ Creates an index and writes it to the DB. """
     p = 7
 
     conn = conn_factory()
     data = conn.execute("""
-    SELECT emb, addr FROM viewing_window
+    SELECT emb, addr, type FROM viewing_window
                  """).fetchall()
 
-    emd_addr_lists_tuple: tuple[list, list[int]] = ([], [])
-    for i in data:
-        emd_addr_lists_tuple[0].append(i[0])
-        emd_addr_lists_tuple[1].append(i[1])
-    
+    embs, addrs, types = zip(*data)
+
     reducer = umap.UMAP(random_state=42)
-    points_2d: np.ndarray = reducer.fit_transform(np.array(emd_addr_lists_tuple[0]))
+    points_2d: np.ndarray = reducer.fit_transform(np.array(embs)) # pyright: ignore
 
     mins = points_2d.min(axis=0)
     maxs = points_2d.max(axis=0)
@@ -49,3 +47,25 @@ def create_index():
     hc = HilbertCurve(p=p, n=2)
     hilbert_positions = np.array([hc.distance_from_point(pt.tolist()) for pt in int_points])
 
+    for pos, addr, t in zip(hilbert_positions, addrs, types):
+        pos = int(pos)
+        if t == "knowledge":
+            conn.execute("""
+            UPDATE knowledge SET position = $1 WHERE addr = $2;
+                             """, (pos, addr))
+        elif t == "executable":
+            conn.execute("""
+            UPDATE executables SET position = $1 WHERE addr = $2;
+                         """, (pos, addr))
+        else:
+            raise ValueError(f"IDK WHAT HAPPENED THERE, but type gotten from the DB is {t}, wich is anything expected")
+
+    conn.close() # NOTE : The connection is set to autocommit. 
+
+def scrollable_index_thread():
+    conn = conn_factory()
+    conn.execute("LISTEN window_recreate")
+    for n in conn.notifies():
+        if n.channel != "window_recreate":
+            continue
+        create_intex()

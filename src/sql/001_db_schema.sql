@@ -136,4 +136,5 @@ CREATE TABLE IF NOT EXISTS ownership(
 CREATE OR REPLACE VIEW viewing_window AS
     SELECT *, 'knowledge' AS type FROM knowledge
     UNION ALL
-    SELECT *, 'executable' AS type FROM executables;
+    SELECT *, 'executable' AS type FROM executables
+    ORDER BY position;

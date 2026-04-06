@@ -16,6 +16,5 @@ ValidTables: TypeAlias = Union[Literal['executables'],
                                ]
 
 class ReferenceTo(TypedDict):
-    addr: int
     ref_addr: int
     ref_table: Optional[ValidTables]

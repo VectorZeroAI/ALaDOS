@@ -8,6 +8,7 @@ import umap
 import numpy as np
 from pydantic import TypeAdapter, ValidationError
 from typing import Any
+import psycopg
 
 
 def resolve_context(slave_obj: SlaveObj):
@@ -53,6 +54,32 @@ def resolve_context(slave_obj: SlaveObj):
 
     load_context = resolve_loads(loads_data_valid)
 
+def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
+    """ The function for resolving knowledge item to a clean AI friendly string """
+    item = conn.execute("""
+        SELECT names.name, knowledge.content
+            FROM knowledge JOIN names ON names.addr = $1 WHERE addr = $1;
+
+                 """, (addr,)).fetchone()
+    assert item is not None
+    result = ""
+    result = "@".join((item[0], f"addr: {addr}", "\n"))
+    result = "\n".join((result, item[1], "", ""))
+    return result
+
+def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+    item = conn.execute("""
+        SELECT names.name, executables.header, executables.body
+            FROM executables JOIN names ON names.addr = $1 WHERE addr = $1;
+                        """, (addr,)).fetchone()
+    assert item is not None   
+    result = ""
+    result = "@".join((item[0], f"addr: {addr}", "\n"))
+    result = "\n".join((result, f"header: {item[1]}", f"body: {item[2]}", "", ""))
+
+    return result
+
+
 
 def resolve_loads(loads_data: LoadsData) -> str
     """ Resolves loads raw data to context string """
@@ -68,16 +95,12 @@ def resolve_loads(loads_data: LoadsData) -> str
             case 'knowledge':
                 result_str.append(_resolve_knowledge_item(addr, conn))
             case 'executables':
-                item = conn.execute("""
-                    SELECT names.name, executables.header, executables.body
-                        FROM executables JOIN names ON names.addr = $1 WHERE addr = $1;
-                                    """, (addr,)).fetchone()
+                result_str.append(_executables_item_resolve(addr, conn))
             case 'logs':
                 item = conn.execute("""
                     SELECT names.name, logs.created_at, logs.action, logs.created_by
                         FROM logs JOIN names ON names.addr = $1 WHERE addr = $1;
                                     """, (addr,)).fetchone()
-
             case 'masters':
                 slaves_fetch = conn.execute("""
                     SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = $1;
@@ -198,13 +221,4 @@ def scrollable_index_thread():
             continue
         create_index()
 
-def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
-    """ The function for resolving knowledge item to a clean AI friendly string """
-    item = conn.execute("""
-        SELECT names.name, knowledge.content
-            FROM JOIN names ON names.addr = $1 knowledge WHERE addr = $1;
-                 """, (addr,)).fetchone()
-    result = ""
-    result = "@".join((item[0], f"addr: {addr}", "\n"))
-    result = "\n".join((result, item[1], "", ""))
-    return result
+

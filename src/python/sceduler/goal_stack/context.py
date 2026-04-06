@@ -63,8 +63,8 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
                  """, (addr,)).fetchone()
     assert item is not None
     result = ""
-    result = "@".join((item[0], f"addr: {addr}", "\n"))
-    result = "\n".join((result, item[1], "", ""))
+    result = "@".join((item[0], f"{addr}", "knowledge"))
+    result = "\n".join(("", result, item[1], "", "", ""))
     return result
 
 def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
@@ -74,14 +74,12 @@ def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
                         """, (addr,)).fetchone()
     assert item is not None   
     result = ""
-    result = "@".join((item[0], f"addr: {addr}", "\n"))
-    result = "\n".join((result, f"header: {item[1]}", f"body: {item[2]}", "", ""))
+    result = "@".join((item[0], f"{addr}", "executable"))
+    result = "\n".join(("", "", result, f"header: {item[1]}", f"body: {item[2]}", "", "", ""))
 
     return result
 
-
-
-def resolve_loads(loads_data: LoadsData) -> str
+def resolve_loads(loads_data: LoadsData) -> str:
     """ Resolves loads raw data to context string """
     conn = conn_factory() # FIXME: make ruff ignore E703 in ruff config.
 
@@ -89,52 +87,92 @@ def resolve_loads(loads_data: LoadsData) -> str
     for addr in loads_data['items_addrs']:
         table = conn.execute("""
         SELECT table FROM addrs_tables WHERE addr = $1
-                     """, (addr,)).fetchone()[0];
+                     """, (addr,)).fetchone()[0]
 
         match table:
             case 'knowledge':
-                result_str.append(_resolve_knowledge_item(addr, conn))
+                result_str.append(_resolve_knowledge_item(addr["ref_addr"], conn))
             case 'executables':
-                result_str.append(_executables_item_resolve(addr, conn))
+                result_str.append(_executables_item_resolve(addr["ref_addr"], conn))
             case 'logs':
-                item = conn.execute("""
-                    SELECT names.name, logs.created_at, logs.action, logs.created_by
-                        FROM logs JOIN names ON names.addr = $1 WHERE addr = $1;
-                                    """, (addr,)).fetchone()
+                result_str.append(_logs_item_resolve(addr["ref_addr"], conn))
             case 'masters':
-                slaves_fetch = conn.execute("""
-                    SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = $1;
-                                    """, (addr,)).fetchall()
-                name = conn.execute("""
-                    SELECT name FROM names WHERE addr = $1;
-                                    """, (addr,)).fetchone()
-                item = (name, *slaves_fetch)
+                result_str.append(_masters_item_resolve(addr["ref_addr"], conn))
 
             case 'slaves':
-                item = conn.execute("""
-                    SELECT names.name,
-                        slaves.master_addr,
-                        slaves.instruction,
-                        slaves.result_addr,
-                        slaves.result_name
-                        FROM slaves JOIN names ON names.addr = $1 WHERE slaves.addr = $1;
-                                    """, (addr,)).fetchone()
+                result_str.append(_slaves_item_resolve(addr["ref_addr"], conn))
             case 'results':
-                item = conn.execute("""
-                SELECT s.result_name, 
-                    r.content_str,
-                    r.ready 
-                    FROM results r JOIN slaves s ON s.result_addr = $1 WHERE r.addr = $1;
-                                    """, (addr,)).fetchone()
+                result_str.append(_result_item_resolve(addr["ref_addr"], conn))
             case _:
                 raise ValueError("Database returned a non existant or invalid table name. Returned {table}, but its not a valid table name. If it is, please add that tables case to the above handler.")
 
-        assert item is not None
-        all_items.append((addr, table, *item))
+    return "".join(result_str)
 
+def _result_item_resolve(addr: int, conn: psycopg.Connection):
+    item = conn.execute("""
+    SELECT s.result_name, 
+        r.content_str,
+        r.ready 
+        FROM results r JOIN slaves s ON s.result_addr = $1 WHERE r.addr = $1;
+                        """, (addr,)).fetchone()
+    result = "@".join((item[0], f"{addr}"))
+    result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
+    return result
 
-        
+def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+    fetch = conn.execute("""
+        SELECT names.name,
+            slaves.master_addr,
+            slaves.instruction,
+            slaves.result_addr,
+            slaves.result_name
+            FROM slaves JOIN names ON names.addr = $1 WHERE slaves.addr = $1;
+                        """, (addr,)).fetchone()
 
+    assert fetch is not None
+
+    result = "@".join((fetch[0], f"{addr}", "slave_goal"))
+    result = "\n".join(("", "", result,
+                        f"master_addr: {fetch[1]}",
+                        f"instruction: {fetch[2]}",
+                        f"result_addr: {fetch[3]}",
+                        f"result_name: {fetch[4]}",
+                        "", "", ""))
+    return result
+
+def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+    slaves_fetch = conn.execute("""
+        SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = $1;
+                        """, (addr,)).fetchall()
+    name = conn.execute("""
+        SELECT name FROM names WHERE addr = $1;
+                        """, (addr,)).fetchone()
+
+    assert name is not None
+    assert slaves_fetch is not None
+
+    slave_str_list: list[str] = []
+    result_str = "@".join((*name, f"{addr}", "master_goal"))
+    result_str = "\n".join(("", "", result_str))
+    for i in slaves_fetch:
+        slave_str_list.append("slave: {")
+        slave_str_list.append(f"instruction: {i[0]}")
+        slave_str_list.append(f"result_addr: {i[1]}")
+        slave_str_list.append(f"result_name: {i[2]}")
+        slave_str_list.append("}")
+
+    result_str = "\n".join(result_str, *slave_str_list)
+    return result_str
+
+def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+    item = conn.execute("""
+        SELECT names.name, logs.created_at, logs.action, logs.created_by
+            FROM logs JOIN names ON names.addr = $1 WHERE addr = $1;
+                        """, (addr,)).fetchone()
+    assert item is not None
+    result = "@".join((item[0], f"{addr}", "log_item"))
+    result = "\n".join(("", "", result, item[1], item[2], item[3], "", "", ""))
+    return result
 
 
 

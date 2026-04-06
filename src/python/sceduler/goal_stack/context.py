@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from python.types import ReferenceTo
 from .types import SlaveObj, WindowData, LoadsData
 from ...utils.conn_factory import conn_factory
 from hilbertcurve.hilbertcurve import HilbertCurve
@@ -40,7 +41,7 @@ def resolve_context(slave_obj: SlaveObj):
                              """, (slave_obj['master_addr'],)).fetchall()
 
     loads_data_python: LoadsData = {
-            "items_addrs": zip(*load_data),
+            "items_addrs": [addr[0] for addr in load_data],
             "master_addr": slave_obj["master_addr"]
         }
     loads_data_validator = TypeAdapter(LoadsData)
@@ -57,27 +58,24 @@ def resolve_loads(loads_data: LoadsData) -> str
     """ Resolves loads raw data to context string """
     conn = conn_factory() # FIXME: make ruff ignore E703 in ruff config.
 
-    all_items = []
+    result_str: list[str] = []
     for addr in loads_data['items_addrs']:
         table = conn.execute("""
         SELECT table FROM addrs_tables WHERE addr = $1
-                     """, (addr,)).fetchone()[0]
+                     """, (addr,)).fetchone()[0];
 
         match table:
             case 'knowledge':
-                item = conn.execute("""
-                    SELECT names.name, knowledge.content FROM knowledge WHERE addr = $1
-                        JOIN names ON names.addr = $1;
-                             """, (addr,)).fetchone()
+                result_str.append(_resolve_knowledge_item(addr, conn))
             case 'executables':
                 item = conn.execute("""
-                    SELECT names.name, executables.header, executables.body FROM executables WHERE addr = $1
-                        JOIN names ON names.addr = $1;
+                    SELECT names.name, executables.header, executables.body
+                        FROM executables JOIN names ON names.addr = $1 WHERE addr = $1;
                                     """, (addr,)).fetchone()
             case 'logs':
                 item = conn.execute("""
-                    SELECT names.name, logs.created_at, logs.action, logs.created_by FROM logs WHERE addr = $1
-                        JOIN names ON names.addr = $1;
+                    SELECT names.name, logs.created_at, logs.action, logs.created_by
+                        FROM logs JOIN names ON names.addr = $1 WHERE addr = $1;
                                     """, (addr,)).fetchone()
 
             case 'masters':
@@ -87,7 +85,7 @@ def resolve_loads(loads_data: LoadsData) -> str
                 name = conn.execute("""
                     SELECT name FROM names WHERE addr = $1;
                                     """, (addr,)).fetchone()
-                item = (name, slaves_fetch)
+                item = (name, *slaves_fetch)
 
             case 'slaves':
                 item = conn.execute("""
@@ -96,22 +94,22 @@ def resolve_loads(loads_data: LoadsData) -> str
                         slaves.instruction,
                         slaves.result_addr,
                         slaves.result_name
-                        FROM slaves WHERE slaves.addr = $1
-                            JOIN names ON names.addr = $1
+                        FROM slaves JOIN names ON names.addr = $1 WHERE slaves.addr = $1;
                                     """, (addr,)).fetchone()
             case 'results':
                 item = conn.execute("""
                 SELECT s.result_name, 
                     r.content_str,
                     r.ready 
-                    FROM results r WHERE r.addr = $1
-                        JOIN slaves s ON s.result_addr = $1
+                    FROM results r JOIN slaves s ON s.result_addr = $1 WHERE r.addr = $1;
                                     """, (addr,)).fetchone()
             case _:
                 raise ValueError("Database returned a non existant or invalid table name. Returned {table}, but its not a valid table name. If it is, please add that tables case to the above handler.")
-        
-        all_items.append((item, table))
-    return all_items
+
+        assert item is not None
+        all_items.append((addr, table, *item))
+
+
         
 
 
@@ -145,9 +143,8 @@ def resolve_window(window_data: WindowData) -> str:
                                    """, (a,)).fetchone()
         names.append(*names_fetch)
 
-    
     context_str = ""
-    for d, a, p, n in descriptions, addrs, positions, names:
+    for d, a, p, n in zip(descriptions, addrs, positions, names):
         context_str = context_str + "@".join((n, f"pos: {p}", f"addr: {a}"))
         context_str = "\n".join((context_str, d, " ", " "))
 
@@ -155,7 +152,6 @@ def resolve_window(window_data: WindowData) -> str:
 
 
 
-    
 def create_index():
     """ Creates an index and writes it to the DB. """
     p = 7
@@ -200,4 +196,15 @@ def scrollable_index_thread():
     for n in conn.notifies():
         if n.channel != "window_recreate":
             continue
-        create_intex()
+        create_index()
+
+def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
+    """ The function for resolving knowledge item to a clean AI friendly string """
+    item = conn.execute("""
+        SELECT names.name, knowledge.content
+            FROM JOIN names ON names.addr = $1 knowledge WHERE addr = $1;
+                 """, (addr,)).fetchone()
+    result = ""
+    result = "@".join((item[0], f"addr: {addr}", "\n"))
+    result = "\n".join((result, item[1], "", ""))
+    return result

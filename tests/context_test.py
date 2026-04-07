@@ -19,8 +19,14 @@ Bugs are marked xfail. Fix the bug → xfail becomes xpass → remove the mark.
 """
 
 import os
+import sys
 import pytest
 import psycopg
+
+# ---------------------------------------------------------------------------
+# Make src/ importable
+# ---------------------------------------------------------------------------
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # ---------------------------------------------------------------------------
 # Connection
@@ -35,7 +41,7 @@ TEST_DSN = dict(
 
 
 def get_test_conn() -> psycopg.Connection:
-    conn = psycopg.connect(**TEST_DSN) # pyright: ignore
+    conn = psycopg.connect(**TEST_DSN)
     conn.autocommit = True
     return conn
 
@@ -46,36 +52,19 @@ def get_test_conn() -> psycopg.Connection:
 
 @pytest.fixture(autouse=True)
 def patch_conn_factory(monkeypatch):
-    """
-    Replace python.utils.conn_factory.conn_factory everywhere so that
-    context.py hits the test DB instead of the production one.
-    """
-    import sys, types as _types
+    """Replace python.utils.conn_factory.conn_factory to use the test DB."""
+    from python.utils import conn_factory as cf_module
 
-    src = f"""
-import psycopg
-def conn_factory():
-    conn = psycopg.connect(
-        host='{TEST_DSN["host"]}', port={TEST_DSN["port"]},
-        dbname='{TEST_DSN["dbname"]}', user='{TEST_DSN["user"]}'
-    )
-    conn.autocommit = True
-    return conn
-"""
-    fake = _types.ModuleType("python.utils.conn_factory")
-    exec(src, fake.__dict__)
-    monkeypatch.setitem(sys.modules, "python.utils.conn_factory", fake)
+    def fake_conn_factory():
+        conn = psycopg.connect(**TEST_DSN)
+        conn.autocommit = True
+        return conn
 
-    # Also patch the already-bound reference inside context if it was imported earlier
-    try:
-        from ..src.python.sceduler.goal_stack import context as ctx
-        monkeypatch.setattr(ctx, "conn_factory", fake.conn_factory)
-    except ImportError:
-        pass
+    monkeypatch.setattr(cf_module, "conn_factory", fake_conn_factory)
 
 
 # ---------------------------------------------------------------------------
-# Schema teardown / bring-up
+# Schema teardown / bring-up (session scope)
 # ---------------------------------------------------------------------------
 
 # Drop order respects FK dependencies.
@@ -102,6 +91,14 @@ DROP FUNCTION IF EXISTS resolve_name CASCADE;
 DROP FUNCTION IF EXISTS new_result  CASCADE;
 """
 
+# Tables that must be truncated between tests
+TRUNCATE_TABLES = """
+TRUNCATE TABLE
+    addrs, names, masters, slaves, knowledge, executables,
+    results, logs, master_context, master_load, slave_req
+CASCADE;
+"""
+
 
 @pytest.fixture(scope="session")
 def db() -> psycopg.Connection:
@@ -120,12 +117,19 @@ def db() -> psycopg.Connection:
     conn.close()
 
 
+@pytest.fixture(autouse=True, scope="function")
+def clean_db(db: psycopg.Connection):
+    """Truncate all tables and reset sequence before each test."""
+    db.execute(TRUNCATE_TABLES)
+    db.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Seed helpers
 # ---------------------------------------------------------------------------
 
 def new_addr(conn: psycopg.Connection) -> int:
-    """Use the DB's own new_addr() function, matching production behaviour."""
     return conn.execute("SELECT new_addr()").fetchone()[0]
 
 
@@ -145,7 +149,7 @@ def insert_executable(conn: psycopg.Connection, name: str, header: str,
         "INSERT INTO executables (header, body, description, position) VALUES (%s,%s,%s,%s) RETURNING addr",
         (header, body, description, position)
     ).fetchone()[0]
-    conn.execute("INSERT INTO names (addr, name) VALUES (%s,%s)", (addr, name))
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 
 
@@ -165,7 +169,6 @@ def insert_result(conn: psycopg.Connection, content: str = "", ready: bool = Fal
 def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
                  instruction: str, result_addr: int,
                  result_name: str, requires: list[int] | None = None) -> int:
-    """Uses the new_slave() DB function, same as production."""
     requires = requires or []
     return conn.execute(
         "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
@@ -179,12 +182,12 @@ def insert_log(conn: psycopg.Connection, name: str, action: str,
         "INSERT INTO logs (action, created_by) VALUES (%s,%s) RETURNING addr",
         (action, created_by)
     ).fetchone()[0]
-    conn.execute("INSERT INTO names (addr, name) VALUES (%s,%s)", (addr, name))
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 
 
 # ---------------------------------------------------------------------------
-# Shared seed fixture (function-scoped so each test class gets its own rows)
+# Shared seed fixture (function-scoped)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
@@ -229,19 +232,18 @@ def seed(db: psycopg.Connection) -> dict:
 
 class TestResolveKnowledgeItem:
     def test_header_format(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _resolve_knowledge_item
+        from python.sceduler.goal_stack.context import _resolve_knowledge_item
         result = _resolve_knowledge_item(seed["k_addr"], db)
         assert isinstance(result, str)
-        # Expected header line: "TestKnowledge@<addr>@knowledge"
         assert f"TestKnowledge@{seed['k_addr']}@knowledge" in result
 
     def test_content_present(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _resolve_knowledge_item
+        from python.sceduler.goal_stack.context import _resolve_knowledge_item
         result = _resolve_knowledge_item(seed["k_addr"], db)
         assert "This is test knowledge content." in result
 
     def test_nonexistent_addr_raises(self, db):
-        from ..src.python.sceduler.goal_stack.context import _resolve_knowledge_item
+        from python.sceduler.goal_stack.context import _resolve_knowledge_item
         with pytest.raises(AssertionError):
             _resolve_knowledge_item(999999999, db)
 
@@ -252,18 +254,18 @@ class TestResolveKnowledgeItem:
 
 class TestExecutablesItemResolve:
     def test_header_format(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _executables_item_resolve
+        from python.sceduler.goal_stack.context import _executables_item_resolve
         result = _executables_item_resolve(seed["e_addr"], db)
         assert f"TestExecutable@{seed['e_addr']}@executable" in result
 
     def test_header_and_body_labels(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _executables_item_resolve
+        from python.sceduler.goal_stack.context import _executables_item_resolve
         result = _executables_item_resolve(seed["e_addr"], db)
         assert "header: def foo():" in result
         assert "body:     return 42" in result
 
     def test_nonexistent_raises(self, db):
-        from ..src.python.sceduler.goal_stack.context import _executables_item_resolve
+        from python.sceduler.goal_stack.context import _executables_item_resolve
         with pytest.raises(AssertionError):
             _executables_item_resolve(999999999, db)
 
@@ -274,19 +276,18 @@ class TestExecutablesItemResolve:
 
 class TestResultItemResolve:
     def test_format(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _result_item_resolve
+        from python.sceduler.goal_stack.context import _result_item_resolve
         result = _result_item_resolve(seed["r_addr"], db)
-        # result_name comes from the slave row joined via result_addr
         assert "my_result" in result
         assert str(seed["r_addr"]) in result
 
     def test_content_present(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _result_item_resolve
+        from python.sceduler.goal_stack.context import _result_item_resolve
         result = _result_item_resolve(seed["r_addr"], db)
         assert "result content here" in result
 
     def test_ready_flag(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _result_item_resolve
+        from python.sceduler.goal_stack.context import _result_item_resolve
         result = _result_item_resolve(seed["r_addr"], db)
         assert "True" in result
 
@@ -297,12 +298,12 @@ class TestResultItemResolve:
 
 class TestSlavesItemResolve:
     def test_format(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _slaves_item_resolve
+        from python.sceduler.goal_stack.context import _slaves_item_resolve
         result = _slaves_item_resolve(seed["s_addr"], db)
         assert f"TestSlave@{seed['s_addr']}@slave_goal" in result
 
     def test_fields_present(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _slaves_item_resolve
+        from python.sceduler.goal_stack.context import _slaves_item_resolve
         result = _slaves_item_resolve(seed["s_addr"], db)
         assert "slave instruction" in result
         assert str(seed["m_addr"]) in result
@@ -310,15 +311,14 @@ class TestSlavesItemResolve:
         assert str(seed["r_addr"]) in result
 
     def test_nonexistent_raises(self, db):
-        from ..src.python.sceduler.goal_stack.context import _slaves_item_resolve
+        from python.sceduler.goal_stack.context import _slaves_item_resolve
         with pytest.raises(AssertionError):
             _slaves_item_resolve(999999999, db)
 
 
 # ---------------------------------------------------------------------------
 # _masters_item_resolve
-# BUG: "\n".join(result_str, *slave_str_list) — str.join() takes one iterable.
-# Fix: "\n".join([result_str, *slave_str_list])
+# BUG: "\n".join(result_str, *slave_str_list) — should be "\n".join([result_str, *slave_str_list])
 # ---------------------------------------------------------------------------
 
 class TestMastersItemResolve:
@@ -326,7 +326,7 @@ class TestMastersItemResolve:
         reason="str.join() called with *args instead of a single iterable — TypeError"
     )
     def test_format(self, db, seed):
-        from ..src.python.sceduler.goal_stack.context import _masters_item_resolve
+        from python.sceduler.goal_stack.context import _masters_item_resolve
         result = _masters_item_resolve(seed["m_addr"], db)
         assert "master_goal" in result
         assert "slave instruction" in result
@@ -334,32 +334,28 @@ class TestMastersItemResolve:
 
     @pytest.mark.xfail(reason="same str.join bug")
     def test_no_slaves(self, db):
-        """A master with zero slaves should still return a valid string."""
         m_addr = insert_master(db)
-        db.execute(
-            "INSERT INTO master_context (addr) VALUES (%s)", (m_addr,)
-        )
-        from ..src.python.sceduler.goal_stack.context import _masters_item_resolve
+        db.execute("INSERT INTO master_context (addr) VALUES (%s)", (m_addr,))
+        from python.sceduler.goal_stack.context import _masters_item_resolve
         result = _masters_item_resolve(m_addr, db)
         assert "master_goal" in result
 
 
 # ---------------------------------------------------------------------------
 # _logs_item_resolve
-# Note: logs.created_by is TEXT (not INT) per the real schema.
 # ---------------------------------------------------------------------------
 
 class TestLogsItemResolve:
     def test_format(self, db, seed):
         log_addr = insert_log(db, "TestLog", "did_something", "master_system")
-        from ..src.python.sceduler.goal_stack.context import _logs_item_resolve
+        from python.sceduler.goal_stack.context import _logs_item_resolve
         result = _logs_item_resolve(log_addr, db)
         assert f"TestLog@{log_addr}@log_item" in result
         assert "did_something" in result
         assert "master_system" in result
 
     def test_nonexistent_raises(self, db):
-        from ..src.python.sceduler.goal_stack.context import _logs_item_resolve
+        from python.sceduler.goal_stack.context import _logs_item_resolve
         with pytest.raises(AssertionError):
             _logs_item_resolve(999999999, db)
 
@@ -367,9 +363,7 @@ class TestLogsItemResolve:
 # ---------------------------------------------------------------------------
 # resolve_loads
 # BUG: iterates item_addrs as ints, then does addr["ref_addr"] — TypeError.
-# Fix: use addr directly in the match block, not addr["ref_addr"].
-# Also: addrs_tables is a VIEW (not a table with a "table" column) — column is "type".
-# Fix: SELECT type FROM addrs_tables WHERE addr =%s 
+# Also: addrs_tables column is "type", not "table".
 # ---------------------------------------------------------------------------
 
 class TestResolveLoads:
@@ -377,7 +371,7 @@ class TestResolveLoads:
         reason="Two bugs: (1) addr['ref_addr'] on an int, (2) column is 'type' not 'table' in addrs_tables view"
     )
     def test_knowledge_and_executable(self, seed):
-        from ..src.python.sceduler.goal_stack.context import resolve_loads
+        from python.sceduler.goal_stack.context import resolve_loads
         loads = {
             "master_addr": seed["m_addr"],
             "items_addrs": [seed["k_addr"], seed["e_addr"]],
@@ -389,7 +383,7 @@ class TestResolveLoads:
 
     @pytest.mark.xfail(reason="same bugs as above")
     def test_result_item(self, seed):
-        from ..src.python.sceduler.goal_stack.context import resolve_loads
+        from python.sceduler.goal_stack.context import resolve_loads
         loads = {
             "master_addr": seed["m_addr"],
             "items_addrs": [seed["r_addr"]],
@@ -398,8 +392,7 @@ class TestResolveLoads:
         assert "my_result" in result
 
     def test_empty_returns_empty_string(self, seed):
-        """Zero items — no DB queries needed, should always return ''."""
-        from ..src.python.sceduler.goal_stack.context import resolve_loads
+        from python.sceduler.goal_stack.context import resolve_loads
         loads = {
             "master_addr": seed["m_addr"],
             "items_addrs": [],
@@ -409,13 +402,8 @@ class TestResolveLoads:
 
     @pytest.mark.xfail(reason="same bugs; ValueError only reachable once addr lookup is fixed")
     def test_unknown_type_raises_value_error(self, db, seed):
-        """
-        addrs_tables is a view — it only covers known tables.
-        An addr that exists in addrs but in no known table won't appear in the
-        view at all, so fetchone() returns None → should raise, not silently pass.
-        """
-        orphan = new_addr(db)  # exists in addrs, not in any content table
-        from ..src.python.sceduler.goal_stack.context import resolve_loads
+        orphan = new_addr(db)
+        from python.sceduler.goal_stack.context import resolve_loads
         loads = {
             "master_addr": seed["m_addr"],
             "items_addrs": [orphan],
@@ -426,7 +414,7 @@ class TestResolveLoads:
 
 # ---------------------------------------------------------------------------
 # resolve_window
-# bug was fixed
+# BUG: Table name passed as %s — needs psycopg.sql.Identifier
 # ---------------------------------------------------------------------------
 
 class TestResolveWindow:
@@ -434,7 +422,7 @@ class TestResolveWindow:
         reason="Table name passed as %s parameter — not valid SQL, needs psycopg.sql.Identifier"
     )
     def test_knowledge_anchor(self, seed):
-        from ..src.python.sceduler.goal_stack.context import resolve_window
+        from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
             "window_position": {
@@ -450,7 +438,7 @@ class TestResolveWindow:
 
     @pytest.mark.xfail(reason="same Identifier bug")
     def test_executable_anchor(self, seed):
-        from ..src.python.sceduler.goal_stack.context import resolve_window
+        from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
             "window_position": {
@@ -465,12 +453,7 @@ class TestResolveWindow:
 
     @pytest.mark.xfail(reason="same Identifier bug")
     def test_items_within_range_appear(self, db, seed):
-        """
-        knowledge at position 10, window L=5 R=5 → range [5, 15].
-        TestKnowledge (pos 10) should be in output.
-        TestExecutable (pos 20) should not.
-        """
-        from ..src.python.sceduler.goal_stack.context import resolve_window
+        from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
             "window_position": {
@@ -486,8 +469,7 @@ class TestResolveWindow:
 
     @pytest.mark.xfail(reason="same Identifier bug")
     def test_zero_window_returns_only_anchor(self, seed):
-        """L=0, R=0 → only the anchor item's position is included."""
-        from ..src.python.sceduler.goal_stack.context import resolve_window
+        from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
             "window_position": {
@@ -512,34 +494,28 @@ class TestResolveContext:
         reason="Depends on resolve_window (Identifier bug) + resolve_loads (addr bug) + no return statement"
     )
     def test_full_integration(self, seed):
-        from ..src.python.sceduler.goal_stack.context import resolve_context
+        from python.sceduler.goal_stack.context import resolve_context
         result = resolve_context(seed["slave_obj"])
         assert result is not None
 
     def test_missing_master_context_row_raises(self, db):
-        """
-        master_addr with no row in master_context → fetchone() is None →
-        window_data[0] blows up with TypeError. Should raise, not silently return.
-        """
         m_addr = insert_master(db)
         r_addr = insert_result(db, "x", False)
         s_addr = insert_slave(db, m_addr, f"OrphanSlave{m_addr}",
                                "noop", r_addr, "noop_result")
         slave_obj = dict(addr=s_addr, instruction="noop",
                          master_addr=m_addr, result_name="noop_result")
-        from ..src.python.sceduler.goal_stack.context import resolve_context
+        from python.sceduler.goal_stack.context import resolve_context
         with pytest.raises(Exception):
             resolve_context(slave_obj)
 
 
 # ---------------------------------------------------------------------------
-# new_result() DB function — tested directly via SQL
-# This is a pure DB-level integration test, no Python code involved.
+# new_result() DB function — pure DB integration
 # ---------------------------------------------------------------------------
 
 class TestNewResultFunction:
     def test_marks_result_ready(self, db, seed):
-        """new_result() should flip ready=TRUE and set content."""
         db.execute(
             "SELECT new_result(%s, %s, NULL)",
             ("computed output", seed["r_addr"])
@@ -552,8 +528,6 @@ class TestNewResultFunction:
         assert row[1] is True
 
     def test_resolve_by_name(self, db, seed):
-        """new_result() p_name path: resolve via slaves.result_name."""
-        # Create a fresh result (not ready) with a known result_name
         r2 = insert_result(db, "", False)
         m2 = insert_master(db)
         insert_slave(db, m2, f"NamedSlave{r2}", "x", r2, "named_result_key")
@@ -568,12 +542,6 @@ class TestNewResultFunction:
         assert row[1] is True
 
     def test_notifies_unblocked_slave(self, db, seed):
-        """
-        When a result is the last blocker for a slave, new_result() should
-        pg_notify('slaves_ready', slave_addr). Verify by checking slave_req
-        state — all reqs must be ready after the call.
-        """
-        # Build: slave blocked on two results, satisfy both.
         m = insert_master(db)
         r1 = insert_result(db, "", False)
         r2 = insert_result(db, "", False)
@@ -583,7 +551,6 @@ class TestNewResultFunction:
         db.execute("SELECT new_result(%s, %s, NULL)", ("first", r1))
         db.execute("SELECT new_result(%s, %s, NULL)", ("second", r2))
 
-        # After both are ready, no unsatisfied reqs remain for this slave.
         unsatisfied = db.execute("""
             SELECT 1 FROM slave_req sr
             JOIN results r ON r.addr = sr.req_addr
@@ -670,10 +637,8 @@ class TestAddrsTablesView:
         assert row[0] == "results"
 
     def test_orphan_addr_not_in_view(self, db):
-        """An addr that exists in addrs but no content table → not in view."""
         orphan = new_addr(db)
         row = db.execute(
             'SELECT type FROM addrs_tables WHERE addr = %s', (orphan,)
         ).fetchone()
         assert row is None
-

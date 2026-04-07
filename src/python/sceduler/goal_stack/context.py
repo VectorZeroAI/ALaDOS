@@ -15,7 +15,7 @@ def resolve_context(slave_obj: SlaveObj):
     conn = conn_factory()
 
     window_data: Any = conn.execute("""
-    SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = $1;
+    SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
                  """, (slave_obj['master_addr'],)).fetchone()
 
     window_data_python: WindowData = {
@@ -37,7 +37,7 @@ def resolve_context(slave_obj: SlaveObj):
     window_context = resolve_window(window_data_valid)
 
     load_data = conn.execute("""
-    SELECT item_addr FROM master_load WHERE master_addr = $1;
+    SELECT item_addr FROM master_load WHERE master_addr = %s;
                              """, (slave_obj['master_addr'],)).fetchall()
 
     loads_data_python: LoadsData = {
@@ -60,9 +60,9 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
     """ The function for resolving knowledge item to a clean AI friendly string """
     item = conn.execute("""
         SELECT names.name, knowledge.content
-            FROM knowledge JOIN names ON names.addr = $1 WHERE addr = $1;
+            FROM knowledge JOIN names ON names.addr = %s WHERE addr = %s;
 
-                 """, (addr,)).fetchone()
+                 """, (addr, addr)).fetchone()
     assert item is not None
     result = ""
     result = "@".join((item[0], f"{addr}", "knowledge"))
@@ -72,8 +72,8 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
 def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, executables.header, executables.body
-            FROM executables JOIN names ON names.addr = $1 WHERE addr = $1;
-                        """, (addr,)).fetchone()
+            FROM executables JOIN names ON names.addr = %s WHERE addr = %s;
+                        """, (addr, addr)).fetchone()
     assert item is not None   
     result = ""
     result = "@".join((item[0], f"{addr}", "executable"))
@@ -88,7 +88,7 @@ def resolve_loads(loads_data: LoadsData) -> str:
     result_str: list[str] = []
     for addr in loads_data['items_addrs']:
         table = conn.execute("""
-        SELECT table FROM addrs_tables WHERE addr = $1
+        SELECT table FROM addrs_tables WHERE addr = %s 
                      """, (addr,)).fetchone()[0]
 
         match table:
@@ -115,8 +115,8 @@ def _result_item_resolve(addr: int, conn: psycopg.Connection):
     SELECT s.result_name, 
         r.content_str,
         r.ready 
-        FROM results r JOIN slaves s ON s.result_addr = $1 WHERE r.addr = $1;
-                        """, (addr,)).fetchone()
+        FROM results r JOIN slaves s ON s.result_addr = %s WHERE r.addr = %s;
+                        """, (addr, addr)).fetchone()
     result = "@".join((item[0], f"{addr}"))
     result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
     return result
@@ -128,8 +128,8 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
             slaves.instruction,
             slaves.result_addr,
             slaves.result_name
-            FROM slaves JOIN names ON names.addr = $1 WHERE slaves.addr = $1;
-                        """, (addr,)).fetchone()
+            FROM slaves JOIN names ON names.addr = %s WHERE slaves.addr = %s;
+                        """, (addr, addr)).fetchone()
 
     assert fetch is not None
 
@@ -144,10 +144,10 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 
 def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     slaves_fetch = conn.execute("""
-        SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = $1;
+        SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = %s;
                         """, (addr,)).fetchall()
     name = conn.execute("""
-        SELECT name FROM names WHERE addr = $1;
+        SELECT name FROM names WHERE addr = %s;
                         """, (addr,)).fetchone()
 
     assert name is not None
@@ -169,8 +169,8 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, logs.created_at, logs.action, logs.created_by
-            FROM logs JOIN names ON names.addr = $1 WHERE addr = $1;
-                        """, (addr,)).fetchone()
+            FROM logs JOIN names ON names.addr = %s WHERE addr = %s;
+                        """, (addr, addr)).fetchone()
     assert item is not None
     result = "@".join((item[0], f"{addr}", "log_item"))
     result = "\n".join(("", "", result, item[1], item[2], item[3], "", "", ""))
@@ -182,7 +182,7 @@ def resolve_window(window_data: WindowData) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
     conn = conn_factory()
     anchor_pos: Any = conn.execute(f"""
-    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = $1
+    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = %s 
                  """, ( window_data["window_position"]["ref_addr"])).fetchone()
 
     anchor_pos = int(anchor_pos[0])
@@ -190,9 +190,9 @@ def resolve_window(window_data: WindowData) -> str:
     most_r_pos = anchor_pos - window_data['window_size_r']
 
     context_fetch = conn.execute("""
-    SELECT description, addr, position FROM knowledge WHERE position BETWEEN $1 AND $2 ORDER BY position
+    SELECT description, addr, position FROM knowledge WHERE position BETWEEN %s AND %s ORDER BY position
     UNION ALL
-    SELECT description, addr, position FROM executables WHERE position BETWEEN $1 AND $2 ORDER BY position;
+    SELECT description, addr, position FROM executables WHERE position BETWEEN %s AND %s ORDER BY position;
                                  """, (most_l_pos, most_r_pos)).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
@@ -200,7 +200,7 @@ def resolve_window(window_data: WindowData) -> str:
     names = []
     for a in addrs:
         names_fetch = conn.execute("""
-        SELECT name FROM names WHERE addr = $1
+        SELECT name FROM names WHERE addr = %s 
                                    """, (a,)).fetchone()
         names.append(*names_fetch)
 
@@ -240,11 +240,11 @@ def create_index():
         pos = int(pos)
         if t == "knowledge":
             conn.execute("""
-            UPDATE knowledge SET position = $1 WHERE addr = $2;
+            UPDATE knowledge SET position = %s WHERE addr = %s;
                              """, (pos, addr))
         elif t == "executable":
             conn.execute("""
-            UPDATE executables SET position = $1 WHERE addr = $2;
+            UPDATE executables SET position = %s WHERE addr = %s;
                          """, (pos, addr))
         else:
             raise ValueError(f"IDK WHAT HAPPENED THERE, but type gotten from the DB is {t}, wich is anything expected")

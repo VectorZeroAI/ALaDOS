@@ -132,20 +132,20 @@ def new_addr(conn: psycopg.Connection) -> int:
 def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
                      description: str, position: int = 10) -> int:
     addr = conn.execute(
-        "INSERT INTO knowledge (content, description, position) VALUES ($1,$2,$3) RETURNING addr",
+        "INSERT INTO knowledge (content, description, position) VALUES (%s,%s,%s) RETURNING addr",
         (content, description, position)
     ).fetchone()[0]
-    conn.execute("INSERT INTO names (addr, name) VALUES ($1,$2)", (addr, name))
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 
 
 def insert_executable(conn: psycopg.Connection, name: str, header: str,
                        body: str, description: str, position: int = 20) -> int:
     addr = conn.execute(
-        "INSERT INTO executables (header, body, description, position) VALUES ($1,$2,$3,$4) RETURNING addr",
+        "INSERT INTO executables (header, body, description, position) VALUES (%s,%s,%s,%s) RETURNING addr",
         (header, body, description, position)
     ).fetchone()[0]
-    conn.execute("INSERT INTO names (addr, name) VALUES ($1,$2)", (addr, name))
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s,%s)", (addr, name))
     return addr
 
 
@@ -157,7 +157,7 @@ def insert_master(conn: psycopg.Connection) -> int:
 
 def insert_result(conn: psycopg.Connection, content: str = "", ready: bool = False) -> int:
     return conn.execute(
-        "INSERT INTO results (content_str, ready) VALUES ($1,$2) RETURNING addr",
+        "INSERT INTO results (content_str, ready) VALUES (%s,%s) RETURNING addr",
         (content, ready)
     ).fetchone()[0]
 
@@ -168,7 +168,7 @@ def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
     """Uses the new_slave() DB function, same as production."""
     requires = requires or []
     return conn.execute(
-        "SELECT new_slave($1,$2,$3,$4,$5,$6)",
+        "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
         (master_addr, name, instruction, requires, result_addr, result_name)
     ).fetchone()[0]
 
@@ -176,10 +176,10 @@ def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
 def insert_log(conn: psycopg.Connection, name: str, action: str,
                created_by: str) -> int:
     addr = conn.execute(
-        "INSERT INTO logs (action, created_by) VALUES ($1,$2) RETURNING addr",
+        "INSERT INTO logs (action, created_by) VALUES (%s,%s) RETURNING addr",
         (action, created_by)
     ).fetchone()[0]
-    conn.execute("INSERT INTO names (addr, name) VALUES ($1,$2)", (addr, name))
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s,%s)", (addr, name))
     return addr
 
 
@@ -201,14 +201,14 @@ def seed(db: psycopg.Connection) -> dict:
     db.execute(
         """INSERT INTO master_context
                (addr, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
-           VALUES ($1, NULL, $2, 5, 5)""",
+           VALUES (%s, NULL, %s, 5, 5)""",
         (m_addr, k_addr)
     )
     db.execute(
-        "INSERT INTO master_load (master_addr, item_addr) VALUES ($1,$2)", (m_addr, k_addr)
+        "INSERT INTO master_load (master_addr, item_addr) VALUES (%s,%s)", (m_addr, k_addr)
     )
     db.execute(
-        "INSERT INTO master_load (master_addr, item_addr) VALUES ($1,$2)", (m_addr, e_addr)
+        "INSERT INTO master_load (master_addr, item_addr) VALUES (%s,%s)", (m_addr, e_addr)
     )
 
     return dict(
@@ -337,7 +337,7 @@ class TestMastersItemResolve:
         """A master with zero slaves should still return a valid string."""
         m_addr = insert_master(db)
         db.execute(
-            "INSERT INTO master_context (addr) VALUES ($1)", (m_addr,)
+            "INSERT INTO master_context (addr) VALUES (%s)", (m_addr,)
         )
         from ..src.python.sceduler.goal_stack.context import _masters_item_resolve
         result = _masters_item_resolve(m_addr, db)
@@ -369,7 +369,7 @@ class TestLogsItemResolve:
 # BUG: iterates item_addrs as ints, then does addr["ref_addr"] — TypeError.
 # Fix: use addr directly in the match block, not addr["ref_addr"].
 # Also: addrs_tables is a VIEW (not a table with a "table" column) — column is "type".
-# Fix: SELECT type FROM addrs_tables WHERE addr = $1
+# Fix: SELECT type FROM addrs_tables WHERE addr =%s 
 # ---------------------------------------------------------------------------
 
 class TestResolveLoads:
@@ -426,14 +426,12 @@ class TestResolveLoads:
 
 # ---------------------------------------------------------------------------
 # resolve_window
-# BUG: "SELECT position FROM $1 WHERE addr = $2" — table name can't be a
-# psycopg parameter. Raises ProgrammingError at runtime.
-# Fix: use psycopg.sql.SQL + psycopg.sql.Identifier for the table name.
+# bug was fixed
 # ---------------------------------------------------------------------------
 
 class TestResolveWindow:
     @pytest.mark.xfail(
-        reason="Table name passed as $1 parameter — not valid SQL, needs psycopg.sql.Identifier"
+        reason="Table name passed as %s parameter — not valid SQL, needs psycopg.sql.Identifier"
     )
     def test_knowledge_anchor(self, seed):
         from ..src.python.sceduler.goal_stack.context import resolve_window
@@ -543,11 +541,11 @@ class TestNewResultFunction:
     def test_marks_result_ready(self, db, seed):
         """new_result() should flip ready=TRUE and set content."""
         db.execute(
-            "SELECT new_result($1, $2, NULL)",
+            "SELECT new_result(%s, %s, NULL)",
             ("computed output", seed["r_addr"])
         )
         row = db.execute(
-            "SELECT content_str, ready FROM results WHERE addr = $1",
+            "SELECT content_str, ready FROM results WHERE addr = %s",
             (seed["r_addr"],)
         ).fetchone()
         assert row[0] == "computed output"
@@ -560,11 +558,11 @@ class TestNewResultFunction:
         m2 = insert_master(db)
         insert_slave(db, m2, f"NamedSlave{r2}", "x", r2, "named_result_key")
         db.execute(
-            "SELECT new_result($1, NULL, $2)",
+            "SELECT new_result(%s, NULL, %s)",
             ("output via name", "named_result_key")
         )
         row = db.execute(
-            "SELECT content_str, ready FROM results WHERE addr = $1", (r2,)
+            "SELECT content_str, ready FROM results WHERE addr = %s", (r2,)
         ).fetchone()
         assert row[0] == "output via name"
         assert row[1] is True
@@ -582,20 +580,20 @@ class TestNewResultFunction:
         s = insert_slave(db, m, f"BlockedSlave{m}", "x", r1, "r1_name",
                          requires=[r1, r2])
 
-        db.execute("SELECT new_result($1, $2, NULL)", ("first", r1))
-        db.execute("SELECT new_result($1, $2, NULL)", ("second", r2))
+        db.execute("SELECT new_result(%s, %s, NULL)", ("first", r1))
+        db.execute("SELECT new_result(%s, %s, NULL)", ("second", r2))
 
         # After both are ready, no unsatisfied reqs remain for this slave.
         unsatisfied = db.execute("""
             SELECT 1 FROM slave_req sr
             JOIN results r ON r.addr = sr.req_addr
-            WHERE sr.slave_addr = $1 AND r.ready = FALSE
+            WHERE sr.slave_addr = %s AND r.ready = FALSE
         """, (s,)).fetchone()
         assert unsatisfied is None
 
     def test_no_addr_no_name_raises(self, db):
         with pytest.raises(psycopg.errors.RaiseException):
-            db.execute("SELECT new_result($1, NULL, NULL)", ("x",))
+            db.execute("SELECT new_result(%s, NULL, NULL)", ("x",))
 
 
 # ---------------------------------------------------------------------------
@@ -607,18 +605,18 @@ class TestNewSlaveFunction:
         m = insert_master(db)
         r = insert_result(db, "", False)
         s_addr = db.execute(
-            "SELECT new_slave($1,$2,$3,$4,$5,$6)",
+            "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
             (m, "MyNewSlave", "do stuff", [], r, "my_result")
         ).fetchone()[0]
 
         slave = db.execute(
-            "SELECT instruction, result_name FROM slaves WHERE addr = $1", (s_addr,)
+            "SELECT instruction, result_name FROM slaves WHERE addr = %s", (s_addr,)
         ).fetchone()
         assert slave[0] == "do stuff"
         assert slave[1] == "my_result"
 
         name = db.execute(
-            "SELECT name FROM names WHERE addr = $1", (s_addr,)
+            "SELECT name FROM names WHERE addr = %s", (s_addr,)
         ).fetchone()
         assert name[0] == "MyNewSlave"
 
@@ -628,12 +626,12 @@ class TestNewSlaveFunction:
         r2 = insert_result(db, "", False)
         result_r = insert_result(db, "", False)
         s_addr = db.execute(
-            "SELECT new_slave($1,$2,$3,$4,$5,$6)",
+            "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
             (m, f"ReqSlave{m}", "needs two", [r1, r2], result_r, "req_result")
         ).fetchone()[0]
 
         reqs = db.execute(
-            "SELECT req_addr FROM slave_req WHERE slave_addr = $1 ORDER BY req_addr",
+            "SELECT req_addr FROM slave_req WHERE slave_addr = %s ORDER BY req_addr",
             (s_addr,)
         ).fetchall()
         req_addrs = {row[0] for row in reqs}
@@ -648,26 +646,26 @@ class TestNewSlaveFunction:
 class TestAddrsTablesView:
     def test_knowledge_type(self, db, seed):
         row = db.execute(
-            'SELECT type FROM addrs_tables WHERE addr = $1', (seed["k_addr"],)
+            'SELECT type FROM addrs_tables WHERE addr = %s', (seed["k_addr"],)
         ).fetchone()
         assert row is not None
         assert row[0] == "knowledge"
 
     def test_executable_type(self, db, seed):
         row = db.execute(
-            'SELECT type FROM addrs_tables WHERE addr = $1', (seed["e_addr"],)
+            'SELECT type FROM addrs_tables WHERE addr = %s', (seed["e_addr"],)
         ).fetchone()
         assert row[0] == "executables"
 
     def test_slave_type(self, db, seed):
         row = db.execute(
-            'SELECT type FROM addrs_tables WHERE addr = $1', (seed["s_addr"],)
+            'SELECT type FROM addrs_tables WHERE addr = %s', (seed["s_addr"],)
         ).fetchone()
         assert row[0] == "slaves"
 
     def test_result_type(self, db, seed):
         row = db.execute(
-            'SELECT type FROM addrs_tables WHERE addr = $1', (seed["r_addr"],)
+            'SELECT type FROM addrs_tables WHERE addr = %s', (seed["r_addr"],)
         ).fetchone()
         assert row[0] == "results"
 
@@ -675,7 +673,7 @@ class TestAddrsTablesView:
         """An addr that exists in addrs but no content table → not in view."""
         orphan = new_addr(db)
         row = db.execute(
-            'SELECT type FROM addrs_tables WHERE addr = $1', (orphan,)
+            'SELECT type FROM addrs_tables WHERE addr = %s', (orphan,)
         ).fetchone()
         assert row is None
 

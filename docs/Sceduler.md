@@ -11,7 +11,7 @@ If no, do nothing — the slave will be checked again when its next requirement 
 The dependency check query:
 ```sql
 SELECT slave_addr FROM slave_req
-WHERE req_addr = $1
+WHERE req_addr = %s 
 AND slave_addr NOT IN (
 SELECT slave_addr FROM slave_req
 WHERE req_addr NOT IN (SELECT addr FROM results)

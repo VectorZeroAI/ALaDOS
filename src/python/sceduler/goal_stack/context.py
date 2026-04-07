@@ -36,7 +36,6 @@ def resolve_context(slave_obj: SlaveObj):
 
     window_context = resolve_window(window_data_valid)
 
-
     load_data = conn.execute("""
     SELECT item_addr FROM master_load WHERE master_addr = $1;
                              """, (slave_obj['master_addr'],)).fetchall()
@@ -53,6 +52,9 @@ def resolve_context(slave_obj: SlaveObj):
         raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
 
     load_context = resolve_loads(loads_data_valid)
+
+    return "\n\n\n".join([window_context, load_context])
+    
 
 def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
     """ The function for resolving knowledge item to a clean AI friendly string """
@@ -161,7 +163,7 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
         slave_str_list.append(f"result_name: {i[2]}")
         slave_str_list.append("}")
 
-    result_str = "\n".join(result_str, *slave_str_list)
+    result_str = "\n".join([result_str, *slave_str_list])
     return result_str
 
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
@@ -179,12 +181,10 @@ def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def resolve_window(window_data: WindowData) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
     conn = conn_factory()
-    anchor_pos: Any = conn.execute("""
-    SELECT position FROM $1 WHERE addr = $2
-                 """, (
-                     window_data["window_position"]["ref_table"],
-                     window_data["window_position"]["ref_addr"]
-                     )).fetchone()
+    anchor_pos: Any = conn.execute(f"""
+    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = $1
+                 """, ( window_data["window_position"]["ref_addr"])).fetchone()
+
     anchor_pos = int(anchor_pos[0])
     most_l_pos = anchor_pos - window_data['window_size_l']
     most_r_pos = anchor_pos - window_data['window_size_r']

@@ -3,3 +3,4 @@ diagnostics.db-shm
 diagnostics.db-wal
 uv.lock
 dir_tree_snapshot.txt
+tests/__pycache__/context_test.cpython-313-pytest-9.0.2.pyc

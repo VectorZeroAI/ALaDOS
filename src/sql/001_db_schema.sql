@@ -18,19 +18,12 @@ CREATE TABLE IF NOT EXISTS addrs (
 );
 
 CREATE TABLE IF NOT EXISTS names(
-    addr BIGINT UNIQUE
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    addr BIGINT UNIQUE REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     name TEXT PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS knowledge (
-    addr BIGINT DEFAULT new_addr()
-        PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     content TEXT NOT NULL,
     description TEXT NOT NULL,
     position INT,
@@ -38,11 +31,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
 );
 
 CREATE TABLE IF NOT EXISTS executables (
-    addr BIGINT DEFAULT new_addr()
-        PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     description TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
@@ -51,38 +40,20 @@ CREATE TABLE IF NOT EXISTS executables (
 );
 
 CREATE TABLE IF NOT EXISTS logs (
-    addr BIGINT DEFAULT new_addr() 
-        PRIMARY KEY 
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     action TEXT NOT NULL,
     created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()))::BIGINT,
     created_by TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS masters (
-    addr BIGINT DEFAULT new_addr()
-        PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON DELETE CASCADE
-            ON UPDATE CASCADE
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
-    addr BIGINT
-        PRIMARY KEY
-        REFERENCES masters(addr)
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
-    window_anchor_exe BIGINT
-        REFERENCES executables(addr)
-            ON DELETE SET NULL
-            ON UPDATE CASCADE,
-    window_anchor_knowledge BIGINT
-        REFERENCES knowledge(addr)
-            ON DELETE SET NULL
-            ON UPDATE CASCADE,
+    addr BIGINT PRIMARY KEY REFERENCES masters(addr) ON DELETE CASCADE ON UPDATE CASCADE,
+    window_anchor_exe BIGINT REFERENCES executables(addr) ON DELETE SET NULL ON UPDATE CASCADE,
+    window_anchor_knowledge BIGINT REFERENCES knowledge(addr) ON DELETE SET NULL ON UPDATE CASCADE,
     window_size_r INT,
     window_size_l INT,
     CONSTRAINT window_full_or_none CHECK (
@@ -95,23 +66,13 @@ CREATE TABLE IF NOT EXISTS master_context (
 );
 
 CREATE TABLE IF NOT EXISTS master_load (
-    master_addr BIGINT
-        REFERENCES masters(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
-    item_addr BIGINT
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    master_addr BIGINT REFERENCES masters(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    item_addr BIGINT REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     PRIMARY KEY (master_addr, item_addr)
 );
 
 CREATE TABLE IF NOT EXISTS results (
-    addr BIGINT DEFAULT new_addr()
-        PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     content_str TEXT NOT NULL,
     ready BOOLEAN NOT NULL
 );

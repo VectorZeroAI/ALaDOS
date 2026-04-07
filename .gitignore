@@ -2,3 +2,4 @@ diagnostics.db
 diagnostics.db-shm
 diagnostics.db-wal
 uv.lock
+dir_tree_snapshot.txt

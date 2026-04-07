@@ -4,3 +4,11 @@ diagnostics.db-wal
 uv.lock
 dir_tree_snapshot.txt
 tests/__pycache__/context_test.cpython-313-pytest-9.0.2.pyc
+__pycache__/__init__.cpython-313.pyc
+src/__pycache__/__init__.cpython-313.pyc
+tests/__pycache__/__init__.cpython-313.pyc
+src/python/__pycache__/types.cpython-313.pyc
+src/python/sceduler/goal_stack/__pycache__/context.cpython-313.pyc
+src/python/sceduler/goal_stack/__pycache__/types.cpython-313.pyc
+src/python/utils/__pycache__/conn_factory.cpython-313.pyc
+src/python/__pycache__/__init__.cpython-313.pyc

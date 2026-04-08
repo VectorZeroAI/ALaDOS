@@ -405,7 +405,7 @@ class TestResolveWindow:
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": seed["k_addr"],
+            "window_position": {seed["k_addr"], "knowledge"},
             "window_size_l": 5,
             "window_size_r": 5,
         }
@@ -417,7 +417,7 @@ class TestResolveWindow:
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": seed["e_addr"],
+            "window_position": {seed["e_addr"], "executables"},
             "window_size_l": 5,
             "window_size_r": 5,
         }
@@ -428,7 +428,7 @@ class TestResolveWindow:
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": seed["k_addr"],
+            "window_position": {seed["k_addr"], "knowledge"},
             "window_size_l": 5,
             "window_size_r": 5,
         }
@@ -440,7 +440,7 @@ class TestResolveWindow:
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": seed["k_addr"],
+            "window_position": {seed["k_addr"], "knowledge"},
             "window_size_l": 0,
             "window_size_r": 0,
         }

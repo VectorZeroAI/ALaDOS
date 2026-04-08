@@ -17,7 +17,10 @@ def resolve_context(slave_obj: SlaveObj):
 
     window_data_python: WindowData = {
             "master_addr": slave_obj['master_addr'],
-            "window_position": window_data[0] if window_data[0] is not None else window_data[1],
+            "window_position": {
+                "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
+                "ref_table": "executables" if window_data[0] is not None else "knowledge"
+                },
             "window_size_l": window_data[3],
             "window_size_r": window_data[2]
             }
@@ -189,8 +192,8 @@ def resolve_window(window_data: WindowData) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
     conn = conn_factory()
     anchor_pos = conn.execute(f"""
-    SELECT position FROM {window_data["window_position"]} WHERE addr = %s 
-                 """, (window_data["window_position"], )).fetchone()
+    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = %s 
+                 """, (window_data["window_position"]["ref_addr"], )).fetchone()
 
     if anchor_pos is None:
         return f"DOES NOT EXIST@{window_data["window_position"]}"

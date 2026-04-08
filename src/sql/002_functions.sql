@@ -11,7 +11,30 @@ CREATE OR REPLACE FUNCTION new_slave(
     DECLARE
         new_slave_addr BIGINT;
         req BIGINT;
+        v_has_cycle BOOLEAN;
     BEGIN
+        WITH RECURSIVE dep_chain(slave_addr) AS (
+            SELECT s.addr
+            FROM slave_req sr
+            JOIN slaves s ON s.result_addr = sr.req_addr
+            WHERE sr.slave_addr = new_slave_addr
+
+            UNION
+
+            SELECT s.addr
+            FROM dep_chain dc
+            JOIN slave_req sr ON sr.slave_addr = dc.slave_addr
+            JOIN slaves s ON s.result_addr = sr.req_addr
+        )
+        SELECT EXISTS (
+            SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr
+        ) INTO v_has_cycle;
+
+        IF v_has_cycle THEN
+            RAISE EXCEPTION 'Cyclic dependency detected involving slave %', new_slave_addr;
+        END IF;
+
+
         INSERT INTO slaves (master_addr, instruction, result_addr, result_name)
         VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name)
         RETURNING addr INTO new_slave_addr;

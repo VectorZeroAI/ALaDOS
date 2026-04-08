@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import TypeAlias, TypedDict, List, Optional
-from ...types import ReferenceTo
+from ...types import ReferenceTo, ValidTables
 
 SlaveAddr: TypeAlias = int
 MasterAddr: TypeAlias = int
@@ -13,9 +13,13 @@ class SlaveObj(TypedDict):
     master_addr: MasterAddr
     result_name: str
 
+class Anchor(TypedDict):
+    ref_addr: ReferenceTo
+    ref_table: ValidTables
+
 class WindowData(TypedDict):
     master_addr: MasterAddr
-    window_position: ReferenceTo
+    window_position: Anchor
     window_size_r: int
     window_size_l: int
 

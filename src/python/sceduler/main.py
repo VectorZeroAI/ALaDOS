@@ -15,11 +15,12 @@ from ..executor.queue import executor_queue
 from ..executor.types import instr_json
 from .goal_stack.context import resolve_context
 import psycopg
-from ..executor.queue import executor_queue
+import threading
 
 instr_json_validator = TypeAdapter(instr_json)
 
-def addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json:
+def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json:
+    """ resolves a slave addr to an instruction object, including context resolution. """
     context_prefetch = conn.execute("""
     SELECT instruction, master_addr, result_name, result_addr FROM slaves WHERE addr = %s;
                                     """, (slave_addr,)).fetchone()
@@ -36,19 +37,32 @@ def addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json:
     instruction = instr_json_validator.validate_python({
         "result_addr": context_prefetch[3],
         "instruction": context_prefetch[0],
-        "master_addr": context_prefetch[2],
+        "master_addr": context_prefetch[1],
         "context": context
         })
     return instruction
 
 def new_slave_listener_thread():
-    conn = conn_factory()
-    conn.execute("LISTEN slaves_ready")
-    for n in conn.notifies():
-        if n.channel != "slaves_ready":
-            continue
-        instr = addr_to_instr(int(n.payload), conn)
-        executor_queue.put(instr)
+    """ The sceduler thread that listens to Postgres telling it what slaves are unblocked, and sceduling them for execution."""
+    try:
+        conn = conn_factory()
+        qconn = conn_factory()
+        conn.execute("LISTEN slaves_ready")
+        for n in conn.notifies():
+            try:
+                if n.channel != "slaves_ready":
+                    continue
+                instr = slave_addr_to_instr(int(n.payload), qconn)
+                executor_queue.put(instr)
+            except Exception as e:
+                print(f"sceduler new_slave_listener_thread errored: {e}")
+                # TODO : IMPLEMENT ACTUAL LOGGING
+    finally:
+        try:
+            conn.close()
+            qconn.close()
+        except Exception:
+            pass
                
 
 def setup():
@@ -65,5 +79,7 @@ def setup():
                  """).fetchall()
 
     for addr in unblocked_slave_addrs:
-        instruction = addr_to_instr(addr[0], conn)
+        instruction = slave_addr_to_instr(addr[0], conn)
         executor_queue.put(instruction)
+
+    threading.Thread(target=new_slave_listener_thread, daemon=True).start()

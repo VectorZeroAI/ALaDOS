@@ -107,7 +107,7 @@ def db() -> psycopg.Connection:
     conn.execute(TEARDOWN)
 
     sql_dir = os.path.join(os.path.dirname(__file__), "..", "src", "sql")
-    for fname in ("001_db_schema.sql", "002_functions.sql"):
+    for fname in ("001_db_schema.sql", "002_functions.sql", "003_notifiers.sql"):
         path = os.path.join(sql_dir, fname)
         with open(path) as f:
             conn.execute(f.read())
@@ -133,11 +133,14 @@ def new_addr(conn: psycopg.Connection) -> int:
     return conn.execute("SELECT new_addr()").fetchone()[0]
 
 
+_ZERO_EMB = "[" + ",".join(["0"] * 384) + "]"
+
+
 def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
                      description: str, position: int = 10) -> int:
     addr = conn.execute(
-        "INSERT INTO knowledge (content, description, position) VALUES (%s,%s,%s) RETURNING addr",
-        (content, description, position)
+        "INSERT INTO knowledge (content, description, position, emb) VALUES (%s,%s,%s,%s::vector) RETURNING addr",
+        (content, description, position, _ZERO_EMB)
     ).fetchone()[0]
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
@@ -146,8 +149,8 @@ def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
 def insert_executable(conn: psycopg.Connection, name: str, header: str,
                        body: str, description: str, position: int = 20) -> int:
     addr = conn.execute(
-        "INSERT INTO executables (header, body, description, position) VALUES (%s,%s,%s,%s) RETURNING addr",
-        (header, body, description, position)
+        "INSERT INTO executables (header, body, description, position, emb) VALUES (%s,%s,%s,%s,%s::vector) RETURNING addr",
+        (header, body, description, position, _ZERO_EMB)
     ).fetchone()[0]
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
@@ -242,10 +245,10 @@ class TestResolveKnowledgeItem:
         result = _resolve_knowledge_item(seed["k_addr"], db)
         assert "This is test knowledge content." in result
 
-    def test_nonexistent_addr_raises(self, db):
+    def test_nonexistent_addr_returns_sentinel(self, db):
         from python.sceduler.goal_stack.context import _resolve_knowledge_item
-        with pytest.raises(AssertionError):
-            _resolve_knowledge_item(999999999, db)
+        result = _resolve_knowledge_item(999999999, db)
+        assert result == "DOES NOT EXIST@999999999"
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +267,10 @@ class TestExecutablesItemResolve:
         assert "header: def foo():" in result
         assert "body:     return 42" in result
 
-    def test_nonexistent_raises(self, db):
+    def test_nonexistent_returns_sentinel(self, db):
         from python.sceduler.goal_stack.context import _executables_item_resolve
-        with pytest.raises(AssertionError):
-            _executables_item_resolve(999999999, db)
+        result = _executables_item_resolve(999999999, db)
+        assert result == "DOES NOT EXIST@999999999"
 
 
 # ---------------------------------------------------------------------------
@@ -310,21 +313,17 @@ class TestSlavesItemResolve:
         assert "my_result" in result
         assert str(seed["r_addr"]) in result
 
-    def test_nonexistent_raises(self, db):
+    def test_nonexistent_returns_sentinel(self, db):
         from python.sceduler.goal_stack.context import _slaves_item_resolve
-        with pytest.raises(AssertionError):
-            _slaves_item_resolve(999999999, db)
+        result = _slaves_item_resolve(999999999, db)
+        assert result == "DOES NOT EXIST@999999999"
 
 
 # ---------------------------------------------------------------------------
 # _masters_item_resolve
-# BUG: "\n".join(result_str, *slave_str_list) — should be "\n".join([result_str, *slave_str_list])
 # ---------------------------------------------------------------------------
 
 class TestMastersItemResolve:
-    @pytest.mark.xfail(
-        reason="str.join() called with *args instead of a single iterable — TypeError"
-    )
     def test_format(self, db, seed):
         from python.sceduler.goal_stack.context import _masters_item_resolve
         result = _masters_item_resolve(seed["m_addr"], db)
@@ -332,7 +331,6 @@ class TestMastersItemResolve:
         assert "slave instruction" in result
         assert str(seed["r_addr"]) in result
 
-    @pytest.mark.xfail(reason="same str.join bug")
     def test_no_slaves(self, db):
         m_addr = insert_master(db)
         db.execute("INSERT INTO master_context (addr) VALUES (%s)", (m_addr,))
@@ -354,22 +352,13 @@ class TestLogsItemResolve:
         assert "did_something" in result
         assert "master_system" in result
 
-    def test_nonexistent_raises(self, db):
+    def test_nonexistent_returns_sentinel(self, db):
         from python.sceduler.goal_stack.context import _logs_item_resolve
-        with pytest.raises(AssertionError):
-            _logs_item_resolve(999999999, db)
+        result = _logs_item_resolve(999999999, db)
+        assert result == "DOES NOT EXIST@999999999"
 
-
-# ---------------------------------------------------------------------------
-# resolve_loads
-# BUG: iterates item_addrs as ints, then does addr["ref_addr"] — TypeError.
-# Also: addrs_tables column is "type", not "table".
-# ---------------------------------------------------------------------------
 
 class TestResolveLoads:
-    @pytest.mark.xfail(
-        reason="Two bugs: (1) addr['ref_addr'] on an int, (2) column is 'type' not 'table' in addrs_tables view"
-    )
     def test_knowledge_and_executable(self, seed):
         from python.sceduler.goal_stack.context import resolve_loads
         loads = {
@@ -381,7 +370,6 @@ class TestResolveLoads:
         assert "TestKnowledge" in result
         assert "TestExecutable" in result
 
-    @pytest.mark.xfail(reason="same bugs as above")
     def test_result_item(self, seed):
         from python.sceduler.goal_stack.context import resolve_loads
         loads = {
@@ -400,7 +388,6 @@ class TestResolveLoads:
         result = resolve_loads(loads)
         assert result == ""
 
-    @pytest.mark.xfail(reason="same bugs; ValueError only reachable once addr lookup is fixed")
     def test_unknown_type_raises_value_error(self, db, seed):
         orphan = new_addr(db)
         from python.sceduler.goal_stack.context import resolve_loads
@@ -412,23 +399,13 @@ class TestResolveLoads:
             resolve_loads(loads)
 
 
-# ---------------------------------------------------------------------------
-# resolve_window
-# BUG: Table name passed as %s — needs psycopg.sql.Identifier
-# ---------------------------------------------------------------------------
 
 class TestResolveWindow:
-    @pytest.mark.xfail(
-        reason="Table name passed as %s parameter — not valid SQL, needs psycopg.sql.Identifier"
-    )
     def test_knowledge_anchor(self, seed):
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": {
-                "ref_addr": seed["k_addr"],
-                "ref_table": "knowledge",
-            },
+            "window_position": seed["k_addr"],
             "window_size_l": 5,
             "window_size_r": 5,
         }
@@ -436,30 +413,22 @@ class TestResolveWindow:
         assert isinstance(result, str)
         assert len(result) > 0
 
-    @pytest.mark.xfail(reason="same Identifier bug")
     def test_executable_anchor(self, seed):
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": {
-                "ref_addr": seed["e_addr"],
-                "ref_table": "executables",
-            },
+            "window_position": seed["e_addr"],
             "window_size_l": 5,
             "window_size_r": 5,
         }
         result = resolve_window(window)
         assert isinstance(result, str)
 
-    @pytest.mark.xfail(reason="same Identifier bug")
     def test_items_within_range_appear(self, db, seed):
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": {
-                "ref_addr": seed["k_addr"],
-                "ref_table": "knowledge",
-            },
+            "window_position": seed["k_addr"],
             "window_size_l": 5,
             "window_size_r": 5,
         }
@@ -467,15 +436,11 @@ class TestResolveWindow:
         assert "TestKnowledge" in result
         assert "TestExecutable" not in result
 
-    @pytest.mark.xfail(reason="same Identifier bug")
     def test_zero_window_returns_only_anchor(self, seed):
         from python.sceduler.goal_stack.context import resolve_window
         window = {
             "master_addr": seed["m_addr"],
-            "window_position": {
-                "ref_addr": seed["k_addr"],
-                "ref_table": "knowledge",
-            },
+            "window_position": seed["k_addr"],
             "window_size_l": 0,
             "window_size_r": 0,
         }
@@ -490,9 +455,6 @@ class TestResolveWindow:
 # ---------------------------------------------------------------------------
 
 class TestResolveContext:
-    @pytest.mark.xfail(
-        reason="Depends on resolve_window (Identifier bug) + resolve_loads (addr bug) + no return statement"
-    )
     def test_full_integration(self, seed):
         from python.sceduler.goal_stack.context import resolve_context
         result = resolve_context(seed["slave_obj"])
@@ -642,3 +604,5 @@ class TestAddrsTablesView:
             'SELECT type FROM addrs_tables WHERE addr = %s', (orphan,)
         ).fetchone()
         assert row is None
+
+

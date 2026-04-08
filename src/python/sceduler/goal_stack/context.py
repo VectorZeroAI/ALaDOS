@@ -3,9 +3,6 @@
 from python.types import ReferenceTo
 from .types import SlaveObj, WindowData, LoadsData
 from ...utils.conn_factory import conn_factory
-from hilbertcurve.hilbertcurve import HilbertCurve
-import umap
-import numpy as np
 from pydantic import TypeAdapter, ValidationError
 from typing import Any
 import psycopg
@@ -20,10 +17,7 @@ def resolve_context(slave_obj: SlaveObj):
 
     window_data_python: WindowData = {
             "master_addr": slave_obj['master_addr'],
-            "window_position": {
-                "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
-                "ref_table": "executables" if window_data[0] is not None else "knowledge",
-                },
+            "window_position": window_data[0] if window_data[0] is not None else window_data[1],
             "window_size_l": window_data[3],
             "window_size_r": window_data[2]
             }
@@ -60,10 +54,12 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
     """ The function for resolving knowledge item to a clean AI friendly string """
     item = conn.execute("""
         SELECT names.name, knowledge.content
-            FROM knowledge JOIN names ON names.addr = %s WHERE addr = %s;
+            FROM knowledge JOIN names ON names.addr = %s WHERE knowledge.addr = %s;
 
                  """, (addr, addr)).fetchone()
-    assert item is not None
+    if item is None:
+        return f"DOES NOT EXIST@{addr}"
+
     result = ""
     result = "@".join((item[0], f"{addr}", "knowledge"))
     result = "\n".join(("", result, item[1], "", "", ""))
@@ -72,9 +68,10 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
 def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, executables.header, executables.body
-            FROM executables JOIN names ON names.addr = %s WHERE addr = %s;
+            FROM executables JOIN names ON names.addr = %s WHERE executables.addr = %s;
                         """, (addr, addr)).fetchone()
-    assert item is not None   
+    if item is None:
+        return f"DOES NOT EXIST@{addr}"
     result = ""
     result = "@".join((item[0], f"{addr}", "executable"))
     result = "\n".join(("", "", result, f"header: {item[1]}", f"body: {item[2]}", "", "", ""))
@@ -88,25 +85,25 @@ def resolve_loads(loads_data: LoadsData) -> str:
     result_str: list[str] = []
     for addr in loads_data['items_addrs']:
         table = conn.execute("""
-        SELECT table FROM addrs_tables WHERE addr = %s 
+        SELECT type FROM addrs_tables WHERE addr = %s 
                      """, (addr,)).fetchone()[0]
 
         match table:
             case 'knowledge':
-                result_str.append(_resolve_knowledge_item(addr["ref_addr"], conn))
+                result_str.append(_resolve_knowledge_item(addr, conn))
             case 'executables':
-                result_str.append(_executables_item_resolve(addr["ref_addr"], conn))
+                result_str.append(_executables_item_resolve(addr, conn))
             case 'logs':
-                result_str.append(_logs_item_resolve(addr["ref_addr"], conn))
+                result_str.append(_logs_item_resolve(addr, conn))
             case 'masters':
-                result_str.append(_masters_item_resolve(addr["ref_addr"], conn))
+                result_str.append(_masters_item_resolve(addr, conn))
 
             case 'slaves':
-                result_str.append(_slaves_item_resolve(addr["ref_addr"], conn))
+                result_str.append(_slaves_item_resolve(addr, conn))
             case 'results':
-                result_str.append(_result_item_resolve(addr["ref_addr"], conn))
+                result_str.append(_result_item_resolve(addr, conn))
             case _:
-                raise ValueError("Database returned a non existant or invalid table name. Returned {table}, but its not a valid table name. If it is, please add that tables case to the above handler.")
+                raise ValueError(f"Database returned a non existant or invalid table name. Returned {table}, but its not a valid table name. If it is, please add that tables case to the above handler.")
 
     return "".join(result_str)
 
@@ -117,6 +114,9 @@ def _result_item_resolve(addr: int, conn: psycopg.Connection):
         r.ready 
         FROM results r JOIN slaves s ON s.result_addr = %s WHERE r.addr = %s;
                         """, (addr, addr)).fetchone()
+    if item is None:
+        return f"DOES NOT EXIST@{addr}"
+
     result = "@".join((item[0], f"{addr}"))
     result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
     return result
@@ -131,7 +131,8 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
             FROM slaves JOIN names ON names.addr = %s WHERE slaves.addr = %s;
                         """, (addr, addr)).fetchone()
 
-    assert fetch is not None
+    if fetch is None:
+        return f"DOES NOT EXIST@{addr}"
 
     result = "@".join((fetch[0], f"{addr}", "slave_goal"))
     result = "\n".join(("", "", result,
@@ -149,9 +150,14 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     name = conn.execute("""
         SELECT name FROM names WHERE addr = %s;
                         """, (addr,)).fetchone()
+    if name is None and slaves_fetch is None:
+        return f"DOES NOT EXIST@{addr}"
 
-    assert name is not None
-    assert slaves_fetch is not None
+    if name is None:
+        name = ("None",)
+
+    if slaves_fetch is None:
+        slaves_fetch = ("No slaves", "no slaves", "no slaves")
 
     slave_str_list: list[str] = []
     result_str = "@".join((*name, f"{addr}", "master_goal"))
@@ -169,31 +175,35 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, logs.created_at, logs.action, logs.created_by
-            FROM logs JOIN names ON names.addr = %s WHERE addr = %s;
+            FROM logs JOIN names ON names.addr = %s WHERE logs.addr = %s;
                         """, (addr, addr)).fetchone()
-    assert item is not None
+    
+    if item is None:
+        return f"DOES NOT EXIST@{addr}"
+
     result = "@".join((item[0], f"{addr}", "log_item"))
-    result = "\n".join(("", "", result, item[1], item[2], item[3], "", "", ""))
+    result = "\n".join(("", "", result, str(item[1]), item[2], item[3], "", "", ""))
     return result
-
-
 
 def resolve_window(window_data: WindowData) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
     conn = conn_factory()
-    anchor_pos: Any = conn.execute(f"""
-    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = %s 
-                 """, ( window_data["window_position"]["ref_addr"])).fetchone()
+    anchor_pos = conn.execute(f"""
+    SELECT position FROM {window_data["window_position"]} WHERE addr = %s 
+                 """, (window_data["window_position"], )).fetchone()
+
+    if anchor_pos is None:
+        return f"DOES NOT EXIST@{window_data["window_position"]}"
 
     anchor_pos = int(anchor_pos[0])
     most_l_pos = anchor_pos - window_data['window_size_l']
-    most_r_pos = anchor_pos - window_data['window_size_r']
+    most_r_pos = anchor_pos + window_data['window_size_r']
 
     context_fetch = conn.execute("""
-    SELECT description, addr, position FROM knowledge WHERE position BETWEEN %s AND %s ORDER BY position
+    SELECT description, addr, position FROM knowledge WHERE position BETWEEN %s AND %s
     UNION ALL
     SELECT description, addr, position FROM executables WHERE position BETWEEN %s AND %s ORDER BY position;
-                                 """, (most_l_pos, most_r_pos)).fetchall()
+                                 """, (most_l_pos, most_r_pos, most_l_pos, most_r_pos)).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 

@@ -38,13 +38,13 @@ CREATE OR REPLACE FUNCTION position_calculation()
         SELECT position, NEW.emb <=> k.emb AS distance INTO item_2_pos_k, item_2_distance_k FROM knowledge k ORDER BY NEW.emb <=> k.emb OFFSET 1 LIMIT 1;
 
         IF item_1_distance_k < item_1_distance THEN
-            item_1_distance := item_1_distance_k
-            item_1_pos := item_1_pos_k
+            item_1_distance := item_1_distance_k;
+            item_1_pos := item_1_pos_k;
         END IF;
 
         IF item_2_distance_k < item_2_distance THEN
-            item_2_distance := item_2_distance_k
-            item_2_pos := item_2_pos_k
+            item_2_distance := item_2_distance_k;
+            item_2_pos := item_2_pos_k;
         END IF;
 
         IF item_1_pos IS NULL THEN

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Optional, TypedDict, TypeAlias, Union, Literal
+from typing import TypeAlias, Union, Literal
 
 ValidTables: TypeAlias = Union[Literal['executables'],
                                Literal['knowledge'],
@@ -15,6 +15,4 @@ ValidTables: TypeAlias = Union[Literal['executables'],
                                Literal['master_load'],
                                ]
 
-class ReferenceTo(TypedDict):
-    ref_addr: int
-    ref_table: Optional[ValidTables]
+ReferenceTo: TypeAlias = int

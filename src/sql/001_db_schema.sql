@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     emb vector(384) NOT NULL  -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE INDEX ON knowledge USING hnsw(emb, vector_cosine_ops)
+CREATE INDEX ON knowledge USING hnsw(emb vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS executables (
     emb vector(384) NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE INDEX ON executables USING hnsw(emb, vector_cosine_ops)
+CREATE INDEX ON executables USING hnsw(emb vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS logs (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY

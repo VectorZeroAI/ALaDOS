@@ -32,9 +32,11 @@ CREATE TABLE IF NOT EXISTS knowledge (
             ON DELETE CASCADE,
     content TEXT NOT NULL,
     description TEXT NOT NULL,
-    position INT,
-    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
+    position NUMERIC NOT NULL,
+    emb vector(384) NOT NULL  -- NOTE : Names, aka titles, are always stored in names table
 );
+
+CREATE INDEX ON knowledge USING hnsw(emb, vector_cosine_ops)
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
@@ -44,9 +46,11 @@ CREATE TABLE IF NOT EXISTS executables (
     description TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
-    position INT,
-    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
+    position NUMERIC NOT NULL,
+    emb vector(384) NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
+
+CREATE INDEX ON executables USING hnsw(emb, vector_cosine_ops)
 
 CREATE TABLE IF NOT EXISTS logs (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY

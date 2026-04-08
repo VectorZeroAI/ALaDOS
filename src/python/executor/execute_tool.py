@@ -13,4 +13,3 @@ def register_tool(name: str|None = None):
 
 def execute_tool(call: tool_call) -> None:
     TOOL_REGISTRY[call["tool"]](**call["args"])
-

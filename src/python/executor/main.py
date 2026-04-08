@@ -13,12 +13,10 @@ from ..queue import global_interrupt_queue
 from ..utils.uqueue import Uqueue
 import tomllib
 import httpx
-from .types import api, instr_json, tool_call
+from .types import api, instr_json, tool_call, tool_calls_block
 import psycopg2
 import psycopg2.extensions
-
-def execute_instruction(slave_json: instr_json) -> None:
-    executor_queue.put(slave_json)
+from .queue import executor_queue
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
@@ -59,7 +57,7 @@ def llm_call(api: api, prompt: str) -> str:
         return _llm_call_openai(api, prompt)
 
 
-@interruptable(executor_interrupt_queue, global_interrupt_queue) # TODO : figure out how to get global interrupt chanell working and get it to work.
+@interruptable(executor_interrupt_queue, global_interrupt_queue)
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Uqueue[instr_json],
@@ -68,7 +66,7 @@ async def core(
         ) -> None:
     while True:
         await checkpoint()
-        instr = queue.get()
+        instr = await queue.get()
 
         str_instr = " ".join((instr["context"], instr["instruction"]))
         
@@ -86,7 +84,7 @@ async def core(
         else:
             print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
             raise RuntimeError("All the APIS failed")
-        tool_calls = llm_to_json(result)
+        tool_calls: tool_calls_block = llm_to_json(result)
         for call in tool_calls:
             execute_tool(call)
 
@@ -101,8 +99,6 @@ def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg2.ex
 
 def startup(conn: psycopg2.extensions.connection) -> None:
     """ The startup function that starts up the whole executor system """
-    global executor_queue
-    executor_queue = Uqueue()
 
     config_dir = config_dir_resolver()
     config_file = config_dir / "executor.toml"

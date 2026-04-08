@@ -11,7 +11,7 @@ class SlaveObj(TypedDict):
     addr: SlaveAddr
     instruction: str
     master_addr: MasterAddr
-    result_name: str
+    result_name: Optional[str]
 
 class Anchor(TypedDict):
     ref_addr: ReferenceTo

@@ -71,3 +71,11 @@ CREATE OR REPLACE FUNCTION position_calculation()
         RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER pos_calculate_k
+BEFORE INSERT ON knowledge
+FOR EACH ROW EXECUTE FUNCTION position_calculation(); 
+
+CREATE OR REPLACE TRIGGER pos_calculate_e
+BEFORE INSERT ON executables
+FOR EACH ROW EXECUTE FUNCTION position_calculation();

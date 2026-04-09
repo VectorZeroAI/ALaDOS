@@ -11,11 +11,13 @@ CREATE OR REPLACE FUNCTION new_slave(
     DECLARE
         new_slave_addr BIGINT;
         req BIGINT;
-        v_has_cycle BOOLEAN;
+--         v_has_cycle BOOLEAN; NOTE : LATER MAYBE SOMEDAY
         v_result_addr BIGINT;
     BEGIN
         IF p_result_addr IS NULL THEN
             INSERT INTO addrs (addr) DEFAULT VALUES RETURNING addr INTO v_result_addr;
+            INSERT INTO results (addr) VALUES (v_result_addr);
+
         END IF;
 
         IF p_result_name IS NOT NULL THEN
@@ -31,29 +33,29 @@ CREATE OR REPLACE FUNCTION new_slave(
         IF p_requires IS NULL THEN
             PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT);
             RETURN new_slave_addr;
-        ELSE THEN
+        ELSE
             FOREACH req IN ARRAY p_requires LOOP
                 INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
             END LOOP;
         END IF;
 
 
-        WITH RECURSIVE dep_chain(slave_addr) AS (
-            SELECT sr.slave_addr FROM slave_req sr WHERE sr.req_addr = new_slave_addr
-
-            UNION
-
-            SELECT sr.slave_addr FROM dep_chain dc
-            JOIN slaves s ON dc.slave_addr = s.slave_addr
-            JOIN slave_req sr ON sr.req_addr = s.result_addr
-        );
-        SELECT EXISTS (
-            SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr;
-        ) INTO v_has_cycle;
-
-        IF v_has_cycle THEN
-            RAISE EXCEPTION 'CYCLE DETECTED!!!';
-        END IF;
+--         WITH RECURSIVE dep_chain(slave_addr) AS (
+--             SELECT sr.slave_addr FROM slave_req sr WHERE sr.req_addr = COALESCE(p_result_addr, v_result_addr)
+-- 
+--             UNION NOTE : LATER MAYBE SOMEDAY, I cant figure that out. Any working version would be vibed, and propably not working.
+-- 
+--             SELECT sr.slave_addr FROM dep_chain dc
+--             JOIN slaves s ON dc.slave_addr = s.slave_addr
+--             JOIN slave_req sr ON sr.req_addr = s.result_addr
+--         )
+--         SELECT EXISTS (
+--             SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr
+--         ) INTO v_has_cycle;
+-- 
+--         IF v_has_cycle THEN
+--             RAISE EXCEPTION 'CYCLE DETECTED!!!';
+--         END IF;
 
     RETURN new_slave_addr;
 END;

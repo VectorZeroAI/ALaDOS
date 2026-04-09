@@ -110,8 +110,13 @@ CREATE TABLE IF NOT EXISTS results (
         REFERENCES addrs(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    content_str TEXT NOT NULL,
-    ready BOOLEAN NOT NULL
+    content_str TEXT,
+    ready BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT content_present_when_ready CHECK(
+        (ready IS FALSE AND content_str IS NULL)
+        OR 
+        (ready IS TRUE AND content_str IS NOT NULL)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS slaves (

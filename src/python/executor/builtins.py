@@ -10,12 +10,8 @@ def print_to_console(input_str: str) -> None:
     print(input_str)
 
 @register_tool("K.write")
-def k_write(content: str, description: str, name: str|None = None, _master_id: int):
+def k_write(content: str, description: str, name: str|None = None, _master_id: int) -> None:
     conn = conn_factory()
-    
-    check_ownership_of_file = conn.exeucte("""
-    SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                           """) # TODO: FINISH !
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
     conn.execute("""
@@ -27,7 +23,7 @@ def k_write(content: str, description: str, name: str|None = None, _master_id: i
     return True
 
 @register_tool("K.read")
-def k_read(addr: int|None, name: str|None, _master_id: int):
+def k_read(addr: int|None, name: str|None, _master_id: int) -> str:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = conn_factory()
     if addr is not None:
@@ -40,5 +36,6 @@ def k_read(addr: int|None, name: str|None, _master_id: int):
                      """, (name,)).fetchone()[0]
     else:
         raise TypeError("ADDR OR NAME MUST BE PROVIDED")
+    return result
 
 

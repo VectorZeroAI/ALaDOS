@@ -37,4 +37,4 @@ def register_tool(name: str|None = None):
     return decorator
 
 def execute_tool(call: tool_call, _master_id: int) -> None:
-    TOOL_REGISTRY[call["tool"]](**call["args"], _master_id = _master_id)
+    return TOOL_REGISTRY[call["tool"]](**call["args"], _master_id = _master_id)

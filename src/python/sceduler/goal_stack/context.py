@@ -52,7 +52,7 @@ def resolve_context(slave_obj: SlaveObj):
 
     results_context = resolve_req_results(slave_obj, conn)
 
-    return "\n\n\n".join([window_context, load_context])
+    return "\n\n\n".join([window_context, load_context, results_context])
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """

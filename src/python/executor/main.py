@@ -14,8 +14,7 @@ from ..utils.uqueue import Uqueue
 import tomllib
 import httpx
 from .types import api, instr_json, tool_call, tool_calls_block
-import psycopg2
-import psycopg2.extensions
+import psycopg
 from .queue import executor_queue
 
 def _llm_call_claude(api: api, prompt: str) -> str:
@@ -62,7 +61,7 @@ async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Uqueue[instr_json],
         apis: Sequence[api],
-        conn: psycopg2.extensions.connection
+        conn: psycopg.Connection
         ) -> None:
     while True:
         await checkpoint()
@@ -97,7 +96,7 @@ def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg2.ex
     finally:
         loop.close()
 
-def startup(conn: psycopg2.extensions.connection) -> None:
+def startup(conn: psycopg.Connection) -> None:
     """ The startup function that starts up the whole executor system """
 
     config_dir = config_dir_resolver()

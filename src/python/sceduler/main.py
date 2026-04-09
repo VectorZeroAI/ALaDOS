@@ -60,6 +60,9 @@ def new_slave_listener_thread():
     finally:
         try:
             conn.close()
+        except Exception:
+            pass
+        try:
             qconn.close()
         except Exception:
             pass

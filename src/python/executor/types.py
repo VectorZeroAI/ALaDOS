@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import TypeAlias, TypedDict, Optional, Union
+from typing import TypeAlias, TypedDict, Optional, Union, List
 
 from pydantic import BaseModel
 
@@ -25,6 +25,4 @@ class tool_call(TypedDict):
     tool: str
     args: dict[str, JsonSerialisable]
 
-class tool_calls_block(TypedDict):
-    """ The full tool block class, directly extracted from LLM output """
-    tool_calls: list[tool_call]
+tool_calls_block: TypeAlias = List[tool_call]

@@ -6,6 +6,9 @@ Main entrypoint, and the first file to start.
 from pathlib import Path
 import asyncio
 from .utils.conn_factory import conn_factory
+import psycopg
+from .executor.main import startup as e_startup
+from .sceduler.main import setup as s_setup
 
 def main():
     """
@@ -13,16 +16,18 @@ def main():
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 
     """
     conn = conn_factory()
-    curr = conn.cursor()
 
     main_file = Path(__file__)
     sql_dir = main_file.parent.parent / "sql"
 
     for i in sorted(sql_dir.glob("*.sql")):
         try:
-            curr.execute(i.read_text())
+            conn.execute(f"{i.read_text()}") # pyright: ignore
         except Exception as e:
-            raise psycopg2.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
+            raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
+
+    e_startup(conn)
+    s_setup()
     
 if __name__ == "__main__":
     main()

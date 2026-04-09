@@ -1,8 +1,8 @@
 CREATE OR REPLACE FUNCTION new_slave(
-    p_master_addr BIGINT,
-    p_name TEXT,
-    p_instruction TEXT,
-    p_requires BIGINT[],
+    p_master_addr BIGINT NOT NULL,
+    p_name TEXT NOT NULL,
+    p_instruction TEXT NOT NULL,
+    p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
     p_result_name TEXT DEFAULT NULL
     )
@@ -12,28 +12,15 @@ CREATE OR REPLACE FUNCTION new_slave(
         new_slave_addr BIGINT;
         req BIGINT;
         v_has_cycle BOOLEAN;
+        v_result_addr BIGINT;
     BEGIN
-        WITH RECURSIVE dep_chain(slave_addr) AS (
-            SELECT s.addr
-            FROM slave_req sr
-            JOIN slaves s ON s.result_addr = sr.req_addr
-            WHERE sr.slave_addr = new_slave_addr
-
-            UNION
-
-            SELECT s.addr
-            FROM dep_chain dc
-            JOIN slave_req sr ON sr.slave_addr = dc.slave_addr
-            JOIN slaves s ON s.result_addr = sr.req_addr
-        )
-        SELECT EXISTS (
-            SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr
-        ) INTO v_has_cycle;
-
-        IF v_has_cycle THEN
-            RAISE EXCEPTION 'Cyclic dependency detected involving slave %', new_slave_addr;
+        IF p_result_addr IS NULL THEN
+            INSERT INTO addrs (addr) DEFAULT VALUES RETURNING addr INTO v_result_addr;
         END IF;
 
+        IF p_result_name IS NOT NULL THEN
+            INSERT INTO names (addr, name) VALUES ((COALESCE(p_result_addr, v_result_addr)), p_result_name);
+        END IF;
 
         INSERT INTO slaves (master_addr, instruction, result_addr, result_name)
         VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name)
@@ -41,9 +28,32 @@ CREATE OR REPLACE FUNCTION new_slave(
 
         INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
 
-        FOREACH req IN ARRAY p_requires LOOP
-            INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
-        END LOOP;
+        IF p_requires IS NULL THEN
+            PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT);
+            RETURN new_slave_addr;
+        ELSE THEN
+            FOREACH req IN ARRAY p_requires LOOP
+                INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
+            END LOOP;
+        END IF;
+
+
+        WITH RECURSIVE dep_chain(slave_addr) AS (
+            SELECT sr.slave_addr FROM slave_req sr WHERE sr.req_addr = new_slave_addr
+
+            UNION
+
+            SELECT sr.slave_addr FROM dep_chain dc
+            JOIN slaves s ON dc.slave_addr = s.slave_addr
+            JOIN slave_req sr ON sr.req_addr = s.result_addr
+        );
+        SELECT EXISTS (
+            SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr;
+        ) INTO v_has_cycle;
+
+        IF v_has_cycle THEN
+            RAISE EXCEPTION 'CYCLE DETECTED!!!';
+        END IF;
 
     RETURN new_slave_addr;
 END;
@@ -104,5 +114,3 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
-
-

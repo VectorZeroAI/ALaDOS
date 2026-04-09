@@ -42,7 +42,12 @@ def _llm_call_openai(api: api, prompt: str) -> str:
                 headers={"Authorization": f"Bearer {api["key"]}"},
                 json={
                     "model": api["model"],
-                    "messages": prompt
+                    "messages": [
+                            {
+                                "role": "system", 
+                                "message": prompt
+                            }
+                        ]
                     }
                 )
         response.raise_for_status()
@@ -85,9 +90,9 @@ async def core(
             raise RuntimeError("All the APIS failed")
         tool_calls: tool_calls_block = llm_to_json(result)
         for call in tool_calls:
-            execute_tool(call)
+            execute_tool(call, instr["master_addr"])
 
-def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg2.extensions.connection) -> None:
+def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg.Connection) -> None:
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(coroutine(queue, apis, conn)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 

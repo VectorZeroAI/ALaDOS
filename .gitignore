@@ -13,3 +13,14 @@ src/python/sceduler/goal_stack/__pycache__/types.cpython-313.pyc
 src/python/utils/__pycache__/conn_factory.cpython-313.pyc
 src/python/__pycache__/__init__.cpython-313.pyc
 src/dump.txt
+src/alados.egg-info/PKG-INFO
+src/alados.egg-info/SOURCES.txt
+src/alados.egg-info/dependency_links.txt
+src/alados.egg-info/requires.txt
+src/python/__pycache__/main.cpython-313.pyc
+src/alados.egg-info/entry_points.txt
+src/alados.egg-info/top_level.txt
+src/python/__pycache__/queue.cpython-313.pyc
+src/python/executor/__pycache__/builtins.cpython-313.pyc
+src/python/executor/__pycache__/execute_tool.cpython-313.pyc
+src/python/executor/__pycache__/main.cpython-313.pyc

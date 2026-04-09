@@ -48,6 +48,7 @@ def new_slave_listener_thread():
         conn = conn_factory()
         qconn = conn_factory()
         conn.execute("LISTEN slaves_ready")
+        print("sceduler_listener_thread_ready")
         for n in conn.notifies():
             try:
                 if n.channel != "slaves_ready":
@@ -86,3 +87,4 @@ def setup():
         executor_queue.put(instruction)
 
     threading.Thread(target=new_slave_listener_thread, daemon=True).start()
+    print("startup of the sceduler finished.")

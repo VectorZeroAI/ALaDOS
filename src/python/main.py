@@ -28,6 +28,7 @@ def main():
 
     e_startup(conn)
     s_setup()
+    print("startup of the server finished.")
     
 if __name__ == "__main__":
     main()

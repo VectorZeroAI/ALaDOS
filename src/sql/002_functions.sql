@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION new_slave(
-    p_master_addr BIGINT NOT NULL,
-    p_name TEXT NOT NULL,
-    p_instruction TEXT NOT NULL,
+    p_master_addr BIGINT,
+    p_name TEXT,
+    p_instruction TEXT,
     p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
     p_result_name TEXT DEFAULT NULL
@@ -14,8 +14,9 @@ CREATE OR REPLACE FUNCTION new_slave(
 --         v_has_cycle BOOLEAN; NOTE : LATER MAYBE SOMEDAY
         v_result_addr BIGINT;
     BEGIN
+        new_slave_addr := nextval('global_next_id');
         IF p_result_addr IS NULL THEN
-            INSERT INTO addrs (addr) DEFAULT VALUES RETURNING addr INTO v_result_addr;
+            INSERT INTO addrs (addr) VALUES (new_slave_addr);
             INSERT INTO results (addr) VALUES (v_result_addr);
 
         END IF;

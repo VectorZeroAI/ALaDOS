@@ -5,6 +5,7 @@ import threading
 from typing import Callable, Coroutine, Sequence, Any
 
 from python.executor.execute_tool import execute_tool
+from python.utils.conn_factory import conn_factory
 from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver
@@ -66,8 +67,11 @@ async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Uqueue[instr_json],
         apis: Sequence[api],
-        conn: psycopg.Connection
         ) -> None:
+
+    await checkpoint()
+    conn = conn_factory()
+
     while True:
         await checkpoint()
         instr = await queue.get()
@@ -77,7 +81,7 @@ async def core(
         for api_sps in apis:
             await checkpoint()
             try:
-                result = llm_call(api_sps, str_instr)
+                llm_response = llm_call(api_sps, str_instr)
                 await checkpoint()
             except httpx.HTTPStatusError:
                 await checkpoint()
@@ -87,21 +91,34 @@ async def core(
                 break
         else:
             print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
-            raise RuntimeError("All the APIS failed")
-        tool_calls: tool_calls_block = llm_to_json(result)
-        for call in tool_calls:
-            execute_tool(call, instr["master_addr"])
+            global_interrupt_queue.put("STOP")
+        await checkpoint()
+        tool_calls: tool_calls_block = llm_to_json(llm_response)
 
-def core_thread(coroutine, queue: Uqueue, apis: Sequence[api], conn: psycopg.Connection) -> None:
+        results = []
+
+        for call in tool_calls:
+            await checkpoint()
+            results.append(execute_tool(call, instr["master_addr"]))
+
+        result_str = "\n".join(str(results))
+
+        await checkpoint()
+        conn.execute("""
+        UPDATE results SET ready = TRUE, content_str = %s WHERE addr = %s
+                     """, (result_str, instr["result_addr"]))
+        
+
+def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
     loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(coroutine(queue, apis, conn)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
+        loop.run_until_complete(coroutine(queue, apis)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
     except Exception as e:
         print(f"CORE THREAD ERRORED OUT: {e}")
     finally:
         loop.close()
 
-def startup(conn: psycopg.Connection) -> None:
+def startup() -> None:
     """ The startup function that starts up the whole executor system """
 
     config_dir = config_dir_resolver()
@@ -111,7 +128,7 @@ def startup(conn: psycopg.Connection) -> None:
     for _ in range(config["cores_number"]):
         threading.Thread(
                 target=core_thread,
-                args=(core, executor_queue, config["apis"], conn),
+                args=(core, executor_queue, config["apis"]),
                 daemon=True
                 ).start()
     print("startup of the executor finished")

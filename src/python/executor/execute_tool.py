@@ -8,8 +8,6 @@ import re
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
 
-import re
-
 # Pattern matches:
 # - optional comma and whitespace before (if not first param)
 # - the parameter itself: _master_addr: <type>

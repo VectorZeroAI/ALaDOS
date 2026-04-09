@@ -50,7 +50,24 @@ def resolve_context(slave_obj: SlaveObj):
 
     load_context = resolve_loads(loads_data_valid)
 
+    results_context = resolve_req_results(slave_obj, conn)
+
     return "\n\n\n".join([window_context, load_context])
+
+def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
+    """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
+    req_results_addrs = conn.execute("""
+    SELECT req_addr FROM slave_req WHERE slave_addr = %s;
+                                     """, (slave_obj["addr"], )).fetchall()
+    req_results_content = []
+    for i in req_results_addrs:
+        content = conn.execute("""
+        SELECT content_str FROM results WHERE addr = %s;
+                               """, (*i,))
+        req_results_content.append(content)
+
+    results_str = "\n\n".join(req_results_content)
+    return results_str
     
 
 def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:

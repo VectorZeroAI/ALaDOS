@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION new_slave(
     p_master_addr BIGINT,
-    p_name TEXT DEFAULT NULL,
     p_instruction TEXT,
+    p_name TEXT DEFAULT NULL,
     p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
     p_result_name TEXT DEFAULT NULL
@@ -44,7 +44,7 @@ CREATE OR REPLACE FUNCTION new_slave(
             END LOOP;
         END IF;
         IF flag_any_result_not_ready IS FALSE THEN
-            PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT):
+            PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT);
         END IF;
 
 

@@ -175,7 +175,7 @@ def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
     requires = requires or []
     return conn.execute(
         "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
-        (master_addr, name, instruction, requires, result_addr, result_name)
+        (master_addr, instruction, name, requires, result_addr, result_name)
     ).fetchone()[0]
 
 
@@ -535,7 +535,7 @@ class TestNewSlaveFunction:
         r = insert_result(db, "", False)
         s_addr = db.execute(
             "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
-            (m, "MyNewSlave", "do stuff", [], r, "my_result")
+            (m, "do stuff", "MyNewSlave", [], r, "my_result")
         ).fetchone()[0]
 
         slave = db.execute(
@@ -556,7 +556,7 @@ class TestNewSlaveFunction:
         result_r = insert_result(db, "", False)
         s_addr = db.execute(
             "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
-            (m, f"ReqSlave{m}", "needs two", [r1, r2], result_r, "req_result")
+            (m, "needs two", f"ReqSlave{m}", [r1, r2], result_r, "req_result")
         ).fetchone()[0]
 
         reqs = db.execute(

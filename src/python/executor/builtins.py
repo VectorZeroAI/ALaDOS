@@ -88,3 +88,4 @@ def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_master_id, addr))
 
+

@@ -130,11 +130,11 @@ CREATE TABLE IF NOT EXISTS slaves (
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
     instruction TEXT NOT NULL,
-    result_addr BIGINT 
+    result_addr BIGINT
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    result_name TEXT
+    result_name TEXT UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (

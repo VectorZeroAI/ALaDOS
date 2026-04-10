@@ -63,7 +63,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     for i in req_results_addrs:
         content = conn.execute("""
         SELECT content_str FROM results WHERE addr = %s;
-                               """, (*i,))
+                               """, (*i,)).fetchone()[0]
         req_results_content.append(content)
 
     results_str = "\n\n".join(req_results_content)

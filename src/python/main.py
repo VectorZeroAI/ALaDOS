@@ -26,7 +26,7 @@ def main():
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
 
-    e_startup(conn)
+    e_startup()
     s_setup()
     print("startup of the server finished.")
     

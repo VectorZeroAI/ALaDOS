@@ -24,28 +24,17 @@ CREATE OR REPLACE FUNCTION position_calculation()
     DECLARE
         item_1_pos NUMERIC;
         item_2_pos NUMERIC;
-        item_1_pos_k NUMERIC;
-        item_2_pos_k NUMERIC;
         item_1_distance DOUBLE PRECISION;
         item_2_distance DOUBLE PRECISION;
-        item_1_distance_k DOUBLE PRECISION;
-        item_2_distance_k DOUBLE PRECISION;
     BEGIN 
-        SELECT position, NEW.emb <=> e.emb AS distance INTO item_1_pos, item_1_distance FROM executables e ORDER BY NEW.emb <=> e.emb LIMIT 1;
-        SELECT position, NEW.emb <=> k.emb AS distance INTO item_1_pos_k, item_1_distance_k FROM knowledge k ORDER BY NEW.emb <=> k.emb LIMIT 1;
-
-        SELECT position, NEW.emb <=> e.emb AS distance INTO item_2_pos, item_2_distance FROM executables e ORDER BY NEW.emb <=> e.emb OFFSET 1 LIMIT 1;
-        SELECT position, NEW.emb <=> k.emb AS distance INTO item_2_pos_k, item_2_distance_k FROM knowledge k ORDER BY NEW.emb <=> k.emb OFFSET 1 LIMIT 1;
-
-        IF item_1_distance_k < item_1_distance THEN
-            item_1_distance := item_1_distance_k;
-            item_1_pos := item_1_pos_k;
-        END IF;
-
-        IF item_2_distance_k < item_2_distance THEN
-            item_2_distance := item_2_distance_k;
-            item_2_pos := item_2_pos_k;
-        END IF;
+        WITH e_and_k AS (
+            SELECT position, NEW.emb <=> emb AS distance FROM knowledge
+            UNION ALL
+            SELECT position, NEW.emb <=> emb AS distance FROM executables
+            ORDER BY distance LIMIT 2
+        )
+        SELECT position, distance INTO item_1_pos, item_1_distance FROM e_and_k LIMIT 1;
+        SELECT position, distance INTO item_2_pos, item_2_distance FROM e_and_k ek OFFSET 1 LIMIT 1;
 
         IF item_1_pos IS NULL THEN
             NEW.position := 0;

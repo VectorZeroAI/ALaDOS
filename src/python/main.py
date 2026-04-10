@@ -9,6 +9,7 @@ from .utils.conn_factory import conn_factory
 import psycopg
 from .executor.main import startup as e_startup
 from .sceduler.main import setup as s_setup
+from .interfaces.alados_console import start_console
 
 def main():
     """
@@ -29,6 +30,7 @@ def main():
     e_startup()
     s_setup()
     print("startup of the server finished.")
+    start_console()
     
 if __name__ == "__main__":
     main()

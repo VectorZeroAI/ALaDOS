@@ -46,7 +46,7 @@ def _llm_call_openai(api: api, prompt: str) -> str:
                     "messages": [
                             {
                                 "role": "system", 
-                                "message": prompt
+                                "content": prompt
                             }
                         ]
                     }

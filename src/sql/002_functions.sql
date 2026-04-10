@@ -13,7 +13,9 @@ CREATE OR REPLACE FUNCTION new_slave(
         req BIGINT;
 --         v_has_cycle BOOLEAN; NOTE : LATER MAYBE SOMEDAY
         v_result_addr BIGINT;
+        flag_any_result_not_ready BOOLEAN;
     BEGIN
+        flag_any_result_not_ready := FALSE;
         new_slave_addr := new_addr();
         v_result_addr := COALESCE(p_result_addr, new_addr());
 
@@ -36,7 +38,13 @@ CREATE OR REPLACE FUNCTION new_slave(
         ELSE
             FOREACH req IN ARRAY p_requires LOOP
                 INSERT INTO slave_req (slave_addr, req_addr) VALUES (new_slave_addr, req);
+                IF (SELECT ready FROM results WHERE addr = req) IS FALSE THEN
+                    flag_any_result_not_ready := TRUE;
+                END IF;
             END LOOP;
+        END IF;
+        IF flag_any_result_not_ready IS FALSE THEN
+            PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT):
         END IF;
 
 

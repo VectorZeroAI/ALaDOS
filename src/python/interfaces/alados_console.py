@@ -6,7 +6,7 @@ from python.utils.conn_factory import conn_factory
 def add_master(instruction: list[str], conn: psycopg.Connection):
     conn.execute("""
     INSERT INTO masters(instruction) VALUES (%s);
-                 """, (*instruction,))
+                 """, (" ".join(instruction),))
 
 def start_console():
     """ The function that starts the server side controll console of alados. """
@@ -22,7 +22,7 @@ def start_console():
                 print("shutdown initiated")
                 sys.exit(0)
             case "add", "task", *_:
-                print(f"adding task {command[2:]} as a master goal") # TODO: use slicing insdead of raw "2"
+                print(f"adding task {" ".join(command[2:])} as a master goal") # TODO: use slicing insdead of raw "2"
                 add_master(command[2:], conn)
             case _:
                 print("undefined command")

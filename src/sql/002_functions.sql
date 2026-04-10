@@ -29,8 +29,10 @@ CREATE OR REPLACE FUNCTION new_slave(
 
         INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr)
         VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name, new_slave_addr);
-
-        INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
+        
+        IF p_name IS NOT NULL THEN
+            INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
+        END IF;
 
         IF p_requires IS NULL THEN
             PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT);

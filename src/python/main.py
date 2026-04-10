@@ -28,7 +28,7 @@ def main():
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
 
-    e_startup()
+    e_startup() # FIXME : CHECK LAST CLAUDE CHAT AND THE DEEP SEEK CHAT FOR THE REQUIRED FIXES!!!
     s_setup()
     print("startup of the server finished.")
     start_console()

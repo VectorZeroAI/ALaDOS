@@ -6,6 +6,7 @@ from ...utils.conn_factory import conn_factory
 from pydantic import TypeAdapter, ValidationError
 from typing import Any
 import psycopg
+from ...executor.execute_tool import HEADERS_REGISTRY
 
 
 def resolve_context(slave_obj: SlaveObj):
@@ -52,7 +53,9 @@ def resolve_context(slave_obj: SlaveObj):
 
     results_context = resolve_req_results(slave_obj, conn)
 
-    return "\n\n\n".join([window_context, load_context, results_context])
+    builtin_tools = "\n\n".join(HEADERS_REGISTRY.values())
+
+    return "\n\n\n".join([window_context, load_context, results_context, builtin_tools])
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """

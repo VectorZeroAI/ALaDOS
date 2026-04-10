@@ -65,15 +65,15 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     env = os.environ.copy()
     env["KWARGS"] = json.dumps(kwargs)
     
-    result =  str(subprocess.run(["python3"],
+    result = subprocess.run(["python3"],
                                  input=body,
                                  capture_output=True,
                                  text=True,
                                  timeout=timeout,
                                  env=env
-                                 ))
+                                 )
 
-    return result
+    return result.stdout # TODO : add error handling and stderr capturing on error.
 
 @register_tool("context.add")
 def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None:
@@ -88,4 +88,64 @@ def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_master_id, addr))
 
+@register_tool("task.add_step")
+def add_slave(instruction: str,
+              required_results_names: list[str]|None=None,
+              required_results_addrs: list[int]|None=None,
+              tasks_name: str|None=None,
+              result_name: str|None=None,
+              _master_id: int = 99) -> None:
+    """
+    Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
+    A step may require anouther steps result, by adding the required results name or address. 
+    A step gets the results it requires when it is executed.
+    Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
+    """
+    conn = conn_factory()
+    if required_results_addrs is None:
+        required_results_addrs = []
+
+    if required_results_names is not None:
+        for i in required_results_names:
+            required_results_addrs.append(conn.execute("""
+            SELECT resolve_name(%s);
+                  """, (i,)).fetchone()[0])
+
+    conn.execute("""
+    new_slave(%s, %s, %s, %s, %s, %s);
+        """, 
+    (_master_id, instruction, tasks_name, required_results_addrs, None, result_name))
+
+@register_tool("task.add_planner_step")
+def add_replanner_slave(_master_id: int) -> None:
+    """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
+    conn = conn_factory()
+    special_context = []
+    fetch = conn.execute("""
+    SELECT instruction FROM masters WHERE addr = %s;
+                         """, (_master_id,)).fetchone()
+    special_context.append(fetch)
+    fetch = conn.execute("""
+    SELECT s.instruction, r.content_str FROM masters m JOIN slaves s ON s.master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
+                         """, (_master_id,)).fetchall()
+    special_context.append(fetch)
+
+    special_context_str = f"Task instruction: {special_context.pop(0)}"
+
+    tmp = []
+    for i in special_context: # NOTE : the first element is removed in special_context.pop(0) call.
+        tmp.append(["\n", "previous step: [", f" instruction: {i[0]}", f" result: {i[1]}", "]"])
+    special_context_str = special_context_str + "".join(tmp)
+
+    fetch = conn.execute("""
+    SELECT r.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
+                         """, (_master_id,)).fetchall()
+
+    prompt = """
+    Your task is to provide additional steps for the following task, given the previous steps and their results.
+    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool.
+    For adding new steps, use the task.add_step tool. For adding a planner tool, use the task.add_planner_step tool.
+    """ + special_context_str
+
+    conn.execute("new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
 

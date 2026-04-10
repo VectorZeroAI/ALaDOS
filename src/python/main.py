@@ -23,7 +23,8 @@ def main():
 
     for i in sorted(sql_dir.glob("*.sql")):
         try:
-            conn.execute(f"{i.read_text()}") # pyright: ignore
+            conn.execute(i.read_text()) # pyright: ignore
+            print(f"sql file {i.name} was successfully executed")
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
 

@@ -9,6 +9,8 @@ import psycopg
 from ...executor.execute_tool import HEADERS_REGISTRY
 
 
+TOOL_HEADERS = "\n\n".join(HEADERS_REGISTRY.values())
+
 def resolve_context(slave_obj: SlaveObj):
     conn = conn_factory()
 
@@ -16,46 +18,51 @@ def resolve_context(slave_obj: SlaveObj):
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
                  """, (slave_obj['master_addr'],)).fetchone()
 
-    window_data_python: WindowData = {
-            "master_addr": slave_obj['master_addr'],
-            "window_position": {
-                "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
-                "ref_table": "executables" if window_data[0] is not None else "knowledge"
-                },
-            "window_size_l": window_data[3],
-            "window_size_r": window_data[2]
-            }
-    window_data_validator = TypeAdapter(WindowData)
-    try:
-        window_data_valid = window_data_validator.validate_python(window_data_python)
-    except ValidationError as e:
-        print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
-        raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+    if window_data is not None:
+        window_data_python: WindowData = {
+                "master_addr": slave_obj['master_addr'],
+                "window_position": {
+                    "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
+                    "ref_table": "executables" if window_data[0] is not None else "knowledge"
+                    },
+                "window_size_l": window_data[3],
+                "window_size_r": window_data[2]
+                }
+        window_data_validator = TypeAdapter(WindowData)
+        try:
+            window_data_valid = window_data_validator.validate_python(window_data_python)
+        except ValidationError as e:
+            print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+            raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
 
-    window_context = resolve_window(window_data_valid)
+        window_context = resolve_window(window_data_valid)
+    else:
+        window_context = "VIEW WINDOW DOES NOT YET EXIST."
 
     load_data = conn.execute("""
     SELECT item_addr FROM master_load WHERE master_addr = %s;
                              """, (slave_obj['master_addr'],)).fetchall()
 
-    loads_data_python: LoadsData = {
-            "items_addrs": [addr[0] for addr in load_data],
-            "master_addr": slave_obj["master_addr"]
-        }
-    loads_data_validator = TypeAdapter(LoadsData)
-    try:
-        loads_data_valid = loads_data_validator.validate_python(loads_data_python)
-    except ValidationError as e:
-        print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
-        raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+    if load_data is not None:
 
-    load_context = resolve_loads(loads_data_valid)
+        loads_data_python: LoadsData = {
+                "items_addrs": [addr[0] for addr in load_data],
+                "master_addr": slave_obj["master_addr"]
+            }
+        loads_data_validator = TypeAdapter(LoadsData)
+        try:
+            loads_data_valid = loads_data_validator.validate_python(loads_data_python)
+        except ValidationError as e:
+            print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+            raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+
+        load_context = resolve_loads(loads_data_valid)
+    else:
+        load_context = "NO ITEMS LOADED YET"
 
     results_context = resolve_req_results(slave_obj, conn)
 
-    builtin_tools = "\n\n".join(HEADERS_REGISTRY.values())
-
-    return "\n\n\n".join([window_context, load_context, results_context, builtin_tools])
+    return "\n\n\n".join([window_context, load_context, results_context, TOOL_HEADERS])
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """

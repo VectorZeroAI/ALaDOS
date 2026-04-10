@@ -28,10 +28,10 @@ CREATE OR REPLACE FUNCTION position_calculation()
         item_2_distance DOUBLE PRECISION;
     BEGIN 
         WITH e_and_k AS (
-            SELECT position, NEW.emb <=> emb AS distance FROM knowledge
+            SELECT position, NEW.emb <=> emb AS distance FROM knowledge WHERE emb IS NOT NULL
             UNION ALL
-            SELECT position, NEW.emb <=> emb AS distance FROM executables
-            ORDER BY distance LIMIT 2
+            SELECT position, NEW.emb <=> emb AS distance FROM executables WHERE emb IS NOT NULL
+            ORDER BY distance
         )
         SELECT position, distance INTO item_1_pos, item_1_distance FROM e_and_k LIMIT 1;
         SELECT position, distance INTO item_2_pos, item_2_distance FROM e_and_k ek OFFSET 1 LIMIT 1;
@@ -72,12 +72,17 @@ FOR EACH ROW EXECUTE FUNCTION position_calculation();
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
     BEGIN
-        new_slave(NEW.addr, 
-            'Your task is to decompose the following task into the initial steps. You must use the add_slave tool to do so.'||NEW.instruction||'You must only provide the initial steps, and end the initial plan with an "create further plan steps" step, wich you must add via the "add_planner" tool', 
-        );       
-    END;
-$$, LANGUAGE plpgsql;
+        PERFORM new_slave(NEW.addr, 
+            'Your task is to decompose the following task into the initial steps.
+            You must use the add_slave tool to do so.'||NEW.instruction||'You must 
+            only provide the initial steps,
+            and end the initial plan with an "create further plan steps" step,
+            wich you must add via the "add_planner" tool'
+        );
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER master_decompose_task()
+CREATE OR REPLACE TRIGGER master_decompose_task
 AFTER INSERT ON masters
-FOR EACH ROW EXECUTE FUNCTION master_decomposition_slave_submission;
+FOR EACH ROW EXECUTE FUNCTION master_decomposition_slave_submission();

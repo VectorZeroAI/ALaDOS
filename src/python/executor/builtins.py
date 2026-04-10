@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import os
 from .execute_tool import register_tool
 from ..utils.conn_factory import conn_factory
 import subprocess
 from ..types import ValidTables
+import json
 
 # EXAMPLE: 
 @register_tool("print.to_console")
@@ -11,7 +13,7 @@ def print_to_console(input_str: str) -> None:
     print(input_str)
 
 @register_tool("K.create")
-def k_create(content: str, description: str, name: str|None = None, _master_id: int) -> None:
+def k_create(content: str, description: str, name: str|None = None, _master_id: int = 99) -> None:
     """ Creates a knowledge item. The description is a short definition of the items contents for semantic similarity search. content is the actual content, and name is name wich can be used a access the item. """
     conn = conn_factory()
 
@@ -41,13 +43,11 @@ def k_read(addr: int|None, name: str|None, _master_id: int) -> str:
     return result
 
 @register_tool("tool.execute")
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict[str, str], _master_id: int) -> str:
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _master_id: int = 99) -> str:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
-    Passes kwargs to the executed code via kwargs.
-    The kwargs you are allowed to use are limited to what JSON can express.
-    Do not try to pass anything else in. 
+    kwargs are the parameters you pass to the programm. They are json serialised, so do not try to pass in anything other then json.
     Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
 
     """
@@ -62,11 +62,21 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     body = conn.execute("""
     SELECT body FROM executables WHERE addr = %s;
                         """, (v_addr,)).fetchone()[0]
+    env = os.environ.copy()
+    env["KWARGS"] = json.dumps(kwargs)
     
-    return str(subprocess.run(["python3"], input=body, capture_output=True, text=True, timeout=timeout))
+    result =  str(subprocess.run(["python3"],
+                                 input=body,
+                                 capture_output=True,
+                                 text=True,
+                                 timeout=timeout,
+                                 env=env
+                                 ))
+
+    return result
 
 @register_tool("context.add")
-def context_add_by_addr(addr: int|None, name: int|None, _master_id: int) -> None:
+def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = conn_factory()
     if addr is None:

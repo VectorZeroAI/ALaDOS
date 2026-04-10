@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION new_slave(
     p_master_addr BIGINT,
-    p_name TEXT,
+    p_name TEXT DEFAULT NULL,
     p_instruction TEXT,
     p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
@@ -14,20 +14,19 @@ CREATE OR REPLACE FUNCTION new_slave(
 --         v_has_cycle BOOLEAN; NOTE : LATER MAYBE SOMEDAY
         v_result_addr BIGINT;
     BEGIN
-        new_slave_addr := nextval('global_next_id');
-        IF p_result_addr IS NULL THEN
-            INSERT INTO addrs (addr) VALUES (new_slave_addr);
-            INSERT INTO results (addr) VALUES (v_result_addr);
+        new_slave_addr := new_addr();
+        v_result_addr := COALESCE(p_result_addr, new_addr());
 
+        IF p_result_addr IS NULL THEN
+            INSERT INTO results (addr) VALUES (v_result_addr);
         END IF;
 
         IF p_result_name IS NOT NULL THEN
-            INSERT INTO names (addr, name) VALUES ((COALESCE(p_result_addr, v_result_addr)), p_result_name);
+            INSERT INTO names (addr, name) VALUES (v_result_addr, p_result_name);
         END IF;
 
-        INSERT INTO slaves (master_addr, instruction, result_addr, result_name)
-        VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name)
-        RETURNING addr INTO new_slave_addr;
+        INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr)
+        VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name, new_slave_addr);
 
         INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
 

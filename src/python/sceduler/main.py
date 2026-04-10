@@ -58,6 +58,7 @@ def new_slave_listener_thread():
             except Exception as e:
                 print(f"sceduler new_slave_listener_thread errored: {e}")
                 # TODO : IMPLEMENT ACTUAL LOGGING
+                continue
     finally:
         try:
             conn.close()

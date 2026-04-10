@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
         REFERENCES addrs(addr)
             ON DELETE CASCADE 
-            ON UPDATE CASCADE
+            ON UPDATE CASCADE,
+    instruction TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS master_context (

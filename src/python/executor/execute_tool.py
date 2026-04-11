@@ -8,6 +8,26 @@ import re
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
 
+TOOL_USAGE_INSTRUCTION = """
+When calling the tools, your output format must be the following: 
+[
+    {
+        "tool": "tool.name",
+        "args": {
+            "param_name": "value",
+            "anouther_param_name": 123
+        }
+
+    },
+    {
+        ...
+    },
+    ...
+]
+"""
+
+HEADERS_REGISTRY[" "] = TOOL_USAGE_INSTRUCTION # TODO : Maybe make this a bit nicer, IDK, maybe
+
 # Pattern matches:
 # - optional comma and whitespace before (if not first param)
 # - the parameter itself: _master_addr: <type>

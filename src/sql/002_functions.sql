@@ -20,6 +20,7 @@ CREATE OR REPLACE FUNCTION new_slave(
         v_result_addr := COALESCE(p_result_addr, new_addr());
 
         IF p_result_addr IS NULL THEN
+            v_result_addr := new_addr();
             INSERT INTO results (addr) VALUES (v_result_addr);
         END IF;
 
@@ -28,7 +29,7 @@ CREATE OR REPLACE FUNCTION new_slave(
         END IF;
 
         INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr)
-        VALUES (p_master_addr, p_instruction, p_result_addr, p_result_name, new_slave_addr);
+        VALUES (p_master_addr, p_instruction, v_result_addr, p_result_name, new_slave_addr);
         
         IF p_name IS NOT NULL THEN
             INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);

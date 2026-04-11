@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
 from typing import TypeAlias, TypedDict, Optional, Union, List
+from pydantic import Json
 
-from pydantic import BaseModel
-
-JsonSerialisable: TypeAlias = Union[str, int, float, bool, None, dict[str, "JsonSerialisable"], list["JsonSerialisable"]]
+JsonSerializable: TypeAlias = Json
 
 class api(TypedDict):
     """ An api endpoint representation """
@@ -23,6 +23,6 @@ class instr_json(TypedDict):
 class tool_call(TypedDict):
     """ A single tool call, directly executable """
     tool: str
-    args: dict[str, JsonSerialisable]
+    args: dict[str, JsonSerializable]
 
 tool_calls_block: TypeAlias = List[tool_call]

@@ -93,6 +93,7 @@ async def core(
             print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
             global_interrupt_queue.put("STOP")
         await checkpoint()
+        print(llm_response) # FIXME : REmove the debug print statement after done debugging this
         tool_calls: tool_calls_block = llm_to_json(llm_response)
 
         results = []

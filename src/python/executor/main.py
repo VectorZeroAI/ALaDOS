@@ -35,9 +35,9 @@ def _llm_call_claude(api: api, prompt: str) -> str:
 def _llm_call_openai(api: api, prompt: str) -> str:
     """
     This is the function that calls an openai compatable endpoint.  
-    THE FULL ENDPOINT URL MUST BE PROVIDED, INCLUDING THE v1/completions whatever path.
+    THE FULL ENDPOINT URL MUST BE PROVIDED, INCLUDING THE v1/chat/completions whatever path.
     """
-    with httpx.Client() as client:
+    with httpx.Client(timeout=60) as client:
         response = client.post(
                 url=api["url"],
                 headers={"Authorization": f"Bearer {api["key"]}"},
@@ -77,6 +77,7 @@ async def core(
         instr = await queue.get()
 
         str_instr = " ".join((instr["context"], instr["instruction"]))
+        print(str_instr)
         
         for api_sps in apis:
             await checkpoint()
@@ -95,6 +96,7 @@ async def core(
         await checkpoint()
         print(llm_response) # FIXME : REmove the debug print statement after done debugging this
         tool_calls: tool_calls_block = llm_to_json(llm_response)
+        print(f"TOOL CALLS EXTRACTED: {tool_calls}")
 
         results = []
 

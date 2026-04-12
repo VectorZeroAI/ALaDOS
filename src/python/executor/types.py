@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from typing import TypeAlias, TypedDict, Optional, Union, List
-from pydantic import Json
+from pydantic import JsonValue
 
-JsonSerializable: TypeAlias = Json
+JsonSerializable: TypeAlias = JsonValue
 
 class api(TypedDict):
     """ An api endpoint representation """
@@ -23,6 +23,6 @@ class instr_json(TypedDict):
 class tool_call(TypedDict):
     """ A single tool call, directly executable """
     tool: str
-    args: dict[str, JsonSerializable]
+    args: Optional[dict[str, JsonSerializable]]
 
 tool_calls_block: TypeAlias = List[tool_call]

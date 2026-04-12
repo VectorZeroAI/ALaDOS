@@ -1,34 +1,35 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
-import re
 from json_repair import repair_json
-from ..executor.types import tool_calls_block, tool_call, JsonSerializable
+from ..executor.types import tool_calls_block
 from pydantic import TypeAdapter, ValidationError
+import json
 
 def extract_json_block(text: str) -> str:
     """
-    Extracts the first complete JSON object or array from the text.
+    Extracts the last complete JSON array or object from the text.
     Returns the JSON string or raises ValueError if not found.
     """
-    # Find the first '{' or '['
-    start_idx = None
-    start_char = None
-    for i, ch in enumerate(text):
-        if ch in ('{', '['):
-            start_idx = i
-            start_char = ch
+    # Find the last occurrence of ']' or '}'
+    end_idx = None
+    end_char = None
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] in (']', '}'):
+            end_idx = i
+            end_char = text[i]
             break
-    if start_idx is None:
+
+    if end_idx is None:
         raise ValueError("No JSON object or array found in model output")
 
-    # Matching closing character
-    end_char = '}' if start_char == '{' else ']'
-    depth = 0
+    start_char = '[' if end_char == ']' else '{'
+    stack = 0
     in_string = False
     escape = False
-    for i in range(start_idx, len(text)):
+
+    # Scan backwards from end_idx to find the matching start_char at depth 0
+    for i in range(end_idx, -1, -1):
         ch = text[i]
         if escape:
             escape = False
@@ -41,16 +42,26 @@ def extract_json_block(text: str) -> str:
             continue
         if in_string:
             continue
-        if ch == start_char:
-            depth += 1
-        elif ch == end_char:
-            depth -= 1
-            if depth == 0:
-                return text[start_idx:i+1]
-    raise ValueError("Unbalanced JSON brackets")
+        if ch == end_char:
+            stack += 1
+        elif ch == start_char:
+            stack -= 1
+            if stack == 0:
+                # Found the matching opening bracket
+                candidate = text[i:end_idx+1]
+                # Validate that it's parsable JSON
+                try:
+                    json.loads(candidate)
+                    return candidate
+                except json.JSONDecodeError:
+                    # Invalid JSON, continue searching earlier
+                    continue
+
+    raise ValueError("No valid JSON block found")
 
 def llm_to_json(input_str: str) -> tool_calls_block:
     json_str = extract_json_block(input_str)
+    print(f"extracted json block = {json_str}")
 
     validator = TypeAdapter(tool_calls_block)
     validator.rebuild()

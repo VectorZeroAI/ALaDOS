@@ -39,9 +39,10 @@ def remove_master_addr_param(signature_str: str) -> str:
     return re.sub(pattern, '', signature_str).strip()
 
 
-def _construct_header(func: Callable) -> str:
+def _construct_header(func: Callable, name: str|None = None) -> str:
     signature = inspect.signature(func)
-    signature_str = str(signature)
+    signature_str = name or func.__name__
+    signature_str = signature_str + str(signature)
     signature_str = remove_master_addr_param(signature_str)
     signature_str = "\n".join((signature_str, (func.__doc__ or "No description provided")))
     return signature_str
@@ -50,9 +51,13 @@ def _construct_header(func: Callable) -> str:
 def register_tool(name: str|None = None):
     def decorator(func: Callable):
         TOOL_REGISTRY[name or func.__name__] = func
-        HEADERS_REGISTRY[name or func.__name__] = _construct_header(func)
+        HEADERS_REGISTRY[name or func.__name__] = _construct_header(func, name)
         return func
     return decorator
 
 def execute_tool(call: tool_call, _master_id: int) -> None:
     return TOOL_REGISTRY[call["tool"]](**call["args"], _master_id = _master_id)
+
+# register all the tools
+from . import builtins # # pyright: ignore # ruff: ignore 
+# THIS IS REQUIRED ! DONT REMOVE THIS!!!

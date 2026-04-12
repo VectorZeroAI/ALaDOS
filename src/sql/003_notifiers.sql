@@ -1,24 +1,3 @@
--- notifiers
--- CREATE OR REPLACE FUNCTION count_updates()
---     RETURNS TRIGGER AS $$
---     BEGIN
---         IF nextval('update_counter_window') IS 1000 THEN
---             PERFORM pg_notify('window_recreate', 'TRUE'::TEXT);
---             PERMORM setval('update_counter_window', 0);
---         END IF;
--- 
---     RETURN NEW;
--- END;
--- $$, LANGUAGE plpgsql;
--- 
--- CREATE OR REPLACE TRIGGER trg_knowledge_update
--- AFTER UPDATE ON knowledge
--- FOR EACH ROW EXECUTE FUNCTION increment_update_count();
--- 
--- CREATE OR REPLACE TRIGGER trg_executable_update
--- AFTER UPDATE ON executables
--- FOR EACH ROW EXECUTE FUNCTION increment_update_count();
-
 CREATE OR REPLACE FUNCTION position_calculation()
     RETURNS TRIGGER AS $$
     DECLARE
@@ -26,15 +5,32 @@ CREATE OR REPLACE FUNCTION position_calculation()
         item_2_pos NUMERIC;
         item_1_distance DOUBLE PRECISION;
         item_2_distance DOUBLE PRECISION;
+        item_1_pos_e NUMERIC;
+        item_2_pos_e NUMERIC;
+        item_1_distance_e DOUBLE PRECISION;
+        item_2_distance_e DOUBLE PRECISION;
     BEGIN 
-        WITH e_and_k AS (
-            SELECT position, NEW.emb <=> emb AS distance FROM knowledge WHERE emb IS NOT NULL
-            UNION ALL
-            SELECT position, NEW.emb <=> emb AS distance FROM executables WHERE emb IS NOT NULL
-            ORDER BY distance
-        )
-        SELECT position, distance INTO item_1_pos, item_1_distance FROM e_and_k LIMIT 1;
-        SELECT position, distance INTO item_2_pos, item_2_distance FROM e_and_k ek OFFSET 1 LIMIT 1;
+        SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos, item_1_distance
+        FROM knowledge WHERE emb IS NOT NULL ORDER BY distance LIMIT 1;
+
+        SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos_e, item_1_distance_e
+        FROM executables WHERE emb IS NOT NULL ORDER BY distance LIMIT 1;
+        
+        SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
+        FROM knowledge WHERE emb IS NOT NULL ORDER BY distance LIMIT 1 OFFSET 1;
+
+        SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos_e, item_2_distance_e
+        FROM executables WHERE emb IS NOT NULL ORDER BY distance LIMIT 1 OFFSET 1;
+
+        IF item_1_distance_e < item_1_distance THEN
+            item_1_distance := item_1_distance_e;
+            item_1_pos := item_1_pos_e;
+        END IF;
+
+        IF item_2_distance_e < item_2_distance THEN
+            item_2_distance := item_2_distance_e;
+            item_2_pos := item_2_pos_e;
+        END IF;
 
         IF item_1_pos IS NULL THEN
             NEW.position := 0;

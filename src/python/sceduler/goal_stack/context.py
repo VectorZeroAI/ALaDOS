@@ -73,7 +73,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     for i in req_results_addrs:
         content = conn.execute("""
         SELECT content_str FROM results WHERE addr = %s;
-                               """, (*i,)).fetchone()[0]
+                               """, (*i,)).fetchone()[0] # TODO : Use an IN clause insdead of a loop
         req_results_content.append(content)
 
     results_str = "\n\n".join(req_results_content)
@@ -226,14 +226,21 @@ def resolve_window(window_data: WindowData) -> str:
         return f"DOES NOT EXIST@{window_data["window_position"]}"
 
     anchor_pos = int(anchor_pos[0])
-    most_l_pos = anchor_pos - window_data['window_size_l']
-    most_r_pos = anchor_pos + window_data['window_size_r']
 
     context_fetch = conn.execute("""
-    SELECT description, addr, position FROM knowledge WHERE position BETWEEN %s AND %s
-    UNION ALL
-    SELECT description, addr, position FROM executables WHERE position BETWEEN %s AND %s ORDER BY position;
-                                 """, (most_l_pos, most_r_pos, most_l_pos, most_r_pos)).fetchall()
+    WITH ordered AS (
+        SELECT description,
+            addr,
+            position,
+            type,
+            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+    ), anchor AS (
+        SELECT rn FROM ordered WHERE addr = %s AND type = %s LIMIT 1
+    )
+    SELECT description, addr, position
+    FROM ordered o, anchor a
+    WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
+                             """, (anchor_pos, )).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 

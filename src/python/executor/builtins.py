@@ -9,7 +9,7 @@ import json
 
 # EXAMPLE: 
 @register_tool("print.to_console")
-def print_to_console(input_str: str) -> None:
+def print_to_console(input_str: str, _master_id: int) -> None:
     print(input_str)
 
 @register_tool("K.create")
@@ -88,11 +88,11 @@ def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_master_id, addr))
 
-@register_tool("task.add_step")
+@register_tool("goal.add_slave")
 def add_slave(instruction: str,
               required_results_names: list[str]|None=None,
               required_results_addrs: list[int]|None=None,
-              tasks_name: str|None=None,
+              goal_name: str|None=None,
               result_name: str|None=None,
               _master_id: int = 99) -> None:
     """
@@ -112,11 +112,11 @@ def add_slave(instruction: str,
                   """, (i,)).fetchone()[0])
 
     conn.execute("""
-    new_slave(%s, %s, %s, %s, %s, %s);
+    SELECT new_slave(%s, %s, %s, %s, %s, %s);
         """, 
-    (_master_id, instruction, tasks_name, required_results_addrs, None, result_name))
+    (_master_id, instruction, goal_name, required_results_addrs, None, result_name))
 
-@register_tool("task.add_planner_step")
+@register_tool("goal.add_planner_slave")
 def add_replanner_slave(_master_id: int) -> None:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
     conn = conn_factory()
@@ -124,28 +124,34 @@ def add_replanner_slave(_master_id: int) -> None:
     fetch = conn.execute("""
     SELECT instruction FROM masters WHERE addr = %s;
                          """, (_master_id,)).fetchone()
-    special_context.append(fetch)
+    assert fetch is not None
+    special_context.extend(fetch)
+
     fetch = conn.execute("""
     SELECT s.instruction, r.content_str FROM masters m JOIN slaves s ON s.master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
                          """, (_master_id,)).fetchall()
-    special_context.append(fetch)
+    special_context.extend(fetch)
 
     special_context_str = f"Task instruction: {special_context.pop(0)}"
 
     tmp = []
     for i in special_context: # NOTE : the first element is removed in special_context.pop(0) call.
-        tmp.append(["\n", "previous step: [", f" instruction: {i[0]}", f" result: {i[1]}", "]"])
+        tmp.append("\n")
+        tmp.append("previous step: [")
+        tmp.append(f" instruction: {i[0]}")
+        tmp.append(f" result: {i[1]}")
+        tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
     fetch = conn.execute("""
-    SELECT r.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
+    SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
                          """, (_master_id,)).fetchall()
 
     prompt = """
     Your task is to provide additional steps for the following task, given the previous steps and their results.
     You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool.
-    For adding new steps, use the task.add_step tool. For adding a planner tool, use the task.add_planner_step tool.
+    For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
     """ + special_context_str
 
-    conn.execute("new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
+    conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
 

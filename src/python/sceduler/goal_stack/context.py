@@ -235,25 +235,24 @@ def resolve_window(window_data: WindowData) -> str:
             type,
             ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
     ), anchor AS (
-        SELECT rn FROM ordered WHERE addr = %s AND type = %s LIMIT 1
+        SELECT rn FROM ordered WHERE addr = %s LIMIT 1
     )
     SELECT description, addr, position
     FROM ordered o, anchor a
     WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
-                             """, (anchor_pos, )).fetchall()
+                             """, (window_data["window_position"], window_data["window_size_l"], window_data["window_size_r"])).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 
     names = []
-    for a in addrs:
-        names_fetch = conn.execute("""
-        SELECT name FROM names WHERE addr = %s 
-                                   """, (a,)).fetchone()
-        names.append(*names_fetch)
+    names_fetch = conn.execute("""
+    SELECT name, addr FROM names WHERE addr = ANY(%s)
+                               """, (addrs,)).fetchone()
+    names.extend(names_fetch)
 
     context_str = ""
     for d, a, p, n in zip(descriptions, addrs, positions, names):
-        context_str = context_str + "@".join((n, f"pos: {p}", f"addr: {a}"))
+        context_str = context_str + "@".join((n[0] if n[1] == a else "Nameless", f"pos: {p}", f"addr: {a}"))
         context_str = "\n".join((context_str, d, " ", " "))
 
     return context_str

@@ -11,7 +11,6 @@ CREATE OR REPLACE FUNCTION new_slave(
     DECLARE
         new_slave_addr BIGINT;
         req BIGINT;
---         v_has_cycle BOOLEAN; NOTE : LATER MAYBE SOMEDAY
         v_result_addr BIGINT;
         flag_any_result_not_ready BOOLEAN;
     BEGIN
@@ -20,7 +19,6 @@ CREATE OR REPLACE FUNCTION new_slave(
         v_result_addr := COALESCE(p_result_addr, new_addr());
 
         IF p_result_addr IS NULL THEN
-            v_result_addr := new_addr();
             INSERT INTO results (addr) VALUES (v_result_addr);
         END IF;
 
@@ -49,24 +47,6 @@ CREATE OR REPLACE FUNCTION new_slave(
         IF flag_any_result_not_ready IS FALSE THEN
             PERFORM pg_notify('slaves_ready', new_slave_addr::TEXT);
         END IF;
-
-
---         WITH RECURSIVE dep_chain(slave_addr) AS (
---             SELECT sr.slave_addr FROM slave_req sr WHERE sr.req_addr = COALESCE(p_result_addr, v_result_addr)
--- 
---             UNION NOTE : LATER MAYBE SOMEDAY, I cant figure that out. Any working version would be vibed, and propably not working.
--- 
---             SELECT sr.slave_addr FROM dep_chain dc
---             JOIN slaves s ON dc.slave_addr = s.slave_addr
---             JOIN slave_req sr ON sr.req_addr = s.result_addr
---         )
---         SELECT EXISTS (
---             SELECT 1 FROM dep_chain WHERE slave_addr = new_slave_addr
---         ) INTO v_has_cycle;
--- 
---         IF v_has_cycle THEN
---             RAISE EXCEPTION 'CYCLE DETECTED!!!';
---         END IF;
 
     RETURN new_slave_addr;
 END;

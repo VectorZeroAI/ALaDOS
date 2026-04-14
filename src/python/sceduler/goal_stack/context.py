@@ -9,7 +9,6 @@ import psycopg
 from ...executor.execute_tool import HEADERS_REGISTRY
 
 
-TOOL_HEADERS = "\n\n".join(HEADERS_REGISTRY.values())
 
 def resolve_context(slave_obj: SlaveObj):
     conn = conn_factory()
@@ -61,6 +60,8 @@ def resolve_context(slave_obj: SlaveObj):
         load_context = "NO ITEMS LOADED YET"
 
     results_context = resolve_req_results(slave_obj, conn)
+
+    TOOL_HEADERS = "\n\n".join(HEADERS_REGISTRY.values())
 
     return "\n\n\n".join([window_context, load_context, results_context, TOOL_HEADERS])
 

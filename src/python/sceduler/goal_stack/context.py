@@ -53,8 +53,8 @@ def resolve_context(slave_obj: SlaveObj):
         try:
             loads_data_valid = loads_data_validator.validate_python(loads_data_python)
         except ValidationError as e:
-            print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
-            raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
+            print(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
+            raise RuntimeError(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
 
         load_context = resolve_loads(loads_data_valid)
     else:

@@ -8,4 +8,4 @@ def setup():
 
 def embedder_thread():
     conn = conn_factory()
-    
+       

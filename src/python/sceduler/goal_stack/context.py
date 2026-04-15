@@ -69,7 +69,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
-                                     """, (slave_obj["addr"], )).fetchall()
+                             """, (slave_obj["addr"], )).fetchall()
     req_results_content = []
     for i in req_results_addrs:
         content = conn.execute("""

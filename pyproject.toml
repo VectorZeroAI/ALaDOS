@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [ ] # ADD THE DEPS HERE. json-repair, sentense-transformers, psycopg
+dependencies = [
+ "httpx>=0.28.1",
+ "json-repair>=0.59.3",
+ "psycopg>=3.3.3",
+ "pydantic>=2.13.0",
+] # ADD THE DEPS HERE. json-repair, sentense-transformers, psycopg
 
 [project.scripts]
 alados_start = "python.main:main"

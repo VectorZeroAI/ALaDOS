@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import os
+
+import psycopg
 from .execute_tool import register_tool
 from ..utils.conn_factory import conn_factory
 import subprocess
@@ -168,15 +170,66 @@ def add_replanner_slave(_master_id: int) -> None:
         tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
+    masters_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_master_id,)).fetchone()
+    masters_result_so_far_str = f"Masters result so far: {masters_result_so_far_str[0] if masters_result_so_far_str is not None else "No master result so far."}"
+
     fetch = conn.execute("""
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
                          """, (_master_id,)).fetchall()
 
     prompt = """
     Your task is to provide additional steps for the following task, given the previous steps and their results.
-    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool.
+    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool, unless the task would be done.
+    If the task is done, add a slave that gets all the finalised results and writes them as "result.master_result".
     For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
-    """ + special_context_str
+    """ + special_context_str + masters_result_so_far_str
 
     conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
 
+@register_tool("result.add_master_result")
+def master_result_add(text: str, _master_id: int = 9) -> None:
+    """
+    This funtion adds a result for the whole master, e.g. the task that consists of many slaves.
+    Doesnt actually terminate the master, and can be used multiple times.
+    """
+    conn = conn_factory()
+    conn.execute("""
+    UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
+                 """, (text, _master_id))
+
+@register_tool("context.window.semantic_land")
+def context_window_lands(querry: text, _master_id: int = 9) -> None:
+    """
+    Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
+    A viewing window is a dynamic automatic context window capable of providing you with relevant and highly controllable context
+    of relevant knowledge and tools to be executed via tool.execute .
+    Very important generally. 
+    """
+
+    from .embedder import embedder
+    emb = embedder.encode_query(querry)
+
+    conn.execute("""""")
+
+@register_tool("context.window.land_by_addr")
+def context_window_land(addr: int, _master_id: int) -> None:
+    """
+    Lands a viewing window, or a context window, these are the same thing, onto an addr.
+    """
+    conn = conn_factory()
+
+    try:
+        addr_type = conn.execute("""
+        SELECT type FROM addrs_tables WHERE addr = %s;
+                                 """, (addr,)).fetchone()[0]
+    except TypeError as e:
+        raise psycopg.DataError(f"Couldnt resolve addr {addr} to type, due to the following error: {e}, as result of fetch is not subscriptable.")
+    if addr_type == "knowledge":
+        conn.execute("""
+        UPDATE master_context SET window_anchor_knowledge = %s, window_size_r = 12, window_size_l = 12;
+                     """, (addr,))
+
+    elif addr_type == "executables":
+        conn.execute("""
+        UPDATE master_context SET window_anchor_exe = %s, window_size_r = 12, window_size_l = 12;
+                     """, (addr,))

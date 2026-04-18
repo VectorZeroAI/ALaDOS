@@ -117,8 +117,8 @@ async def core(
                     try:
                         llm_output_new = llm_call(api_sps, prompt)
                         break
-                    except Exception:
-                        print(f"following API failed in the recovery LLM call: {api}")
+                    except Exception as e:
+                        print(f"following API failed in the recovery LLM call: {api_sps}, due to the reason {e}")
                         continue
                 if llm_output_new is None:
                     raise RuntimeError(f"Every API failed. APIS: {apis}")

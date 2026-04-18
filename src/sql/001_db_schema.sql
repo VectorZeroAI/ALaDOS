@@ -2,8 +2,6 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
-CREATE SEQUENCE IF NOT EXISTS update_counter_window;
-
 CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     DECLARE
         new_id BIGINT;
@@ -75,6 +73,7 @@ CREATE TABLE IF NOT EXISTS master_context (
         REFERENCES masters(addr)
             ON DELETE CASCADE 
             ON UPDATE CASCADE,
+    master_result TEXT,
     window_anchor_exe BIGINT
         REFERENCES executables(addr) 
             ON DELETE SET NULL 

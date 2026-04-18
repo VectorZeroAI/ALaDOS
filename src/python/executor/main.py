@@ -49,7 +49,9 @@ def _llm_call_openai(api: api, prompt: str) -> str:
                                 "role": "system", 
                                 "content": prompt
                             }
-                        ]
+                        ],
+                    "max_completion_tokens": api.get('max_tokens', 4096),
+                    "max_tokens": api.get('max_tokens', 4096)
                     }
                 )
         response.raise_for_status()
@@ -109,7 +111,7 @@ async def core(
 
         await checkpoint()
         conn.execute("""
-        UPDATE results SET ready = TRUE, content_str = %s WHERE addr = %s
+        SELECT new_result(%s, %s);
                      """, (result_str, instr["result_addr"]))
         
 

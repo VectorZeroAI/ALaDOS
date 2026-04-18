@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     content TEXT NOT NULL,
     description TEXT NOT NULL,
     position NUMERIC NOT NULL,
-    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
+    emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE INDEX ON knowledge USING hnsw(emb vector_cosine_ops);
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS executables (
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
     position NUMERIC NOT NULL,
-    emb vector(384) -- NOTE : Names, aka titles, are always stored in names table
+    emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE INDEX ON executables USING hnsw(emb vector_cosine_ops);
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS ownership(
 CREATE OR REPLACE VIEW viewing_window AS
     SELECT addr, description, emb, position, 'knowledge' AS type FROM knowledge
     UNION ALL
-    SELECT addr, description, emb, position, 'executable' AS type FROM executables
+    SELECT addr, description, emb, position, 'executables' AS type FROM executables
     ORDER BY position;
 
 CREATE OR REPLACE VIEW addrs_tables AS

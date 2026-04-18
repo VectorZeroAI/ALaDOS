@@ -85,7 +85,7 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
     """ The function for resolving knowledge item to a clean AI friendly string """
     item = conn.execute("""
         SELECT names.name, knowledge.content
-            FROM knowledge JOIN names ON names.addr = %s WHERE knowledge.addr = %s;
+            FROM knowledge LEFT JOIN names ON names.addr = %s WHERE knowledge.addr = %s;
 
                  """, (addr, addr)).fetchone()
     if item is None:
@@ -99,7 +99,7 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
 def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, executables.header, executables.body
-            FROM executables JOIN names ON names.addr = %s WHERE executables.addr = %s;
+            FROM executables LEFT JOIN names ON names.addr = %s WHERE executables.addr = %s;
                         """, (addr, addr)).fetchone()
     if item is None:
         return f"DOES NOT EXIST@{addr}"
@@ -159,7 +159,7 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
             slaves.instruction,
             slaves.result_addr,
             slaves.result_name
-            FROM slaves JOIN names ON names.addr = %s WHERE slaves.addr = %s;
+            FROM slaves LEFT JOIN names ON names.addr = %s WHERE slaves.addr = %s;
                         """, (addr, addr)).fetchone()
 
     if fetch is None:
@@ -206,7 +206,7 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, logs.created_at, logs.action, logs.created_by
-            FROM logs JOIN names ON names.addr = %s WHERE logs.addr = %s;
+            FROM logs LEFT JOIN names ON names.addr = %s WHERE logs.addr = %s;
                         """, (addr, addr)).fetchone()
     
     if item is None:

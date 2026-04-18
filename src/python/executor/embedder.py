@@ -46,7 +46,7 @@ def embedder_thread():
         item_addr = embedder_queue.get_blocking()
 
         desc_and_type = conn.execute("""
-    SELECT description, type FROM viewing_window vw INNER JOIN addrs_tables at ON at.addr = %s;
+    SELECT vw.description, vw.type FROM viewing_window vw INNER JOIN addrs_tables at ON at.addr = vw.addr WHERE vw.addr = %s;
                  """, (item_addr,)).fetchone()
         if desc_and_type is None:
             print(f"Object that were supposed to embedd is not found. {item_addr} does not exist as an embeddable item.")

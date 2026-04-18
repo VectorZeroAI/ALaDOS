@@ -56,7 +56,7 @@ def register_tool(name: str|None = None):
     return decorator
 
 def execute_tool(call: tool_call, _master_id: int) -> None:
-    return TOOL_REGISTRY[call["tool"]](**call["args"], _master_id = _master_id)
+    return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _master_id = _master_id)
 
 # register all the tools
 from . import builtins # # pyright: ignore # ruff: ignore 

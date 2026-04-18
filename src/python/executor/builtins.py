@@ -41,7 +41,7 @@ def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99) -
                      """, (addr,)).fetchone()[0]
     elif name is not None:
         result = conn.execute("""
-        SELECT k.content FROM knowledge JOIN names n ON k.addr = n.addr WHERE n.name = %s
+        SELECT k.content FROM knowledge k JOIN names n ON k.addr = n.addr WHERE n.name = %s
                      """, (name,)).fetchone()[0]
     else:
         raise TypeError("ADDR OR NAME MUST BE PROVIDED")
@@ -120,7 +120,7 @@ def add_slave(instruction: str,
         {
             "tool": "goal.add_slave",
             "args": {
-                "required_result_names": ["printer_task"],
+                "required_results_names": ["printer_task"],
                 "instruction": "Print 'second_slave_executed_successfully'"
             }
         }

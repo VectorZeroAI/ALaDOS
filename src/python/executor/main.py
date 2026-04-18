@@ -112,6 +112,7 @@ async def core(
                 Your task is to figure out what went wrong there, and create a working tool call.
                 The following is the tool call format instructions and all the valid tools:
                 """ + "\n".join(HEADERS_REGISTRY.values())
+                llm_output_new = None
                 for api_sps in apis:
                     try:
                         llm_output_new = llm_call(api_sps, prompt)
@@ -119,6 +120,8 @@ async def core(
                     except Exception:
                         print(f"following API failed in the recovery LLM call: {api}")
                         continue
+                if llm_output_new is None:
+                    raise RuntimeError(f"Every API failed. APIS: {apis}")
                 new_calls = llm_to_json(llm_output_new)
                 nresults = []
                 for ncall in new_calls:

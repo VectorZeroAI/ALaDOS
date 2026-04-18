@@ -14,10 +14,10 @@ from ..queue import global_interrupt_queue
 from ..utils.uqueue import Uqueue
 import tomllib
 import httpx
-from .types import api, instr_json, tool_call, tool_calls_block
-import psycopg
+from .types import api, instr_json, tool_calls_block
 from .queue import executor_queue
 from . import embedder
+from ..sceduler.goal_stack.context import HEADERS_REGISTRY
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
@@ -105,7 +105,33 @@ async def core(
 
         for call in tool_calls:
             await checkpoint()
-            results.append(execute_tool(call, instr["master_addr"]))
+            try:
+                tool_result = execute_tool(call, instr["master_addr"])
+            except Exception as e:
+                prompt = f"""The following tool call failed for the following reason: {call}, {e}
+                Your task is to figure out what went wrong there, and create a working tool call.
+                The following is the tool call format instructions and all the valid tools:
+                """ + "\n".join(HEADERS_REGISTRY.values())
+                for api_sps in apis:
+                    try:
+                        llm_output_new = llm_call(api_sps, prompt)
+                        break
+                    except Exception:
+                        print(f"following API failed in the recovery LLM call: {api}")
+                        continue
+                new_calls = llm_to_json(llm_output_new)
+                nresults = []
+                for ncall in new_calls:
+                    try:
+                        ntool_result = execute_tool(ncall, instr["master_addr"])
+                    except Exception as e:
+                        print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
+                        raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
+                    nresults.append(ntool_result)
+                results.extend(nresults)
+                continue
+
+            results.append(tool_result)
 
         result_str = "\n".join(str(results))
 

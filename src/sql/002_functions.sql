@@ -134,3 +134,58 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION move_anchor(
+    p_amount INT,
+    p_master_id BIGINT
+)
+RETURNS VOID AS $$
+DECLARE
+    v_new_addr BIGINT;
+    v_new_type TEXT;
+BEGIN
+
+    IF p_amount > 0 THEN
+        
+        WITH ordered AS (
+            SELECT description,
+                addr,
+                position,
+                type,
+                ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+        ), anchor AS (
+            SELECT rn FROM ordered WHERE addr = p_master_id LIMIT 1
+        )
+        SELECT o.addr, o.type INTO v_new_addr, v_new_type
+        FROM ordered o, anchor a
+        WHERE o.rn = a.rn + p_amount;
+
+    ELSE
+
+        WITH ordered AS (
+            SELECT description,
+                addr,
+                position,
+                type,
+                ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+        ), anchor AS (
+            SELECT rn FROM ordered WHERE addr = p_master_id LIMIT 1
+        )
+        SELECT o.addr, o.type INTO v_new_addr, v_new_type
+        FROM ordered o, anchor a
+        WHERE o.rn = a.rn - p_amount; -- NOTE : The only differense is the fact that this is MINUS p_amount, and the top one is PLUS p_amount.
+        -- NOTE: COPY PASTED FROM the context_window_resolution python functions inlined SQL. Sync changes I guess.
+
+    END IF;
+
+    IF v_new_type = 'knowledge' THEN
+        UPDATE master_context SET window_anchor_knowledge = v_new_addr WHERE addr = p_master_id;
+    ELSIF v_new_type = 'executables' THEN
+        UPDATE master_context SET window_anchor_exe = v_new_addr WHERE addr = p_master_id;
+    ELSE 
+        RAISE EXCEPTION'unexpected type of anchor. Type: ';
+    END IF;
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;

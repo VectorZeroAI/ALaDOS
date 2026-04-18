@@ -229,10 +229,34 @@ def context_window_land(addr: int, _master_id: int) -> None:
         raise psycopg.DataError(f"Couldnt resolve addr {addr} to type, due to the following error: {e}, as result of fetch is not subscriptable.")
     if addr_type == "knowledge":
         conn.execute("""
-        UPDATE master_context SET window_anchor_knowledge = %s, window_size_r = 12, window_size_l = 12;
-                     """, (addr,))
+        UPDATE master_context SET window_anchor_knowledge = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
+                     """, (addr, _master_id))
 
     elif addr_type == "executables":
         conn.execute("""
-        UPDATE master_context SET window_anchor_exe = %s, window_size_r = 12, window_size_l = 12;
-                     """, (addr,))
+    UPDATE master_context SET window_anchor_exe = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
+                     """, (addr, _master_id))
+
+
+@register_tool("context.window.change_size")
+def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 999) -> None:
+    """ 
+    The function for changing viewing windows size. 
+    Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
+    """
+    conn = conn_factory()
+    
+    conn.execute("""
+    UPDATE master_context SET window_size_l = window_siez_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
+                 """, (left, right, _master_id))
+
+@register_tool("context.window.move_anchor")
+def move_window_anchor(amount: int, _master_id) -> None:
+    """
+    Function to move the anchor of the viewing window.
+    Moves to the left if amount if negative, to the right if amount is positive.
+    """
+    conn = conn_factory()
+
+    new_pos = conn.execute("""
+                           """)

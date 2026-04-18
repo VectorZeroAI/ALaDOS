@@ -108,24 +108,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE s_land (
-    master_addr_p BIGINT
+CREATE OR REPLACE FUNCTION s_land (
+    master_addr_p BIGINT,
     emb_p vector(768)
 )
 RETURNS VOID AS $$
 DECLARE
     result_addr BIGINT;
-    max_sim INT;
+    max_sim FLOAT;
     tttt TEXT;
 BEGIN
-    SELECT addr, 1 - (emb_p <=> emb) as similarity, type INTO result_addr, max_sim, tttt FROM viewing_window ORDER BY similarity ASC LIMIT 1;
+    SELECT addr, 1 - (emb_p <=> emb) as similarity, type INTO result_addr, max_sim, tttt FROM viewing_window ORDER BY similarity DESC LIMIT 1;
     
-    IF tttt == 'knowledge' THEN
+    IF addr IS NULL THEN
+        RAISE exception'No item to anchor on found.';
+        RETURN;
+    END IF;
+    
+    IF tttt = 'knowledge' THEN
         UPDATE master_context SET window_anchor_knowledge = result_addr, window_size_l = 12, window_size_r = 12 WHERE addr = master_addr_p;
     END IF;
-    IF tttt == 'executables' THEN
+    IF tttt = 'executables' THEN
         UPDATE master_context SET window_anchor_exe = result_addr, window_size_l = 12, window_size_r = 12 WHERE addr = master_addr_p;
     END IF;
     RETURN;
 END;
-$$
+$$ LANGUAGE plpgsql;

@@ -31,7 +31,7 @@ embedder = SentenceTransformer("msmarco-distilbert-base-tas-b")
 def setup():
     """ Set up the embeder threads """
     for _ in range(config_file_exe['cores_number']):
-        threading.Thread(target=embedder_thread, daemon=True, args=(embedder_queue,)).start()
+        threading.Thread(target=embedder_thread, daemon=True, ).start()
 
 def embedder_thread():
     """ A single embeder thread object """

@@ -14,7 +14,12 @@ def print_to_console(input_str: str, _master_id: int) -> None:
 
 @register_tool("K.create")
 def k_create(content: str, description: str, name: str|None = None, _master_id: int = 99) -> None:
-    """ Creates a knowledge item. The description is a short definition of the items contents for semantic similarity search. content is the actual content, and name is name wich can be used a access the item. """
+    """ 
+    Creates a knowledge item.
+    The description is a short definition of the items contents for semantic similarity search.
+    Content is the actual content, and name is name wich can be used a access the item.
+    Name of a knowledge item CANNOT be used in goal.add_slave required_results_names.
+    """
     conn = conn_factory()
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
@@ -24,10 +29,10 @@ def k_create(content: str, description: str, name: str|None = None, _master_id: 
     if name is not None:
         conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
     conn.close()
-    return True
+    return None
 
 @register_tool("K.read")
-def k_read(addr: int|None, name: str|None, _master_id: int) -> str:
+def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99) -> str:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = conn_factory()
     if addr is not None:
@@ -87,6 +92,7 @@ def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> None
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_master_id, addr))
+    return None
 
 @register_tool("goal.add_slave")
 def add_slave(instruction: str,
@@ -100,6 +106,24 @@ def add_slave(instruction: str,
     A step may require anouther steps result, by adding the required results name or address. 
     A step gets the results it requires when it is executed.
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
+    required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
+    You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
+
+    Example:
+        {
+            "tool": "goal.add_slave",
+            "args": {
+                "instruction": "print 'test_slave_executed_success' to console",
+                "result_name": "printer_task"
+            }
+        },
+        {
+            "tool": "goal.add_slave",
+            "args": {
+                "required_result_names": ["printer_task"],
+                "instruction": "Print 'second_slave_executed_successfully'"
+            }
+        }
     """
     conn = conn_factory()
     if required_results_addrs is None:
@@ -115,6 +139,7 @@ def add_slave(instruction: str,
     SELECT new_slave(%s, %s, %s, %s, %s, %s);
         """, 
     (_master_id, instruction, goal_name, required_results_addrs, None, result_name))
+    return None
 
 @register_tool("goal.add_planner_slave")
 def add_replanner_slave(_master_id: int) -> None:

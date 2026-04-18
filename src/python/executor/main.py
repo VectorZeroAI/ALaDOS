@@ -17,6 +17,7 @@ import httpx
 from .types import api, instr_json, tool_call, tool_calls_block
 import psycopg
 from .queue import executor_queue
+from . import embedder
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
@@ -136,6 +137,7 @@ def startup() -> None:
                 ).start()
     print("startup of the executor finished")
 
+    embedder.setup()
 
 """
 

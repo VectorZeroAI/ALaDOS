@@ -68,6 +68,7 @@ def new_slave_listener_thread():
             qconn.close()
         except Exception:
             pass
+    print("sceduler thread exited!")
                
 
 def setup():

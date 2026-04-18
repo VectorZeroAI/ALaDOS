@@ -8,6 +8,7 @@ from ..utils.conn_factory import conn_factory
 import subprocess
 from ..types import ValidTables
 import json
+from .embedder import embedder
 
 # EXAMPLE: 
 @register_tool("print.to_console")
@@ -205,11 +206,13 @@ def context_window_lands(querry: text, _master_id: int = 9) -> None:
     of relevant knowledge and tools to be executed via tool.execute .
     Very important generally. 
     """
+    conn = conn_factory()
 
-    from .embedder import embedder
     emb = embedder.encode_query(querry)
 
-    conn.execute("""""")
+    conn.execute("""
+    SELECT s_land(%s, %s)
+                 """, (emb, _master_id))
 
 @register_tool("context.window.land_by_addr")
 def context_window_land(addr: int, _master_id: int) -> None:

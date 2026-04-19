@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import asyncio
+import json
 import threading
 from typing import Callable, Coroutine, Sequence, Any
+import re
 
 from python.executor.execute_tool import execute_tool
 from python.utils.conn_factory import conn_factory
@@ -118,8 +120,12 @@ async def core(
             global_interrupt_queue.put("STOP")
         await checkpoint()
         print(llm_response) # FIXME : REmove the debug print statement after done debugging this
-        tool_calls: tool_calls_block = llm_to_json(llm_response)
-        print(f"TOOL CALLS EXTRACTED: {tool_calls}")
+        try:
+            tool_calls: tool_calls_block = llm_to_json(llm_response)
+        except ValueError:
+            llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
+            tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
+            print(f"Did not find models json tool calls block, made this one up: {tool_calls}")
 
         results = []
 
@@ -160,7 +166,7 @@ async def core(
 
             results.append(tool_result)
 
-        result_str = "\n".join(str(results))
+        result_str = "\n".join([str(r) for r in results])
 
         await checkpoint()
         conn.execute("""

@@ -276,3 +276,12 @@ def move_window_anchor(amount: int, _master_id) -> ActionConfirmation:
     SELECT move_anchor(%s, %s);
                            """, (amount, _master_id))
     return "moved context window anchor"
+
+
+@register_tool("result.write")
+def result_write(text: int, _master_id) -> ActionConfirmation:
+    """
+    Function that writes text you provide it as the result of your instruction. 
+    Your normal output is inaccesable to anyone, so responses to informational instructions must be wrapped into this tool call.
+    """
+    return f"Result: {text}"

@@ -66,6 +66,27 @@ def llm_call(api: api, prompt: str) -> str:
         return _llm_call_openai(api, prompt)
 
 
+
+def llm_call_with_ratelimit(api: api, prompt: str) -> str:
+    """
+    The function that encapsulates the entire logic of the llm call with rate limit in itself.
+    """
+
+    try:
+        sleep(api.get('rate_limit') if api.get('rate_limit') is not None else 0) # pyright: ignore
+        # NOTE : THIS IS FINE
+        llm_response = llm_call(api, prompt)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            prev_ratelimit = api.get('rate_limit')
+            if prev_ratelimit in (None, 0, 1):
+                api['rate_limit'] = 2
+            else:
+                api['rate_limit'] = api['rate_limit'] ** 2
+        raise e
+    return llm_response
+
+
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
@@ -86,17 +107,11 @@ async def core(
         for api_sps in apis:
             await checkpoint()
             try:
-                sleep(api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None else 0) # pyright: ignore
-                # NOTE : THIS IS FINE
-                llm_response = llm_call(api_sps, str_instr)
+                llm_response = llm_call_with_ratelimit(api_sps, str_instr)
                 await checkpoint()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
-                    api_sps['rate_limit'] = api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None or api_sps.get('rate_limit') is not 0 else 1 ** 2
-                await checkpoint()
-                pass
+            except httpx.HTTPStatusError:
+                continue
             else:
-                await checkpoint()
                 break
         else:
             print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
@@ -119,22 +134,26 @@ async def core(
                 """ + "\n".join(HEADERS_REGISTRY.values())
                 llm_output_new = None
                 for api_sps in apis:
+                    await checkpoint()
                     try:
-                        llm_output_new = llm_call(api_sps, prompt)
-                        break
-                    except Exception as e:
-                        print(f"following API failed in the recovery LLM call: {api_sps}, due to the reason {e}")
+                        llm_output_new = llm_call_with_ratelimit(api_sps, prompt)
+                    except Exception:
                         continue
+                    else:
+                        break
+                    await checkpoint()
                 if llm_output_new is None:
                     raise RuntimeError(f"Every API failed. APIS: {apis}")
                 new_calls = llm_to_json(llm_output_new)
                 nresults = []
                 for ncall in new_calls:
+                    await checkpoint()
                     try:
                         ntool_result = execute_tool(ncall, instr["master_addr"])
                     except Exception as e:
                         print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
                         raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
+                    await checkpoint()
                     nresults.append(ntool_result)
                 results.extend(nresults)
                 continue
@@ -167,7 +186,7 @@ def startup() -> None:
 
     apis = []
     for i in config['apis']:
-        i['rate_limit'] = 0
+        i['rate_limit'] = 2
         apis.append(i)
 
     for _ in range(config["cores_number"]):

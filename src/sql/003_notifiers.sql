@@ -69,11 +69,11 @@ CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
     BEGIN
         PERFORM new_slave(NEW.addr, 
-            'Your task is to decompose the following task into the initial steps.
-            You must use the add_slave tool to do so. '||NEW.instruction||' You must 
+            'Your task is to decompose the following task into the initial steps, OR to directly execute the task, if the task is trivial.
+            You can use add_slave tool to add slaves. '||NEW.instruction||' You should
             only provide the initial steps,
             and end the initial plan with an "create further plan steps" step,
-            wich you must add via the "add_planner" tool'
+            wich you must add via the "add_planner" tool. OR if the task is trivial, directly write a result to the master_result via the corresponding tool.'
         );
     RETURN NULL;
 END;

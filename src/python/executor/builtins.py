@@ -190,6 +190,7 @@ def add_replanner_slave(_master_id: int) -> ActionConfirmation:
     Your task is to decide how to further proceed. For the given task, and the given results and master result, 
     ether formulate the direct next few steps and add a planner slave, or, if the task is completed, write the results to the master result, and do not add new slaves.
     For adding slaves and planner slaves, use the tools goal.add_slave and goal.add_planner_slave.
+    DO NOT ADD SLAVES WITH THE SAME TASK REPETETIVELY!!!
     """ + special_context_str + masters_result_so_far_str
 
 #    prompt = """

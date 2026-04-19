@@ -141,9 +141,14 @@ CREATE OR REPLACE FUNCTION move_anchor(
 )
 RETURNS VOID AS $$
 DECLARE
+    v_anchor_addr BIGINT;
     v_new_addr BIGINT;
     v_new_type TEXT;
 BEGIN
+    SELECT COLESCE(
+        (SELECT window_anchor_knowledge FROM master_context WHERE addr = p_master_id), 
+        (SELECT window_anchor_exe FROM master_context WHERE addr = p_master_id)
+    ) INTO v_anchor_addr;
 
     IF p_amount > 0 THEN
         
@@ -154,7 +159,7 @@ BEGIN
                 type,
                 ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
         ), anchor AS (
-            SELECT rn FROM ordered WHERE addr = p_master_id LIMIT 1
+            SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
         )
         SELECT o.addr, o.type INTO v_new_addr, v_new_type
         FROM ordered o, anchor a
@@ -169,7 +174,7 @@ BEGIN
                 type,
                 ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
         ), anchor AS (
-            SELECT rn FROM ordered WHERE addr = p_master_id LIMIT 1
+            SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
         )
         SELECT o.addr, o.type INTO v_new_addr, v_new_type
         FROM ordered o, anchor a

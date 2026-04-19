@@ -45,6 +45,7 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
                     interrupt_handler = INTERRUPT_TABLE.get(name)
                     if interrupt_handler:
                         if asyncio.iscoroutinefunction(interrupt_handler):
+                            print(f"Interrupt {name} executed")
                             await interrupt_handler()
                         else:
                             await asyncio.to_thread(interrupt_handler)

@@ -5,4 +5,5 @@ import time
 
 @interrupt("WAIT")
 def wait_for_rate_limit():
+    print("Sleeping !!!")
     time.sleep(12)

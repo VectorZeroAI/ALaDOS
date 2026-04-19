@@ -9,7 +9,8 @@ TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
 
 TOOL_USAGE_INSTRUCTION = """
-When calling the tools, your output format must be the following: 
+You must ALWAYS call tools, not outputting tool calls is FORBIDDEN.
+When calling tools you must follow this instruction format:
 [
     {
         "tool": "tool.name",

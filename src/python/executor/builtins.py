@@ -3,6 +3,7 @@
 import os
 from typing import TypeAlias
 
+from numpy import ndarray
 import psycopg
 from .execute_tool import register_tool
 from ..utils.conn_factory import conn_factory
@@ -219,9 +220,12 @@ def context_window_lands(querry: str, _master_id: int = 9) -> ActionConfirmation
 
     emb = embedder.encode_query(querry)
 
+    if isinstance(emb, ndarray):
+        emb = emb.tolist()
+
     conn.execute("""
-    SELECT s_land(%s, %s)
-                 """, (emb, _master_id))
+    SELECT s_land(%s, %s::vector(768))
+                 """, (_master_id, emb))
     return 'Semantically moved the viewing window anchor.'
 
 @register_tool("context.window.land_by_addr")
@@ -279,7 +283,7 @@ def move_window_anchor(amount: int, _master_id) -> ActionConfirmation:
 
 
 @register_tool("result.write")
-def result_write(text: int, _master_id) -> ActionConfirmation:
+def result_write(text: str, _master_id) -> ActionConfirmation:
     """
     Function that writes text you provide it as the result of your instruction. 
     Your normal output is inaccesable to anyone, so responses to informational instructions must be wrapped into this tool call.

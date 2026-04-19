@@ -187,11 +187,17 @@ def add_replanner_slave(_master_id: int) -> ActionConfirmation:
                          """, (_master_id,)).fetchall()
 
     prompt = """
-    Your task is to provide additional steps for the following task, given the previous steps and their results.
-    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool, unless the task would be done.
-    If the task is done, add a slave that gets all the finalised results and writes them as "result.master_result".
-    For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
+    Your task is to decide how to further proceed. For the given task, and the given results and master result, 
+    ether formulate the direct next few steps and add a planner slave, or, if the task is completed, write the results to the master result, and do not add new slaves.
+    For adding slaves and planner slaves, use the tools goal.add_slave and goal.add_planner_slave.
     """ + special_context_str + masters_result_so_far_str
+
+#    prompt = """
+#    Your task is to provide additional steps for the following task, given the previous steps and their results.
+#    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool, unless the task would be done.
+#    If the task is done, add a slave that gets all the finalised results and writes them as "result.master_result".
+#    For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
+#    """ + special_context_str + masters_result_so_far_str
 
     conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
     return "added a replanner slave"

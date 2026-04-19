@@ -13,6 +13,7 @@ class api(TypedDict, total=False):
     model: str
     claude: Optional[bool]
     max_tokens: Optional[int]
+    rate_limit: Optional[int]
 
 class instr_json(TypedDict):
     """ An atomic instruction json representation """

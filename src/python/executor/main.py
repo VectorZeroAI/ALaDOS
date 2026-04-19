@@ -18,6 +18,7 @@ from .types import api, instr_json, tool_calls_block
 from .queue import executor_queue
 from . import embedder
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
+from time import sleep
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
@@ -85,9 +86,13 @@ async def core(
         for api_sps in apis:
             await checkpoint()
             try:
+                sleep(api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None else 0) # pyright: ignore
+                # NOTE : THIS IS FINE
                 llm_response = llm_call(api_sps, str_instr)
                 await checkpoint()
-            except httpx.HTTPStatusError:
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    api_sps['rate_limit'] = api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None or not 0 else 1 ** 2
                 await checkpoint()
                 pass
             else:
@@ -160,10 +165,15 @@ def startup() -> None:
     config_file = config_dir / "executor.toml"
     config = tomllib.loads(config_file.read_text())
 
+    apis = []
+    for i in config['apis']:
+        i['rate_limit'] = 0
+        apis.append(i)
+
     for _ in range(config["cores_number"]):
         threading.Thread(
                 target=core_thread,
-                args=(core, executor_queue, config["apis"]),
+                args=(core, executor_queue, apis),
                 daemon=True
                 ).start()
     print("startup of the executor finished")

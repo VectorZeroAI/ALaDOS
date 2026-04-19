@@ -205,8 +205,8 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
         SELECT names.name, logs.created_at, logs.action, logs.created_by
-            FROM logs LEFT JOIN names ON names.addr = %s WHERE logs.addr = %s;
-                        """, (addr, addr)).fetchone()
+            FROM logs LEFT JOIN names ON names.addr = logs.addr WHERE logs.addr = %s;
+                        """, (addr,)).fetchone()
     
     if item is None:
         return f"DOES NOT EXIST@{addr}"

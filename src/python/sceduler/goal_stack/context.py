@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from python.types import ReferenceTo
 from .types import SlaveObj, WindowData, LoadsData
 from ...utils.conn_factory import conn_factory
 from pydantic import TypeAdapter, ValidationError
@@ -241,7 +240,7 @@ def resolve_window(window_data: WindowData) -> str:
     SELECT description, addr, position
     FROM ordered o, anchor a
     WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
-                             """, (window_data["window_position"], window_data["window_size_l"], window_data["window_size_r"])).fetchall()
+                             """, (window_data["window_position"]["ref_addr"], window_data["window_size_l"], window_data["window_size_r"])).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 
@@ -249,6 +248,7 @@ def resolve_window(window_data: WindowData) -> str:
     names_fetch = conn.execute("""
     SELECT name, addr FROM names WHERE addr = ANY(%s)
                                """, (addrs,)).fetchone()
+    assert names_fetch is not None
     names.extend(names_fetch)
 
     context_str = ""

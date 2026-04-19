@@ -247,7 +247,7 @@ def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 
     conn = conn_factory()
     
     conn.execute("""
-    UPDATE master_context SET window_size_l = window_siez_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
+    UPDATE master_context SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
                  """, (left, right, _master_id))
 
 @register_tool("context.window.move_anchor")
@@ -259,4 +259,5 @@ def move_window_anchor(amount: int, _master_id) -> None:
     conn = conn_factory()
 
     new_pos = conn.execute("""
-                           """)
+    SELECT move_anchor(%s, %s);
+                           """, (amount, _master_id))

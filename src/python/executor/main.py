@@ -92,7 +92,7 @@ async def core(
                 await checkpoint()
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
-                    api_sps['rate_limit'] = api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None or not 0 else 1 ** 2
+                    api_sps['rate_limit'] = api_sps.get('rate_limit') if api_sps.get('rate_limit') is not None or api_sps.get('rate_limit') is not 0 else 1 ** 2
                 await checkpoint()
                 pass
             else:

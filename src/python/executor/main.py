@@ -22,6 +22,11 @@ from . import embedder
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
 from time import sleep
 
+
+config_dir = config_dir_resolver()
+config_file = config_dir / "executor.toml"
+config = tomllib.loads(config_file.read_text())
+
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
 #    with httpx.Client() as client:
@@ -116,8 +121,9 @@ async def core(
             else:
                 break
         else:
-            print("All the APIS failed") # TODO : ADD AN RECOVERY INTERRUPT OR ANY FORM OF ERROR RECOVERY
-            global_interrupt_queue.put("STOP")
+            print("All the APIS failed")
+            for _ in range(config['cores_number']):
+                global_interrupt_queue.put("WAIT")
         await checkpoint()
         print(llm_response) # FIXME : REmove the debug print statement after done debugging this
         try:
@@ -147,7 +153,6 @@ async def core(
                         continue
                     else:
                         break
-                    await checkpoint()
                 if llm_output_new is None:
                     raise RuntimeError(f"Every API failed. APIS: {apis}")
                 new_calls = llm_to_json(llm_output_new)
@@ -186,9 +191,6 @@ def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
 def startup() -> None:
     """ The startup function that starts up the whole executor system """
 
-    config_dir = config_dir_resolver()
-    config_file = config_dir / "executor.toml"
-    config = tomllib.loads(config_file.read_text())
 
     apis = []
     for i in config['apis']:

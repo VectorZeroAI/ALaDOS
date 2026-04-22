@@ -16,19 +16,19 @@ ActionConfirmation: TypeAlias = str
 
 # EXAMPLE: 
 @register_tool("print.to_console")
-def print_to_console(input_str: str, _master_id: int) -> ActionConfirmation:
+def print_to_console(input_str: str, _master_id: int, _conn: psycopg.Connection = None) -> ActionConfirmation:
     print(input_str)
     return "printed something to console."
 
 @register_tool("K.create")
-def k_create(content: str, description: str, name: str|None = None, _master_id: int = 99) -> ActionConfirmation:
+def k_create(content: str, description: str, name: str|None = None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
     Content is the actual content, and name is name wich can be used a access the item.
     Name of a knowledge item CANNOT be used in goal.add_slave required_results_names.
     """
-    conn = conn_factory()
+    conn = _conn
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
     conn.execute("""
@@ -42,9 +42,9 @@ def k_create(content: str, description: str, name: str|None = None, _master_id: 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
 @register_tool("K.read")
-def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99) -> ActionConfirmation:
+def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
-    conn = conn_factory()
+    conn = _conn
     if addr is not None:
         result = conn.execute("""
         SELECT content FROM knowledge WHERE addr = %s
@@ -59,7 +59,7 @@ def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99) -
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
 @register_tool("tool.execute")
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _master_id: int = 99) -> ActionConfirmation:
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -67,7 +67,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
 
     """
-    conn = conn_factory()
+    conn = _conn
     if name is not None:
         v_addr = conn.execute("""
         SELECT resolve_name(%s);
@@ -92,9 +92,9 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
 @register_tool("context.add")
-def context_add_by_addr(addr: int|None, name: str|None, _master_id: int) -> ActionConfirmation:
+def context_add_by_addr(addr: int|None, name: str|None, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
-    conn = conn_factory()
+    conn = _conn
     if addr is None:
         addr = conn.execute("""
         SELECT resolve_name(%s);
@@ -111,7 +111,8 @@ def add_slave(instruction: str,
               required_results_addrs: list[int]|None=None,
               goal_name: str|None=None,
               result_name: str|None=None,
-              _master_id: int = 99) -> ActionConfirmation:
+              _master_id: int = 99,
+              _conn: psycopg.Connection = None) -> ActionConfirmation:
     """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
@@ -136,7 +137,7 @@ def add_slave(instruction: str,
             }
         }
     """
-    conn = conn_factory()
+    conn = _conn
     if required_results_addrs is None:
         required_results_addrs = []
 
@@ -153,9 +154,9 @@ def add_slave(instruction: str,
     return "Added a new slave"
 
 @register_tool("goal.add_planner_slave")
-def add_replanner_slave(_master_id: int) -> ActionConfirmation:
+def add_replanner_slave(_master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
-    conn = conn_factory()
+    conn = _conn
     special_context = []
     fetch = conn.execute("""
     SELECT instruction FROM masters WHERE addr = %s;
@@ -204,26 +205,26 @@ def add_replanner_slave(_master_id: int) -> ActionConfirmation:
     return "added a replanner slave"
 
 @register_tool("result.add_master_result")
-def master_result_add(text: str, _master_id: int = 9) -> ActionConfirmation:
+def master_result_add(text: str, _master_id: int = 9, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """
     This funtion adds a result for the whole master, e.g. the task that consists of many slaves.
     Doesnt actually terminate the master, and can be used multiple times.
     """
-    conn = conn_factory()
+    conn = _conn
     conn.execute("""
     UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
                  """, (text, _master_id))
     return "Added a master result."
 
 @register_tool("context.window.semantic_land")
-def context_window_lands(querry: str, _master_id: int = 9) -> ActionConfirmation:
+def context_window_lands(querry: str, _master_id: int = 9, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
     A viewing window is a dynamic automatic context window capable of providing you with relevant and highly controllable context
     of relevant knowledge and tools to be executed via tool.execute .
     Very important generally. 
     """
-    conn = conn_factory()
+    conn = _conn
 
     emb = embedder.encode_query(querry)
 
@@ -236,11 +237,11 @@ def context_window_lands(querry: str, _master_id: int = 9) -> ActionConfirmation
     return 'Semantically moved the viewing window anchor.'
 
 @register_tool("context.window.land_by_addr")
-def context_window_land(addr: int, _master_id: int) -> ActionConfirmation:
+def context_window_land(addr: int, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, onto an addr.
     """
-    conn = conn_factory()
+    conn = _conn
 
     try:
         addr_type = conn.execute("""
@@ -263,12 +264,12 @@ def context_window_land(addr: int, _master_id: int) -> ActionConfirmation:
 
 
 @register_tool("context.window.change_size")
-def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 999) -> ActionConfirmation:
+def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 999, _conn: psycopg.Connection = None) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
     """
-    conn = conn_factory()
+    conn = _conn
     
     conn.execute("""
     UPDATE master_context SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
@@ -276,12 +277,12 @@ def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 
     return "Changed context window size."
 
 @register_tool("context.window.move_anchor")
-def move_window_anchor(amount: int, _master_id) -> ActionConfirmation:
+def move_window_anchor(amount: int, _master_id, _conn: psycopg.Connection) -> ActionConfirmation:
     """
     Function to move the anchor of the viewing window.
     Moves to the left if amount if negative, to the right if amount is positive.
     """
-    conn = conn_factory()
+    conn = _conn
 
     new_pos = conn.execute("""
     SELECT move_anchor(%s, %s);
@@ -290,7 +291,7 @@ def move_window_anchor(amount: int, _master_id) -> ActionConfirmation:
 
 
 @register_tool("result.write")
-def result_write(text: str, _master_id) -> ActionConfirmation:
+def result_write(text: str, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
     """
     Function that writes text you provide it as the result of your instruction. 
     Your normal output is inaccesable to anyone, so responses to informational instructions must be wrapped into this tool call.

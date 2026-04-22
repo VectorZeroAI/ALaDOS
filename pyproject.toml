@@ -9,7 +9,6 @@ dependencies = [
  "json-repair>=0.59.3",
  "psycopg>=3.3.3",
  "pydantic>=2.13.0",
- "sentence-transformers>=5.4.1",
 ] # ADD THE DEPS HERE. json-repair, sentense-transformers, psycopg
 
 [project.scripts]

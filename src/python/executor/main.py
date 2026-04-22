@@ -103,81 +103,88 @@ async def core(
 
     await checkpoint()
     conn = conn_factory()
+    conn.autocommit = False
 
     while True:
-        await checkpoint()
-        instr = await queue.get()
-
-        str_instr = " ".join((instr["context"], instr["instruction"]))
-        print(str_instr)
-        
-        for api_sps in apis:
-            await checkpoint()
-            try:
-                llm_response = llm_call_with_ratelimit(api_sps, str_instr)
-                await checkpoint()
-            except httpx.HTTPStatusError:
-                continue
-            else:
-                break
-        else:
-            print("All the APIS failed")
-            for _ in range(config['cores_number']):
-                global_interrupt_queue.put("WAIT")
-        await checkpoint()
-        print(llm_response) # FIXME : REmove the debug print statement after done debugging this
         try:
-            tool_calls: tool_calls_block = llm_to_json(llm_response)
-        except ValueError:
-            llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
-            tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
-            print(f"Did not find models json tool calls block, made this one up: {tool_calls}")
-
-        results = []
-
-        for call in tool_calls:
             await checkpoint()
+            instr = await queue.get()
+
+            str_instr = " ".join((instr["context"], instr["instruction"]))
+            print(str_instr)
+            
+            for api_sps in apis:
+                await checkpoint()
+                try:
+                    llm_response = llm_call_with_ratelimit(api_sps, str_instr)
+                    await checkpoint()
+                except httpx.HTTPStatusError:
+                    continue
+                else:
+                    break
+            else:
+                print("All the APIS failed")
+                for _ in range(config['cores_number']):
+                    global_interrupt_queue.put("WAIT")
+            await checkpoint()
+            print(llm_response) # FIXME : REmove the debug print statement after done debugging this
             try:
-                tool_result = execute_tool(call, instr["master_addr"])
-            except Exception as e:
-                prompt = f"""The following tool call failed for the following reason: {call}, {e}
-                Your task is to figure out what went wrong there, and create a working tool call.
-                The following is the tool call format instructions and all the valid tools:
-                """ + "\n".join(HEADERS_REGISTRY.values())
-                llm_output_new = None
-                for api_sps in apis:
-                    await checkpoint()
-                    try:
-                        llm_output_new = llm_call_with_ratelimit(api_sps, prompt)
-                    except Exception:
-                        continue
-                    else:
-                        break
-                if llm_output_new is None:
-                    raise RuntimeError(f"Every API failed. APIS: {apis}")
-                new_calls = llm_to_json(llm_output_new)
-                nresults = []
-                for ncall in new_calls:
-                    await checkpoint()
-                    try:
-                        ntool_result = execute_tool(ncall, instr["master_addr"])
-                    except Exception as e:
-                        print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
-                        raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
-                    await checkpoint()
-                    nresults.append(ntool_result)
-                results.extend(nresults)
-                continue
+                tool_calls: tool_calls_block = llm_to_json(llm_response)
+            except ValueError:
+                llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
+                tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
+                print(f"Did not find models json tool calls block, made this one up: {tool_calls}")
 
-            results.append(tool_result)
+            results = []
 
-        result_str = "\n".join([str(r) for r in results])
+            for call in tool_calls:
+                await checkpoint()
+                try:
+                    tool_result = execute_tool(call, instr["master_addr"])
+                except Exception as e:
+                    prompt = f"""The following tool call failed for the following reason: {call}, {e}
+                    Your task is to figure out what went wrong there, and create a working tool call.
+                    The following is the tool call format instructions and all the valid tools:
+                    """ + "\n".join(HEADERS_REGISTRY.values())
+                    llm_output_new = None
+                    for api_sps in apis:
+                        await checkpoint()
+                        try:
+                            llm_output_new = llm_call_with_ratelimit(api_sps, prompt)
+                        except Exception:
+                            continue
+                        else:
+                            break
+                    if llm_output_new is None:
+                        raise RuntimeError(f"Every API failed. APIS: {apis}")
+                    new_calls = llm_to_json(llm_output_new)
+                    nresults = []
+                    for ncall in new_calls:
+                        await checkpoint()
+                        try:
+                            ntool_result = execute_tool(ncall, instr["master_addr"])
+                        except Exception as e:
+                            print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
+                            raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
+                        await checkpoint()
+                        nresults.append(ntool_result)
+                    results.extend(nresults)
+                    continue
 
-        await checkpoint()
-        conn.execute("""
-        SELECT new_result(%s, %s);
-                     """, (result_str, instr["result_addr"]))
+                results.append(tool_result)
+
+            result_str = "\n".join([str(r) for r in results])
+
+            await checkpoint()
+            conn.execute("""
+            SELECT new_result(%s, %s);
+                         """, (result_str, instr["result_addr"]))
         
+        except Exception as e:
+            print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")
+            conn.rollback()
+            print("RESTART OF CORES NOT YET IMPLEMENTED, please restart the system or implement it")
+            raise e from e
 
 def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
     loop = asyncio.new_event_loop()

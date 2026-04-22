@@ -179,6 +179,7 @@ async def core(
             conn.execute("""
             SELECT new_result(%s, %s);
                          """, (result_str, instr["result_addr"]))
+            conn.commit()
         
         except Exception as e:
             print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")

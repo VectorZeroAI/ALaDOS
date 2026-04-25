@@ -251,12 +251,22 @@ def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirm
         raise psycopg.DataError(f"Couldnt resolve addr {addr} to type, due to the following error: {e}, as result of fetch is not subscriptable.")
     if addr_type == "knowledge":
         conn.execute("""
-        UPDATE master_context SET window_anchor_knowledge = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
+        UPDATE master_context SET
+        window_anchor_knowledge = %s,
+        window_anchor_exe = NULL,
+        window_size_r = 12,
+        window_size_l = 12
+        WHERE addr = %s;
                      """, (addr, _meta['master_id']))
 
     elif addr_type == "executables":
         conn.execute("""
-    UPDATE master_context SET window_anchor_exe = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
+        UPDATE master_context SET
+        window_anchor_exe = %s,
+        window_anchor_knowledge = NULL,
+        window_size_r = 12,
+        window_size_l = 12
+        WHERE addr = %s;
                      """, (addr, _meta['master_id']))
     else:
         raise psycopg.DataError(f"Invalid addr type gotten. Gotten {addr_type}, expected executables or knowledge.")

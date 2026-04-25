@@ -91,7 +91,7 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
                     api['rate_limit'] = 2
             else:
                 with api['lock']:
-                    api['rate_limit'] = api['rate_limit'] ** 2
+                    api['rate_limit'] = min(api['rate_limit'] ** 2, 120)
         raise e
     else:
         prev_ratelimit = api.get('rate_limit')

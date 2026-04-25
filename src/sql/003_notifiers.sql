@@ -1,3 +1,22 @@
+CREATE OR REPLACE FUNCTION position_placeholder()
+    RETURNS TRIGGER AS $$
+    DECLARE
+        max_pos NUMERIC;
+    BEGIN
+        SELECT MAX(position) INTO max_pos FROM viewing_window;
+        NEW.position := COALESCE(max_pos, 0) + 100;
+    RETURN NEW;
+    END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER pos_placeholder_e
+BEFORE INSERT ON executables
+FOR EACH ROW EXECUTE FUNCTION position_placeholder();
+
+CREATE TRIGGER pos_placeholder_k
+BEFORE INSERT ON knowledge
+FOR EACH ROW EXECUTE FUNCTION position_placeholder();
+
 CREATE OR REPLACE FUNCTION position_calculation()
     RETURNS TRIGGER AS $$
     DECLARE
@@ -58,11 +77,11 @@ CREATE OR REPLACE FUNCTION position_calculation()
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER pos_calculate_k
-BEFORE INSERT ON knowledge
+BEFORE UPDATE OF emb ON knowledge
 FOR EACH ROW EXECUTE FUNCTION position_calculation(); 
 
 CREATE OR REPLACE TRIGGER pos_calculate_e
-BEFORE INSERT ON executables
+BEFORE UPDATE OF emb ON executables
 FOR EACH ROW EXECUTE FUNCTION position_calculation();
 
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()

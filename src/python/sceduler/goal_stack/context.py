@@ -244,16 +244,18 @@ def resolve_window(window_data: WindowData) -> str:
 
     descriptions, addrs, positions = zip(*context_fetch)
 
-    names = []
     names_fetch = conn.execute("""
     SELECT name, addr FROM names WHERE addr = ANY(%s)
-                               """, (addrs,)).fetchone()
+                               """, (addrs,)).fetchall()
     assert names_fetch is not None
-    names.extend(names_fetch)
+
+    addr_name_map = {}
+    for nrow in names_fetch:
+        addr_name_map[nrow[1]] = nrow[0]
 
     context_str = ""
-    for d, a, p, n in zip(descriptions, addrs, positions, names):
-        context_str = context_str + "@".join((n[0] if n[1] == a else "Nameless", f"pos: {p}", f"addr: {a}"))
+    for d, a, p in zip(descriptions, addrs, positions):
+        context_str = context_str + "@".join((addr_name_map.get(a) if addr_name_map.get(a) is not None else "Nameless", f"pos: {p}", f"addr: {a}"))
         context_str = "\n".join((context_str, d, " ", " "))
 
     return context_str

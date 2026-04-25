@@ -3,17 +3,20 @@
 import os
 from typing import TypeAlias
 
-from numpy import ndarray
+from numpy import isin, ndarray
 import psycopg
+from torch import Type
 from .execute_tool import register_tool
 from ..utils.conn_factory import conn_factory
 import subprocess
+import re
 import json
 from .embedder import embedder
 from .queue import embedder_queue
-from .types import _exec_tool_meta_data
+from .types import _exec_tool_meta_data, addr
 
 ActionConfirmation: TypeAlias = str
+search_and_replace_block: TypeAlias = str
 
 # EXAMPLE: 
 @register_tool("print.to_console")
@@ -91,6 +94,117 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
                                  )
 
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
+
+@register_tool("tool.create")
+def create_tool(description: str, header: str, body: str, name: str = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+    """
+    Creates a python tool, to be executed with tool.execute .
+    Description is a short description used for searching and identifing the tool.
+    header is detailed description of how to use the tool, including its signature.
+    Body is the executed code itself. (Python only)
+    Input parameters are accepted as key word arguments json object passed at key KWARGS into the env at execution time.
+    Include estimated runtime, because execution longer then 10 seconds will time out without finishing unless timeout is specified to be longer.
+    """
+    conn = _meta['conn']
+    addr = conn.execute("""
+    SELECT new_addr();
+                        """)
+    conn.execute("""
+    INSERT INTO executables(description, header, body, addr) VALUES(%s, %s, %s, %s);
+                 """, (description, header, body, addr))
+    if name is not None:
+        conn.execute("""
+        INSERT INTO names(addr, name) VALUES(%s, %s);
+                     """, (addr, name))
+
+    return f"Created tool {name or description}@{addr}"
+
+
+def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
+    """
+    retuns (search, replacement)
+    search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
+    """
+    match = re.search(
+        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
+        sr_block,
+        re.DOTALL
+    )
+    if not match:
+        raise ValueError(f"No matches found.")
+    
+    search = match.group(1).strip()
+    replacement = match.group(2)
+    return (search, replacement)
+
+@register_tool("tool.edit")
+def edit_tool(name: str|None = None,
+              addr: int|None = None,
+              header_change: search_and_replace_block|None = None,
+              body_change: search_and_replace_block|None = None,
+              new_description: str|None = None,
+              _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+    """
+    Edit a tool.
+    You must provide ether header_change or body_change or new_description.
+    You must provide ether name or addr of the tool you want to edit.
+    Header change or body change format is 'SEARCH AND REPLACE blocks'
+    The format is the following:
+    <SEARCH>
+    def add(a, b):
+    </SEARCH>
+    <REPLACE>
+    def add(a: int, b: int) -> int:
+    </REPLACE>
+
+    Empty search means append to the end.
+    Only one search and replace per tool call allowed. Make multiple tool calls for multiple edits.
+    """
+
+    if header_change is None and body_change is None and new_description is None:
+        raise TypeError("No change provided. Unable to apply nothing.")
+    if name is None and addr is None:
+        raise TypeError("No addr or name provided. Unable to identify what tool to edit.")
+
+    conn = _meta['conn']
+
+    if addr is None:
+        try:
+            addr = conn.execute("""
+            SELECT resolve_name(%s);
+                                """, (name,)).fetchone()[0]
+        except Exception as e:
+            raise Exception("Name most likely does not exist.") from e
+
+    if new_description is not None:
+        conn.execute("""
+        UPDATE executables SET description = %s WHERE addr = %s;
+                     """, (new_description, addr))
+
+    if body_change is not None:
+        old_body = conn.execute("""
+        SELECT body FROM executables WHERE addr = %s;
+                                """, (addr,)).fetchone()[0]
+        assert isinstance(old_body, str)
+
+        search, replacement = _sr_block_parser(body_change)
+
+        new_body = old_body.replace(search, replacement)
+
+        conn.execute("""
+        UPDATE executables SET body = %s WHERE addr = %s;
+                     """, (new_body, addr))
+    if header_change is not None:
+        old_header = conn.execute("""
+        SELECT header FROM executables WHERE addr = %s;
+                                  """, (addr,)).fetchone()[0]
+        assert isinstance(old_header, str)
+
+        search, replacement = _sr_block_parser(header_change)
+
+        new_header = old_header.replace(search, replacement)
+
+    return f"Applied the edits to the tool {name}@{addr}"
 
 @register_tool("context.add")
 def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_data) -> ActionConfirmation:

@@ -156,7 +156,8 @@ async def core(
             for call in tool_calls:
                 await checkpoint()
                 try:
-                    tool_result = execute_tool(call, metadata_c)
+                    with conn.transaction():
+                        tool_result = execute_tool(call, metadata_c)
                 except Exception as e:
                     prompt = f"""The following tool call failed for the following reason: {call}, {e}
                     Your task is to figure out what went wrong there, and create a working tool call.
@@ -178,7 +179,8 @@ async def core(
                     for ncall in new_calls:
                         await checkpoint()
                         try:
-                            ntool_result = execute_tool(ncall, metadata_c)
+                            with conn.transaction():
+                                ntool_result = execute_tool(ncall, metadata_c)
                         except Exception as e:
                             print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
                             raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e

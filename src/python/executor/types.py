@@ -8,6 +8,8 @@ import threading
 
 JsonSerializable: TypeAlias = JsonValue
 
+addr: TypeAlias = int
+
 class api(TypedDict, total=False):
     """ An api endpoint representation """
     url: str

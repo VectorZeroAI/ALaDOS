@@ -145,43 +145,23 @@ DECLARE
     v_new_addr BIGINT;
     v_new_type TEXT;
 BEGIN
-    SELECT COLESCE(
+    SELECT COALESCE(
         (SELECT window_anchor_knowledge FROM master_context WHERE addr = p_master_id), 
         (SELECT window_anchor_exe FROM master_context WHERE addr = p_master_id)
     ) INTO v_anchor_addr;
 
-    IF p_amount > 0 THEN
-        
-        WITH ordered AS (
-            SELECT description,
-                addr,
-                position,
-                type,
-                ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
-        ), anchor AS (
-            SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
-        )
-        SELECT o.addr, o.type INTO v_new_addr, v_new_type
-        FROM ordered o, anchor a
-        WHERE o.rn = a.rn + p_amount;
-
-    ELSE
-
-        WITH ordered AS (
-            SELECT description,
-                addr,
-                position,
-                type,
-                ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
-        ), anchor AS (
-            SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
-        )
-        SELECT o.addr, o.type INTO v_new_addr, v_new_type
-        FROM ordered o, anchor a
-        WHERE o.rn = a.rn - p_amount; -- NOTE : The only differense is the fact that this is MINUS p_amount, and the top one is PLUS p_amount.
-        -- NOTE: COPY PASTED FROM the context_window_resolution python functions inlined SQL. Sync changes I guess.
-
-    END IF;
+    WITH ordered AS (
+        SELECT description,
+            addr,
+            position,
+            type,
+            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+    ), anchor AS (
+        SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
+    )
+    SELECT o.addr, o.type INTO v_new_addr, v_new_type
+    FROM ordered o, anchor a
+    WHERE o.rn = a.rn + p_amount;
 
     IF v_new_type = 'knowledge' THEN
         UPDATE master_context SET window_anchor_knowledge = v_new_addr WHERE addr = p_master_id;

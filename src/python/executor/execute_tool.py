@@ -5,6 +5,7 @@ from python.executor.types import tool_call
 import inspect
 import re
 import psycopg
+from .types import _exec_tool_meta_data
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
@@ -35,12 +36,10 @@ HEADERS_REGISTRY[" "] = TOOL_USAGE_INSTRUCTION # TODO : Maybe make this a bit ni
 # - the parameter itself: _master_addr: <type>
 # - optional default value like = ...
 # - optional trailing comma if it was the last param
-pattern_master_id = r'(?:,\s*)?_master_id\s*:\s*[^,=)]+(?:\s*=\s*[^,)]+)?(?:,\s*)?'
-pattern_conn = r'(?:,\s*)?_conn\s*:\s*[^,=)]+(?:\s*=\s*[^,)]+)?(?:,\s*)?'
+pattern = r'(?:,\s*)?_meta\s*:\s*[^,=)]+(?:\s*=\s*[^,)]+)?(?:,\s*)?'
 
 def remove_master_addr_param(signature_str: str) -> str:
-    tmp = re.sub(pattern_master_id, '', signature_str).strip()
-    tmp = re.sub(pattern_conn, '', tmp).strip()
+    tmp = re.sub(pattern, '', signature_str).strip()
     return tmp
 
 
@@ -60,8 +59,8 @@ def register_tool(name: str|None = None):
         return func
     return decorator
 
-def execute_tool(call: tool_call, _master_id: int, _conn: psycopg.Connection) -> None:
-    return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _master_id = _master_id, _conn = _conn) # pyright: ignore
+def execute_tool(call: tool_call, _meta: _exec_tool_meta_data) -> None:
+    return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _meta = _meta) # pyright: ignore
 
 # register all the tools
 from . import builtins # # pyright: ignore # ruff: ignore 

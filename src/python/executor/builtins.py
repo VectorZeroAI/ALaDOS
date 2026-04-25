@@ -11,24 +11,25 @@ import subprocess
 import json
 from .embedder import embedder
 from .queue import embedder_queue
+from .types import _exec_tool_meta_data
 
 ActionConfirmation: TypeAlias = str
 
 # EXAMPLE: 
 @register_tool("print.to_console")
-def print_to_console(input_str: str, _master_id: int, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def print_to_console(input_str: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     print(input_str)
     return "printed something to console."
 
 @register_tool("K.create")
-def k_create(content: str, description: str, name: str|None = None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def k_create(content: str, description: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
     Content is the actual content, and name is name wich can be used a access the item.
     Name of a knowledge item CANNOT be used in goal.add_slave required_results_names.
     """
-    conn = _conn
+    conn = _meta['conn']
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
     conn.execute("""
@@ -42,9 +43,9 @@ def k_create(content: str, description: str, name: str|None = None, _master_id: 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
 @register_tool("K.read")
-def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
-    conn = _conn
+    conn = _meta['conn']
     if addr is not None:
         result = conn.execute("""
         SELECT content FROM knowledge WHERE addr = %s
@@ -59,7 +60,7 @@ def k_read(addr: int|None = None, name: str|None = None, _master_id: int = 99, _
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
 @register_tool("tool.execute")
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _master_id: int = 99, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -67,7 +68,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
 
     """
-    conn = _conn
+    conn = _meta['conn']
     if name is not None:
         v_addr = conn.execute("""
         SELECT resolve_name(%s);
@@ -92,9 +93,9 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
 @register_tool("context.add")
-def context_add_by_addr(addr: int|None, name: str|None, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
+def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
-    conn = _conn
+    conn = _meta['conn']
     if addr is None:
         addr = conn.execute("""
         SELECT resolve_name(%s);
@@ -102,7 +103,7 @@ def context_add_by_addr(addr: int|None, name: str|None, _master_id: int, _conn: 
     
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
-                 """, (_master_id, addr))
+                 """, (_meta['master_id'], addr))
     return f"Added context {name if name is not None else "No name"}@{addr}."
 
 @register_tool("goal.add_slave")
@@ -111,8 +112,7 @@ def add_slave(instruction: str,
               required_results_addrs: list[int]|None=None,
               goal_name: str|None=None,
               result_name: str|None=None,
-              _master_id: int = 99,
-              _conn: psycopg.Connection = None) -> ActionConfirmation:
+              _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
@@ -137,7 +137,7 @@ def add_slave(instruction: str,
             }
         }
     """
-    conn = _conn
+    conn = _meta['conn']
     if required_results_addrs is None:
         required_results_addrs = []
 
@@ -150,23 +150,23 @@ def add_slave(instruction: str,
     conn.execute("""
     SELECT new_slave(%s, %s, %s, %s, %s, %s);
         """, 
-    (_master_id, instruction, goal_name, required_results_addrs, None, result_name))
+    (_meta['master_id'], instruction, goal_name, required_results_addrs, None, result_name))
     return "Added a new slave"
 
 @register_tool("goal.add_planner_slave")
-def add_replanner_slave(_master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
+def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
-    conn = _conn
+    conn = _meta['conn']
     special_context = []
     fetch = conn.execute("""
     SELECT instruction FROM masters WHERE addr = %s;
-                         """, (_master_id,)).fetchone()
+                         """, (_meta['master_id'],)).fetchone()
     assert fetch is not None
     special_context.extend(fetch)
 
     fetch = conn.execute("""
     SELECT s.instruction, r.content_str FROM masters m JOIN slaves s ON s.master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
-                         """, (_master_id,)).fetchall()
+                         """, (_meta['master_id'],)).fetchall()
     special_context.extend(fetch)
 
     special_context_str = f"Task instruction: {special_context.pop(0)}"
@@ -180,12 +180,12 @@ def add_replanner_slave(_master_id: int, _conn: psycopg.Connection) -> ActionCon
         tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
-    masters_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_master_id,)).fetchone()
+    masters_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta['master_id'],)).fetchone()
     masters_result_so_far_str = f"Masters result so far: {masters_result_so_far_str[0] if masters_result_so_far_str is not None else "No master result so far."}"
 
     fetch = conn.execute("""
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
-                         """, (_master_id,)).fetchall()
+                         """, (_meta['master_id'],)).fetchall()
 
     prompt = """
     Your task is to decide how to further proceed. For the given task, and the given results and master result, 
@@ -201,30 +201,30 @@ def add_replanner_slave(_master_id: int, _conn: psycopg.Connection) -> ActionCon
 #    For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
 #    """ + special_context_str + masters_result_so_far_str
 
-    conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_master_id, prompt, [r[0] for r in fetch]))
+    conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"
 
 @register_tool("result.add_master_result")
-def master_result_add(text: str, _master_id: int = 9, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     This funtion adds a result for the whole master, e.g. the task that consists of many slaves.
     Doesnt actually terminate the master, and can be used multiple times.
     """
-    conn = _conn
+    conn = _meta['conn']
     conn.execute("""
     UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
-                 """, (text, _master_id))
+                 """, (text, _meta['master_id']))
     return "Added a master result."
 
 @register_tool("context.window.semantic_land")
-def context_window_lands(querry: str, _master_id: int = 9, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def context_window_lands(querry: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
     A viewing window is a dynamic automatic context window capable of providing you with relevant and highly controllable context
     of relevant knowledge and tools to be executed via tool.execute .
     Very important generally. 
     """
-    conn = _conn
+    conn = _meta['conn']
 
     emb = embedder.encode_query(querry)
 
@@ -233,15 +233,15 @@ def context_window_lands(querry: str, _master_id: int = 9, _conn: psycopg.Connec
 
     conn.execute("""
     SELECT s_land(%s, %s::vector(768))
-                 """, (_master_id, emb))
+                 """, (_meta['master_id'], emb))
     return 'Semantically moved the viewing window anchor.'
 
 @register_tool("context.window.land_by_addr")
-def context_window_land(addr: int, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
+def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, onto an addr.
     """
-    conn = _conn
+    conn = _meta['conn']
 
     try:
         addr_type = conn.execute("""
@@ -252,46 +252,46 @@ def context_window_land(addr: int, _master_id: int, _conn: psycopg.Connection) -
     if addr_type == "knowledge":
         conn.execute("""
         UPDATE master_context SET window_anchor_knowledge = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
-                     """, (addr, _master_id))
+                     """, (addr, _meta['master_id']))
 
     elif addr_type == "executables":
         conn.execute("""
     UPDATE master_context SET window_anchor_exe = %s, window_size_r = 12, window_size_l = 12 WHERE addr = %s;
-                     """, (addr, _master_id))
+                     """, (addr, _meta['master_id']))
     else:
         raise psycopg.DataError(f"Invalid addr type gotten. Gotten {addr_type}, expected executables or knowledge.")
     return f"Moved context window center to {addr}"
 
 
 @register_tool("context.window.change_size")
-def context_window_size_change(left: int = 0, right: int = 0, _master_id: int = 999, _conn: psycopg.Connection = None) -> ActionConfirmation:
+def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
     """
-    conn = _conn
+    conn = _meta['conn']
     
     conn.execute("""
     UPDATE master_context SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
-                 """, (left, right, _master_id))
+                 """, (left, right, _meta['master_id']))
     return "Changed context window size."
 
 @register_tool("context.window.move_anchor")
-def move_window_anchor(amount: int, _master_id, _conn: psycopg.Connection) -> ActionConfirmation:
+def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Function to move the anchor of the viewing window.
     Moves to the left if amount if negative, to the right if amount is positive.
     """
-    conn = _conn
+    conn = _meta['conn']
 
     new_pos = conn.execute("""
     SELECT move_anchor(%s, %s);
-                           """, (amount, _master_id))
+                           """, (amount, _meta['master_id']))
     return "moved context window anchor"
 
 
 @register_tool("result.write")
-def result_write(text: str, _master_id: int, _conn: psycopg.Connection) -> ActionConfirmation:
+def result_write(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Function that writes text you provide it as the result of your instruction. 
     Your normal output is inaccesable to anyone, so responses to informational instructions must be wrapped into this tool call.

@@ -16,7 +16,7 @@ from ..queue import global_interrupt_queue
 from ..utils.uqueue import Uqueue
 import tomllib
 import httpx
-from .types import api, instr_json, tool_calls_block
+from .types import api, instr_json, tool_calls_block, _exec_tool_meta_data
 from .queue import executor_queue
 from . import embedder
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
@@ -91,6 +91,13 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
             else:
                 api['rate_limit'] = api['rate_limit'] ** 2
         raise e
+    else:
+        prev_ratelimit = api.get('rate_limit')
+        if prev_ratelimit in (None, 0, 1):
+            api['rate_limit'] = 0
+        else:
+            api['rate_limit'] = api['rate_limit'] // 2
+        
     return llm_response
 
 
@@ -137,10 +144,15 @@ async def core(
 
             results = []
 
+            metadata_c: _exec_tool_meta_data = {
+                    'conn': conn,
+                    'master_id': instr['master_addr'],
+                    }
+
             for call in tool_calls:
                 await checkpoint()
                 try:
-                    tool_result = execute_tool(call, instr["master_addr"])
+                    tool_result = execute_tool(call, metadata_c)
                 except Exception as e:
                     prompt = f"""The following tool call failed for the following reason: {call}, {e}
                     Your task is to figure out what went wrong there, and create a working tool call.
@@ -162,7 +174,7 @@ async def core(
                     for ncall in new_calls:
                         await checkpoint()
                         try:
-                            ntool_result = execute_tool(ncall, instr["master_addr"])
+                            ntool_result = execute_tool(ncall, metadata_c)
                         except Exception as e:
                             print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
                             raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e

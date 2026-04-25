@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import TypeAlias, TypedDict, Optional, List, NotRequired
+import psycopg
 from pydantic import JsonValue
 
 JsonSerializable: TypeAlias = JsonValue
@@ -28,3 +29,8 @@ class tool_call(TypedDict, total=False):
     args: Optional[dict[str, JsonSerializable]]
 
 tool_calls_block: TypeAlias = List[tool_call]
+
+class _exec_tool_meta_data(TypedDict):
+    """ Typed dict for the metadata transfer to the executed tools. """
+    master_id: int
+    conn: psycopg.Connection

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TypeAlias, TypedDict, Optional, List, NotRequired
 import psycopg
 from pydantic import JsonValue
+import threading
 
 JsonSerializable: TypeAlias = JsonValue
 
@@ -15,6 +16,7 @@ class api(TypedDict, total=False):
     claude: Optional[bool]
     max_tokens: Optional[int]
     rate_limit: Optional[int]
+    lock: threading.Lock
 
 class instr_json(TypedDict):
     """ An atomic instruction json representation """

@@ -87,16 +87,20 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
         if e.response.status_code == 429:
             prev_ratelimit = api.get('rate_limit')
             if prev_ratelimit in (None, 0, 1):
-                api['rate_limit'] = 2
+                with api['lock']:
+                    api['rate_limit'] = 2
             else:
-                api['rate_limit'] = api['rate_limit'] ** 2
+                with api['lock']:
+                    api['rate_limit'] = api['rate_limit'] ** 2
         raise e
     else:
         prev_ratelimit = api.get('rate_limit')
         if prev_ratelimit in (None, 0, 1):
-            api['rate_limit'] = 0
+            with api['lock']:
+                api['rate_limit'] = 0
         else:
-            api['rate_limit'] = api['rate_limit'] // 2
+            with api['lock']:
+                api['rate_limit'] = api['rate_limit'] // 2
         
     return llm_response
 
@@ -215,6 +219,7 @@ def startup() -> None:
     apis = []
     for i in config['apis']:
         i['rate_limit'] = 2
+        i['lock'] = threading.Lock()
         apis.append(i)
 
     for _ in range(config["cores_number"]):

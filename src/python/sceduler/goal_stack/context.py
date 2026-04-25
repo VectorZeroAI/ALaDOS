@@ -255,7 +255,7 @@ def resolve_window(window_data: WindowData) -> str:
 
     context_str = ""
     for d, a, p in zip(descriptions, addrs, positions):
-        context_str = context_str + "@".join((addr_name_map.get(a) if addr_name_map.get(a) is not None else "Nameless", f"pos: {p}", f"addr: {a}"))
+        context_str = context_str + "@".join((addr_name_map.get(a, "Nameless"), f"pos: {p}", f"addr: {a}"))
         context_str = "\n".join((context_str, d, " ", " "))
 
     return context_str

@@ -55,9 +55,8 @@ CREATE TABLE IF NOT EXISTS logs (
         REFERENCES addrs(addr)
             ON UPDATE CASCADE
             ON DELETE CASCADE,
-    action TEXT NOT NULL,
     created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()))::BIGINT,
-    created_by TEXT NOT NULL
+    content JSONB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS masters (

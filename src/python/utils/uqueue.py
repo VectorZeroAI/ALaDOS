@@ -8,7 +8,7 @@ T = TypeVar('T')
 
 class Uqueue(Generic[T]):
     """
-
+    Universal queue, my bloated abomination queue for everything ever.
     """
     def __init__(self):
         self._queue: queue.Queue[T] = queue.Queue()
@@ -25,3 +25,14 @@ class Uqueue(Generic[T]):
     def get_blocking(self) -> T:
         """ Escape hatch for non-async contexts """
         return self._queue.get()
+
+    def get_all(self) -> list[T]:
+        items = []
+        while True:
+            try:
+                items.append(self._queue.get())
+            except queue.Empty:
+                break
+        return items
+
+

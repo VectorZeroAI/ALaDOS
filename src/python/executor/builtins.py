@@ -45,6 +45,50 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _exec
 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
+@register_tool("K.edit")
+def k_edit(addr: int|None = None,
+           name: str|None = None,
+           description_change: search_and_replace_block = None,
+           content_change: search_and_replace_block = None,
+           _meta: _exec_tool_meta_data = None
+           ) -> ActionConfirmation:
+    """
+    Edits a knowledge entry. 
+    Ether addr or name must be provided
+    change is in the same format as tool.edits change format.
+    """
+    conn = _meta['conn']
+    if addr is None:
+        addr = conn.execute("""
+        SELECT resolve_name(%s);
+                     """, (name,)).fetchone()[0]
+
+    if content_change is not None:
+        old_k = conn.execute("""
+        SELECT content FROM knowledge WHERE addr = %s;
+                             """, (addr,)).fetchone()[0]
+        assert isinstance(old_k, str)
+        search, replace = _sr_block_parser(content_change)
+        new_k = old_k.replace(search, replace)
+        conn.execute("""
+        UPDATE knowledge SET content = %s WHERE addr = %s;
+                     """, (new_k, addr))
+
+    if description_change is not None:
+        old_d = conn.execute("""
+        SELECT description FROM knowledge WHERE addr = %s;
+                             """, (addr,)).fetchone()[0]
+        assert isinstance(old_d, str)
+        search, replace = _sr_block_parser(description_change)
+        new_d = old_d.replace(search, replace)
+        conn.execute("""
+        UPDATE knowledge SET description = %s WHERE addr = %s;
+                     """, (new_d, addr))
+
+    return f"Edited the knowledge item {name if name is not None else "Nameless"}@{addr}"
+
+
+
 @register_tool("K.read")
 def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """

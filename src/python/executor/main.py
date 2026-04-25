@@ -21,6 +21,7 @@ from .queue import executor_queue
 from . import embedder
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
 from time import sleep
+from ..utils.logger import log_json
 
 
 config_dir = config_dir_resolver()
@@ -84,6 +85,13 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
         # NOTE : THIS IS FINE
         llm_response = llm_call(api, prompt)
     except httpx.HTTPStatusError as e:
+        log_json({
+            'type': "api",
+            'status': "error",
+            'api': api,
+            'error_code': e.response.status_code,
+            'prev_rate_limit': api.get('rate_limit')
+            })
         if e.response.status_code == 429:
             prev_ratelimit = api.get('rate_limit')
             if prev_ratelimit in (None, 0, 1):
@@ -101,6 +109,12 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
         else:
             with api['lock']:
                 api['rate_limit'] = api['rate_limit'] // 2
+                log_json({
+                    'type': 'api',
+                    'status': 'normal',
+                    'api': api,
+                    'prev_ratelimit': api.get('rate_limit')
+                    })
         
     return llm_response
 
@@ -134,17 +148,31 @@ async def core(
                 else:
                     break
             else:
-                print("All the APIS failed")
+                log_json({
+                    'type': 'api',
+                    'status': 'error',
+                    'api': 'all'
+                })
                 for _ in range(config['cores_number']):
                     global_interrupt_queue.put("WAIT")
             await checkpoint()
-            print(llm_response) # FIXME : REmove the debug print statement after done debugging this
+            log_json({
+                'type': 'llm_response',
+                'status': 'normal'
+                'response': llm_response
+            })
             try:
                 tool_calls: tool_calls_block = llm_to_json(llm_response)
             except ValueError:
                 llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
                 tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
-                print(f"Did not find models json tool calls block, made this one up: {tool_calls}")
+                log_json({
+                    'type': 'llm_response',
+                    'status': 'abnormal',
+                    'reason': 'did not find any tool calls.',
+                    'new_tool_calls_block': tool_calls,
+                    'llm_without_think': llm_without_think
+                })
 
             results = []
 
@@ -159,8 +187,16 @@ async def core(
                     with conn.transaction():
                         tool_result = execute_tool(call, metadata_c)
                 except Exception as e:
+                    log_json({
+                        'type': 'tool',
+                        'status': 'error',
+                        'message': str(e),
+                        'tool': call,
+                        'metadata': metadata_c
+                    })
                     prompt = f"""The following tool call failed for the following reason: {call}, {e}
                     Your task is to figure out what went wrong there, and create a working tool call.
+                    Here is what it attempted to do "{instr['instruction']}".
                     The following is the tool call format instructions and all the valid tools:
                     """ + "\n".join(HEADERS_REGISTRY.values())
                     llm_output_new = None
@@ -173,16 +209,35 @@ async def core(
                         else:
                             break
                     if llm_output_new is None:
-                        raise RuntimeError(f"Every API failed. APIS: {apis}")
+                        log_json({
+                            'type': 'api',
+                            'status': 'error',
+                            'api': 'all'
+                        })
+                        for _ in range(config['cores_number']):
+                            global_interrupt_queue.put("WAIT")
                     new_calls = llm_to_json(llm_output_new)
+                    log_json({
+                        'type': 'tool_error_recovery',
+                        'status': 'normal',
+                        'new_llm_output': llm_output_new,
+                        'new_tool_calls': new_calls
+                    })
                     nresults = []
                     for ncall in new_calls:
                         await checkpoint()
                         try:
                             with conn.transaction():
                                 ntool_result = execute_tool(ncall, metadata_c)
-                        except Exception as e:
-                            print(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error {e}")
+                        except Exception as e2:
+                            log_json({
+                                'type': 'tool_error_recovery',
+                                'status': 'error',
+                                'recovery_call': ncall,
+                                'error': str(e2),
+                                'original_call': call,
+                                'original_error': str(e)
+                            })
                             raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
                         await checkpoint()
                         nresults.append(ntool_result)

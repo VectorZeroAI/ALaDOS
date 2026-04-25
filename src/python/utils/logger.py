@@ -29,5 +29,5 @@ def _logger_thread() -> None:
 
 
 def startup():
-    threading.Thread(target=_logger_thread, daemon=True).start()
-    print("logger thread started sucsessfully")
+    threading.Thread(target=_logger_thread).start()
+    print("logger thread started successfully")

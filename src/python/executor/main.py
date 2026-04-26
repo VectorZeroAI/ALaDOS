@@ -88,7 +88,7 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
         log_json({
             'type': "api",
             'status': "error",
-            'api': api,
+            'api_url': api['url'],
             'error_code': e.response.status_code,
             'prev_rate_limit': api.get('rate_limit')
             })
@@ -112,7 +112,7 @@ def llm_call_with_ratelimit(api: api, prompt: str) -> str:
                 log_json({
                     'type': 'api',
                     'status': 'normal',
-                    'api': api,
+                    'api_url': api['url'],
                     'prev_ratelimit': api.get('rate_limit')
                     })
         

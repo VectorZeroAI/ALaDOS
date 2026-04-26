@@ -54,6 +54,7 @@ def embedder_thread():
 
         if config_method == "local":
             emb = _local_emb_call(desc_and_type[0])
+            emb = emb.tolist()
         else:
             for i in config_method: # pyright: ignore
                 api_object = api_validator.validate_python(i)
@@ -63,12 +64,15 @@ def embedder_thread():
                 except Exception as e:
                     print(f"api embedding over this method {api_object} encoutered this error: {e}. Trying the next method.")
                     continue
+                break
 
-                conn.execute(f"""
-        UPDATE {desc_and_type[1]} SET emb = %s WHERE addr = %s;
-                             """, (emb, item_addr)) # pyright: ignore
-                break # The table name in there is SQL schema enforced to be only knowledge or executables, so I dont see a python whitelist nesesary.
-            # The ignore is nesesary because it just says that fstring cannot be used as SQK, wich works at runtime, so I dont care.
+            emb = emb.tolist()
+
+        conn.execute(f"""
+                     UPDATE {desc_and_type[1]} SET emb = %s::vector(768) WHERE addr = %s;
+                     """, (emb, item_addr)) # pyright: ignore
+        # The table name in there is SQL schema enforced to be only knowledge or executables, so I dont see a python whitelist nesesary.
+        # The ignore is nesesary because it just says that fstring cannot be used as SQK, wich works at runtime, so I dont care.
 
 def _call_jina_embedding(api: api, text: str):
     with httpx.Client(timeout=15) as client:

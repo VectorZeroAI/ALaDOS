@@ -3,6 +3,7 @@ from ..utils.conn_factory import conn_factory
 from ..utils.uqueue import Uqueue
 from psycopg.types.json import Jsonb
 import threading
+import time
 
 _log_conn = conn_factory()
 
@@ -14,7 +15,7 @@ def log_json(content: dict) -> None:
 def _logger_thread() -> None:
     while True:
         _log_curr = _log_conn.cursor()
-        sleep(0.3)
+        time.sleep(0.3)
         items = _logger_queue.get_all()
         try:
             _log_curr.executemany("""

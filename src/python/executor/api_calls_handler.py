@@ -35,11 +35,14 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
     """
     await checkpoint()
     api_specs_sorted = insertion_sort_by_key(api_specs, 'rate_limited_until')
+    api_specs_sorted = sorted(api_specs_sorted, key=lambda x: x['rate_limited_until'])
     await checkpoint()
+
+    print(f"BEGIN API CALLS BLOCK, APIS SPECS STATUS: {api_specs}")
 
     for api_spec in api_specs_sorted:
         await checkpoint()
-        await asyncio.sleep(api_spec['rate_limited_until'] - time.monotonic())
+        await asyncio.sleep(max(api_spec['rate_limited_until'] - time.monotonic(), 0))
         await checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
@@ -53,7 +56,7 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
                         sleep_seconds = 5
                     await checkpoint()
                     with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.monotonic() + sleep_seconds
+                        api_spec['rate_limited_until'] = time.monotonic() + min(sleep_seconds, 60)
                         api_spec['consecutive_ratelimits'] += 1
                     continue
                 if api_spec['consecutive_ratelimits'] == 0:
@@ -66,6 +69,7 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
                     await checkpoint()
                     with api_spec['lock']:
                         api_spec['rate_limited_until'] = time.monotonic() + (5 * api_spec['consecutive_ratelimits'])
+                        api_spec['consecutive_ratelimits'] += 1
                     continue
         else:
             with api_spec['lock']:
@@ -76,65 +80,17 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
     else:
 
         await checkpoint()
-        for _ in config['cores_number']:
+        for _ in range(config['cores_number']):
             global_interrupt_queue.put('WAIT')
             log_json({
                 'type': 'api',
                 'status': 'error',
                 'api': 'all'
             })
+
         return None
 
     return llm_result
-
-
-
-def llm_call_with_ratelimit(api: api, prompt: str) -> str:
-    """
-    The function that encapsulates the entire logic of the llm call with rate limit in itself.
-    """
-
-    try:
-        time.sleep(api.get('rate_limit') if api.get('rate_limit') is not None else 0) # pyright: ignore
-        # NOTE : THIS IS FINE
-        llm_response = llm_call(api, prompt)
-    except httpx.HTTPStatusError as e:
-        log_json({
-            'type': "api",
-            'status': "error",
-            'api_url': api['url'],
-            'error_code': e.response.status_code,
-            'prev_rate_limit': api.get('rate_limit')
-            })
-        if e.response.status_code == 429:
-            prev_ratelimit = api.get('rate_limit')
-            if prev_ratelimit in (None, 0, 1):
-                with api['lock']:
-                    api['rate_limit'] = 2
-            else:
-                with api['lock']:
-                    api['rate_limit'] = min(api['rate_limit'] ** 2, 120)
-        raise e
-    else:
-        prev_ratelimit = api.get('rate_limit')
-        if prev_ratelimit in (None, 0, 1):
-            with api['lock']:
-                api['rate_limit'] = 0
-        else:
-            with api['lock']:
-                api['rate_limit'] = api['rate_limit'] // 2
-                log_json({
-                    'type': 'api',
-                    'status': 'normal',
-                    'api_url': api['url'],
-                    'prev_ratelimit': api.get('rate_limit')
-                    })
-        
-    return llm_response
-    
-
-
-
 
 def _llm_call_claude(api: api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT

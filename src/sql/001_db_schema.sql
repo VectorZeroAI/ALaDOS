@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS master_context (
         REFERENCES masters(addr)
             ON DELETE CASCADE 
             ON UPDATE CASCADE,
-    master_result TEXT,
+    master_result TEXT NOT NULL,
     window_anchor_exe BIGINT
         REFERENCES executables(addr) 
             ON DELETE SET NULL 

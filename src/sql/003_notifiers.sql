@@ -101,3 +101,13 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER master_decompose_task
 AFTER INSERT ON masters
 FOR EACH ROW EXECUTE FUNCTION master_decomposition_slave_submission();
+
+
+CREATE OR REPLACE FUNCTION init_master_context()
+RETURNS TRIGGER AS $$
+    BEGIN
+        INSERT INTO master_context(addr, master_result, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
+        VALUES(NEW.addr, '', NULL, NULL, 12, 12);
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;

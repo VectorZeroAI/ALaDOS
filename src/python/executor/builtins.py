@@ -152,7 +152,7 @@ def create_tool(description: str, header: str, body: str, name: str = None, _met
     conn = _meta['conn']
     addr = conn.execute("""
     SELECT new_addr();
-                        """)
+                        """).fetchone()[0]
     conn.execute("""
     INSERT INTO executables(description, header, body, addr) VALUES(%s, %s, %s, %s);
                  """, (description, header, body, addr))
@@ -247,6 +247,10 @@ def edit_tool(name: str|None = None,
         search, replacement = _sr_block_parser(header_change)
 
         new_header = old_header.replace(search, replacement)
+
+        conn.execute("""
+        UPDATE executables SET header = %s WHERE addr = %s;
+                     """, (new_header, addr))
 
     return f"Applied the edits to the tool {name}@{addr}"
 

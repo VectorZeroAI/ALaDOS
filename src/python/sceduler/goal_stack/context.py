@@ -41,7 +41,7 @@ def resolve_context(slave_obj: SlaveObj):
     SELECT item_addr FROM master_load WHERE master_addr = %s;
                              """, (slave_obj['master_addr'],)).fetchall()
 
-    if load_data is not None:
+    if len(load_data) != 0:
 
         loads_data_python: LoadsData = {
                 "items_addrs": [addr[0] for addr in load_data],
@@ -186,9 +186,6 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     if name is None:
         name = ("None",)
 
-    if slaves_fetch is None:
-        slaves_fetch = ("No slaves", "no slaves", "no slaves")
-
     slave_str_list: list[str] = []
     result_str = "@".join((*name, f"{addr}", "master_goal"))
     result_str = "\n".join(("", "", result_str))
@@ -199,12 +196,15 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
         slave_str_list.append(f"result_name: {i[2]}")
         slave_str_list.append("}")
 
+    if len(slaves_fetch) == 0:
+        slave_str_list.append("No slaves present in the master goal")
+
     result_str = "\n".join([result_str, *slave_str_list])
     return result_str
 
 def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     item = conn.execute("""
-        SELECT names.name, logs.created_at, logs.action, logs.created_by
+        SELECT names.name, logs.content, logs.created_at
             FROM logs LEFT JOIN names ON names.addr = logs.addr WHERE logs.addr = %s;
                         """, (addr,)).fetchone()
     

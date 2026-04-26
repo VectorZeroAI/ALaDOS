@@ -95,4 +95,4 @@ def llm_to_json(input_str: str) -> tool_calls_block:
 
     except Exception as e:
         print(f"JSON extraction/validation error: {e}")
-        raise NotImplementedError("tool call error recovery not yet implemented", e) from e
+        raise RuntimeError(f"Json extranctioon encountered unexpected error {e}") from e

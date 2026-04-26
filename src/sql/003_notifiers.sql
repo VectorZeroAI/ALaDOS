@@ -107,7 +107,7 @@ CREATE OR REPLACE FUNCTION init_master_context()
 RETURNS TRIGGER AS $$
     BEGIN
         INSERT INTO master_context(addr, master_result, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
-        VALUES(NEW.addr, '', NULL, NULL, 12, 12);
+        VALUES(NEW.addr, '', NULL, NULL, NULL, NULL);
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;

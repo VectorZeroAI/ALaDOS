@@ -155,10 +155,11 @@ async def core(
                 })
                 for _ in range(config['cores_number']):
                     global_interrupt_queue.put("WAIT")
+                continue
             await checkpoint()
             log_json({
                 'type': 'llm_response',
-                'status': 'normal'
+                'status': 'normal',
                 'response': llm_response
             })
             try:

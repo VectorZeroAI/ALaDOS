@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Callable
+from typing import Callable, Sequence
 import tomllib
 import httpx
 import time
@@ -28,7 +28,7 @@ def insertion_sort_by_key(arr, key):
 
 
 
-async def api_calls_block(api_specs: list[api], checkpoint: Callable, prompt: str) -> str|None:
+async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt: str) -> str|None:
     """
     The api calls block. Returns None if no API worked. Returns llm_result str if one API worked.
     """
@@ -70,6 +70,11 @@ async def api_calls_block(api_specs: list[api], checkpoint: Callable, prompt: st
         await checkpoint()
         for _ in config['cores_number']:
             global_interrupt_queue.put('WAIT')
+            log_json({
+                'type': 'api',
+                'status': 'error',
+                'api': 'all'
+            })
             return None
 
     return llm_result

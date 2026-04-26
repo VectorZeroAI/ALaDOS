@@ -190,6 +190,7 @@ def startup() -> None:
         i['rate_limit'] = 2
         i['lock'] = threading.Lock()
         i['consecutive_ratelimits'] = 0
+        i['rate_limited_until'] = 0.0
         apis.append(i)
 
     for _ in range(config["cores_number"]):

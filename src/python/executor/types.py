@@ -17,7 +17,8 @@ class api(TypedDict, total=False):
     model: str
     claude: Optional[bool]
     max_tokens: Optional[int]
-    rate_limit: Optional[int]
+    rate_limited_until: float
+    consecutive_ratelimits: int
 
 class instr_json(TypedDict):
     """ An atomic instruction json representation """

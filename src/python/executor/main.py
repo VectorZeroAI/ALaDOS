@@ -24,100 +24,13 @@ from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
 from .types import _exec_tool_meta_data, api, instr_json, tool_calls_block
+from .api_calls_handler import api_calls_block
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
 config = tomllib.loads(config_file.read_text())
 
-def _llm_call_claude(api: api, prompt: str) -> str:
-    raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
-#    with httpx.Client() as client:
-#        response = client.post(
-#                url=api["url"],
-#                headers={"Authorization": f"Bearer {api["key"]}"},
-#                json={
-#                    "model": api["model"],
-#                    "messages": instr
-#                    }
-#                )
-#        response.raise_for_status()
-#        return response.json()["choices"][0]["message"]["content"]
 
-def _llm_call_openai(api: api, prompt: str) -> str:
-    """
-    This is the function that calls an openai compatable endpoint.  
-    THE FULL ENDPOINT URL MUST BE PROVIDED, INCLUDING THE v1/chat/completions whatever path.
-    """
-    with httpx.Client(timeout=60) as client:
-        response = client.post(
-                url=api["url"],
-                headers={"Authorization": f"Bearer {api["key"]}"},
-                json={
-                    "model": api["model"],
-                    "messages": [
-                            {
-                                "role": "system", 
-                                "content": prompt
-                            }
-                        ],
-                    "max_completion_tokens": api.get('max_tokens', 4096),
-                    "max_tokens": api.get('max_tokens', 4096)
-                    }
-                )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-
-
-def llm_call(api: api, prompt: str) -> str:
-    if api.get('claude'):
-        return _llm_call_claude(api, prompt)
-    else:
-        return _llm_call_openai(api, prompt)
-
-
-
-def llm_call_with_ratelimit(api: api, prompt: str) -> str:
-    """
-    The function that encapsulates the entire logic of the llm call with rate limit in itself.
-    """
-
-    try:
-        sleep(api.get('rate_limit') if api.get('rate_limit') is not None else 0) # pyright: ignore
-        # NOTE : THIS IS FINE
-        llm_response = llm_call(api, prompt)
-    except httpx.HTTPStatusError as e:
-        log_json({
-            'type': "api",
-            'status': "error",
-            'api_url': api['url'],
-            'error_code': e.response.status_code,
-            'prev_rate_limit': api.get('rate_limit')
-            })
-        if e.response.status_code == 429:
-            prev_ratelimit = api.get('rate_limit')
-            if prev_ratelimit in (None, 0, 1):
-                with api['lock']:
-                    api['rate_limit'] = 2
-            else:
-                with api['lock']:
-                    api['rate_limit'] = min(api['rate_limit'] ** 2, 120)
-        raise e
-    else:
-        prev_ratelimit = api.get('rate_limit')
-        if prev_ratelimit in (None, 0, 1):
-            with api['lock']:
-                api['rate_limit'] = 0
-        else:
-            with api['lock']:
-                api['rate_limit'] = api['rate_limit'] // 2
-                log_json({
-                    'type': 'api',
-                    'status': 'normal',
-                    'api_url': api['url'],
-                    'prev_ratelimit': api.get('rate_limit')
-                    })
-        
-    return llm_response
 
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
@@ -138,25 +51,17 @@ async def core(
 
             str_instr = " ".join((instr["context"], instr["instruction"]))
             print(str_instr)
-            
-            for api_sps in apis:
+
+            while True:
+                llm_respone_or_none = api_calls_block(apis, checkpoint)
                 await checkpoint()
-                try:
-                    llm_response = llm_call_with_ratelimit(api_sps, str_instr)
+                if llm_respone_or_none is None:
                     await checkpoint()
-                except httpx.HTTPStatusError:
                     continue
                 else:
                     break
-            else:
-                log_json({
-                    'type': 'api',
-                    'status': 'error',
-                    'api': 'all'
-                })
-                for _ in range(config['cores_number']):
-                    global_interrupt_queue.put("WAIT")
-                continue
+                
+            
             await checkpoint()
             log_json({
                 'type': 'llm_response',
@@ -284,6 +189,7 @@ def startup() -> None:
     for i in config['apis']:
         i['rate_limit'] = 2
         i['lock'] = threading.Lock()
+        i['consecutive_ratelimits'] = 0
         apis.append(i)
 
     for _ in range(config["cores_number"]):

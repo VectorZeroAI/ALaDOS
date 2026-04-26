@@ -111,3 +111,7 @@ RETURNS TRIGGER AS $$
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER init_master_context
+AFTER INSERT ON masters
+FOR EACH ROW EXECUTE FUNCTION init_master_context();

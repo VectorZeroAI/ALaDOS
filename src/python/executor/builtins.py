@@ -41,7 +41,7 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _exec
     if name is not None:
         conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
 
-    embedder_queue.put(addr)
+    _meta['_embedder_queue'].put(addr)
 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
@@ -85,12 +85,14 @@ def k_edit(addr: int|None = None,
         UPDATE knowledge SET description = %s WHERE addr = %s;
                      """, (new_d, addr))
 
+        _meta['_embedder_queue'].put(addr)
+
     return f"Edited the knowledge item {name if name is not None else "Nameless"}@{addr}"
 
 
 
 @register_tool("K.read")
-def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = _meta['conn']
     if addr is not None:
@@ -107,7 +109,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
 @register_tool("tool.execute")
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -140,7 +142,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
 @register_tool("tool.create")
-def create_tool(description: str, header: str, body: str, name: str = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """
     Creates a python tool, to be executed with tool.execute .
     Description is a short description used for searching and identifing the tool.
@@ -160,6 +162,8 @@ def create_tool(description: str, header: str, body: str, name: str = None, _met
         conn.execute("""
         INSERT INTO names(addr, name) VALUES(%s, %s);
                      """, (addr, name))
+
+    _meta['_embedder_queue'].put(addr)
 
     return f"Created tool {name or description}@{addr}"
 
@@ -224,6 +228,7 @@ def edit_tool(name: str|None = None,
         conn.execute("""
         UPDATE executables SET description = %s WHERE addr = %s;
                      """, (new_description, addr))
+        _meta['_embedder_queue'].put(addr)
 
     if body_change is not None:
         old_body = conn.execute("""
@@ -274,7 +279,7 @@ def add_slave(instruction: str,
               required_results_addrs: list[int]|None=None,
               goal_name: str|None=None,
               result_name: str|None=None,
-              _meta: _exec_tool_meta_data) -> ActionConfirmation:
+              _meta: _exec_tool_meta_data=None) -> ActionConfirmation:
     """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
@@ -436,7 +441,7 @@ def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirm
 
 
 @register_tool("context.window.change_size")
-def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.

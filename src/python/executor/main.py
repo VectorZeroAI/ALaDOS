@@ -2,27 +2,28 @@
 
 import asyncio
 import json
-import threading
-from typing import Callable, Coroutine, Sequence, Any
 import re
+import threading
+import tomllib
+from time import sleep
+from typing import Any, Callable, Coroutine, Sequence
+
+import httpx
 
 from ..executor.execute_tool import execute_tool
-from ..utils.conn_factory import conn_factory
-from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
-from ..utils.config_dir_resolver import config_dir_resolver
-from ..utils.llm_to_json import llm_to_json
 from ..queue import global_interrupt_queue
-from ..utils.uqueue import Uqueue
-import tomllib
-import httpx
-from .types import api, instr_json, tool_calls_block, _exec_tool_meta_data
-from .queue import executor_queue
-from . import embedder
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
-from time import sleep
+from ..types import ReferenceTo
+from ..utils.config_dir_resolver import config_dir_resolver
+from ..utils.conn_factory import conn_factory
+from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
-
+from ..utils.uqueue import Uqueue
+from . import embedder
+from .queue import embedder_queue
+from .queue import executor_interrupt_queue, executor_queue
+from .types import _exec_tool_meta_data, api, instr_json, tool_calls_block
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
@@ -180,6 +181,7 @@ async def core(
             metadata_c: _exec_tool_meta_data = {
                     'conn': conn,
                     'master_id': instr['master_addr'],
+                    '_embedder_queue': Uqueue[ReferenceTo]()
                     }
 
             for call in tool_calls:
@@ -254,6 +256,10 @@ async def core(
             SELECT new_result(%s, %s);
                          """, (result_str, instr["result_addr"]))
             conn.commit()
+
+            items = metadata_c['_embedder_queue'].get_all()
+            for i in items:
+                embedder_queue.put(i)
         
         except Exception as e:
             print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")

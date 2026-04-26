@@ -250,7 +250,7 @@ def resolve_window(window_data: WindowData) -> str:
 
     names_fetch = conn.execute("""
     SELECT name, addr FROM names WHERE addr = ANY(%s)
-                               """, (addrs,)).fetchall()
+                               """, (list(addrs),)).fetchall()
     assert names_fetch is not None
 
     addr_name_map = {}

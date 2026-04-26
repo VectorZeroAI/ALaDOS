@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import TypeAlias, TypedDict, Optional, List, NotRequired
+from typing import TypeAlias, TypedDict, Optional, List
 import psycopg
 from pydantic import JsonValue
-import threading
+from python.utils.uqueue import Uqueue
 
 JsonSerializable: TypeAlias = JsonValue
 
@@ -18,7 +18,6 @@ class api(TypedDict, total=False):
     claude: Optional[bool]
     max_tokens: Optional[int]
     rate_limit: Optional[int]
-    lock: threading.Lock
 
 class instr_json(TypedDict):
     """ An atomic instruction json representation """
@@ -38,3 +37,4 @@ class _exec_tool_meta_data(TypedDict):
     """ Typed dict for the metadata transfer to the executed tools. """
     master_id: int
     conn: psycopg.Connection
+    _embedder_queue: Uqueue

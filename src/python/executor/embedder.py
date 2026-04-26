@@ -7,7 +7,7 @@ import tomllib
 from .queue import embedder_queue
 import httpx
 from .types import api
-from pydantic import TypeAdapter
+from pydantic import ConfigDict, TypeAdapter
 from sentence_transformers import SentenceTransformer
 
 config_dir = config_dir_resolver()
@@ -54,7 +54,6 @@ def embedder_thread():
 
         if config_method == "local":
             emb = _local_emb_call(desc_and_type[0])
-            emb = emb.tolist()
         else:
             for i in config_method: # pyright: ignore
                 api_object = api_validator.validate_python(i)
@@ -65,8 +64,6 @@ def embedder_thread():
                     print(f"api embedding over this method {api_object} encoutered this error: {e}. Trying the next method.")
                     continue
                 break
-
-            emb = emb.tolist()
 
         conn.execute(f"""
                      UPDATE {desc_and_type[1]} SET emb = %s::vector(768) WHERE addr = %s;

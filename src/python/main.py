@@ -10,6 +10,7 @@ import psycopg
 from .executor.main import startup as e_startup
 from .sceduler.main import setup as s_setup
 from .interfaces.alados_console import start_console
+from .utils.logger import startup as l_startup, log_json
 
 def main():
     """
@@ -28,8 +29,9 @@ def main():
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
 
-    e_startup() # FIXME : CHECK LAST CLAUDE CHAT AND THE DEEP SEEK CHAT FOR THE REQUIRED FIXES!!!
+    e_startup()
     s_setup()
+    l_startup()
     print("startup of the server finished.")
     start_console()
     

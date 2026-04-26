@@ -53,13 +53,15 @@ async def core(
             print(str_instr)
 
             while True:
-                llm_respone_or_none = api_calls_block(apis, checkpoint)
+                llm_respone_or_none = await api_calls_block(apis, checkpoint, str_instr)
                 await checkpoint()
                 if llm_respone_or_none is None:
                     await checkpoint()
                     continue
                 else:
                     break
+
+            llm_response = llm_respone_or_none
                 
             
             await checkpoint()
@@ -107,23 +109,14 @@ async def core(
                     Here is what it attempted to do "{instr['instruction']}".
                     The following is the tool call format instructions and all the valid tools:
                     """ + "\n".join(HEADERS_REGISTRY.values())
-                    llm_output_new = None
-                    for api_sps in apis:
+                    while True:
                         await checkpoint()
-                        try:
-                            llm_output_new = llm_call_with_ratelimit(api_sps, prompt)
-                        except Exception:
-                            continue
-                        else:
+                        llm_output_new = await api_calls_block(apis, checkpoint, prompt)
+                        if llm_output_new is not None:
                             break
-                    if llm_output_new is None:
-                        log_json({
-                            'type': 'api',
-                            'status': 'error',
-                            'api': 'all'
-                        })
-                        for _ in range(config['cores_number']):
-                            global_interrupt_queue.put("WAIT")
+                        else:
+                            continue
+
                     new_calls = llm_to_json(llm_output_new)
                     log_json({
                         'type': 'tool_error_recovery',

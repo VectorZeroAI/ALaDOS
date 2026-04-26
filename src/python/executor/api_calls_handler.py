@@ -3,9 +3,10 @@
 from typing import Callable, Sequence
 import tomllib
 import httpx
+import asyncio
 import time
-from ..executor.types import api
 
+from ..executor.types import api
 from ..utils.logger import log_json
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..queue import global_interrupt_queue
@@ -38,17 +39,22 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
 
     for api_spec in api_specs_sorted:
         await checkpoint()
-        time.sleep(api_spec['rate_limited_until'] - time.monotonic())
+        await asyncio.sleep(api_spec['rate_limited_until'] - time.monotonic())
         await checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
             await checkpoint()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
-                if e.response.headers.get('Retry-After') is float:
+                if e.response.headers.get('Retry-After') is not None:
+                    try:
+                        sleep_seconds = float(e.response.headers.get('Retry-After'))
+                    except ValueError:
+                        sleep_seconds = 5
                     await checkpoint()
                     with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.monotonic() + e.response.headers.get('Retry-After')
+                        api_spec['rate_limited_until'] = time.monotonic() + sleep_seconds
+                        api_spec['consecutive_ratelimits'] += 1
                     continue
                 if api_spec['consecutive_ratelimits'] == 0:
                     await checkpoint()
@@ -62,7 +68,9 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
                         api_spec['rate_limited_until'] = time.monotonic() + (5 * api_spec['consecutive_ratelimits'])
                     continue
         else:
-
+            with api_spec['lock']:
+                api_spec['consecutive_ratelimits'] = 0
+                api_spec['rate_limited_until'] = 0
             await checkpoint()
             break
     else:
@@ -75,7 +83,7 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
                 'status': 'error',
                 'api': 'all'
             })
-            return None
+        return None
 
     return llm_result
 

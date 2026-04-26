@@ -4,7 +4,7 @@ import asyncio
 from types import FunctionType
 import functools
 
-from python.utils.uqueue import Uqueue
+from ..utils.uqueue import Uqueue
 
 INTERRUPT_TABLE = {}
 

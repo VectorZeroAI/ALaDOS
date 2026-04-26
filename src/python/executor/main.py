@@ -6,8 +6,8 @@ import threading
 from typing import Callable, Coroutine, Sequence, Any
 import re
 
-from python.executor.execute_tool import execute_tool
-from python.utils.conn_factory import conn_factory
+from ..executor.execute_tool import execute_tool
+from ..utils.conn_factory import conn_factory
 from .queue import executor_interrupt_queue
 from ..interrupts.main import interruptable
 from ..utils.config_dir_resolver import config_dir_resolver

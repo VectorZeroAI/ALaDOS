@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import psycopg
-from python.utils.conn_factory import conn_factory
+from ..utils.conn_factory import conn_factory
 
 def add_master(instruction: list[str], conn: psycopg.Connection):
     conn.execute("""

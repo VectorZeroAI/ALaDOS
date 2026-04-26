@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Callable
-from python.executor.types import tool_call
+from ..executor.types import tool_call
 import inspect
 import re
 import psycopg

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from python.utils.conn_factory import conn_factory
-from python.utils.uqueue import Uqueue
+from ..utils.conn_factory import conn_factory
+from ..utils.uqueue import Uqueue
 from psycopg.types.json import Jsonb
 import threading
 

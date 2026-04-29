@@ -3,17 +3,14 @@
 import os
 from typing import TypeAlias
 
-from numpy import isin, ndarray
+from numpy import ndarray
 import psycopg
-from torch import Type
 from .execute_tool import register_tool
-from ..utils.conn_factory import conn_factory
 import subprocess
 import re
 import json
 from .embedder import embedder
-from .queue import embedder_queue
-from .types import _exec_tool_meta_data, addr
+from .types import _exec_tool_meta_data
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
@@ -179,7 +176,7 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
         re.DOTALL
     )
     if not match:
-        raise ValueError(f"No matches found.")
+        raise ValueError("No matches found.")
     
     search = match.group(1).strip()
     replacement = match.group(2)

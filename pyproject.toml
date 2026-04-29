@@ -7,9 +7,22 @@ requires-python = ">=3.13"
 dependencies = [
  "httpx>=0.28.1",
  "json-repair>=0.59.3",
+ "numpy>=2.4.4",
  "psycopg>=3.3.3",
  "pydantic>=2.13.0",
+ "sentence-transformers[onnx]>=5.4.1",
 ] # ADD THE DEPS HERE. json-repair, sentense-transformers, psycopg
 
 [project.scripts]
 alados_start = "python.main:main"
+
+[tool.uv]
+package = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

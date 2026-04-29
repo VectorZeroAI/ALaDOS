@@ -10,8 +10,7 @@ def conn_factory() -> psycopg.Connection:
     conn = psycopg.connect(
             host="127.0.0.1",
             port=5432,
-            dbname="postgres",
-            user="u0_a453"
+            dbname="alados"
             )
     conn.autocommit = True
     return conn

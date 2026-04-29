@@ -5,10 +5,8 @@ import json
 import re
 import threading
 import tomllib
-from time import sleep
-from typing import Any, Callable, Coroutine, Sequence
+from typing import Any, Callable, Coroutine, Sequence, TypedDict
 
-import httpx
 
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
@@ -23,14 +21,29 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
-from .types import _exec_tool_meta_data, api, instr_json, tool_calls_block
+from .types import _exec_tool_meta_data, api, instr_json, tool_calls_block, tool_call
 from .api_calls_handler import api_calls_block
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
 config = tomllib.loads(config_file.read_text())
 
+class ExecutionFailed(Exception):
+    def __init__(self, message: str, call1: tool_call,
+                 call2: tool_call, callb1: tool_calls_block,
+                 callb2: tool_calls_block, error1: Exception,
+                 error2: Exception,
+                 ) -> None:
+        super().__init__(message)
+        self.call1 = call1
+        self.call2 = call2
+        self.callb1 = callb1
+        self.callb2 = callb2
+        self.error1 = error1
+        self.error2 = error2
 
+    def __str__(self) -> str:
+        return f"call1: {self.call1}, call2: {self.call2}, callblock 1: {self.callb1}, callblock2: {self.callb2}, error1: {self.error1}, error2: {self.error2}"
 
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
@@ -45,9 +58,9 @@ async def core(
     conn.autocommit = False
 
     while True:
+        await checkpoint()
+        instr = await queue.get()
         try:
-            await checkpoint()
-            instr = await queue.get()
 
             str_instr = " ".join((instr["context"], instr["instruction"]))
             print(str_instr)
@@ -94,9 +107,10 @@ async def core(
             for call in tool_calls:
                 await checkpoint()
                 try:
-                    with conn.transaction():
-                        tool_result = execute_tool(call, metadata_c)
+                    conn.transaction()
+                    tool_result = execute_tool(call, metadata_c)
                 except Exception as e:
+                    conn.rollback()
                     log_json({
                         'type': 'tool',
                         'status': 'error',
@@ -128,18 +142,9 @@ async def core(
                     for ncall in new_calls:
                         await checkpoint()
                         try:
-                            with conn.transaction():
-                                ntool_result = execute_tool(ncall, metadata_c)
+                            ntool_result = execute_tool(ncall, metadata_c)
                         except Exception as e2:
-                            log_json({
-                                'type': 'tool_error_recovery',
-                                'status': 'error',
-                                'recovery_call': ncall,
-                                'error': str(e2),
-                                'original_call': call,
-                                'original_error': str(e)
-                            })
-                            raise RuntimeError(f"Recovery LLM call failed. Original llm call: {call}, recovery calls {new_calls}, the failed call: {ncall}, error: {e}") from e
+                            raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
                         await checkpoint()
                         nresults.append(ntool_result)
                     results.extend(nresults)
@@ -147,23 +152,35 @@ async def core(
 
                 results.append(tool_result)
 
-            result_str = "\n".join([str(r) for r in results])
+                result_str = "\n".join([str(r) for r in results])
 
-            await checkpoint()
+                await checkpoint()
+                conn.execute("""
+                SELECT new_result(%s, %s);
+                             """, (result_str, instr["result_addr"]))
+                conn.commit()
+
+                items = metadata_c['_embedder_queue'].get_all()
+                for i in items:
+                    embedder_queue.put(i)
+
+        except ExecutionFailed as e:
+            conn.rollback()
             conn.execute("""
-            SELECT new_result(%s, %s);
-                         """, (result_str, instr["result_addr"]))
-            conn.commit()
-
-            items = metadata_c['_embedder_queue'].get_all()
-            for i in items:
-                embedder_queue.put(i)
+            UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
+                         """, ({
+                             'tool_call': e.call1,
+                             'tool_call_recovery': e.call2,
+                             'tool_calls_block': e.callb1,
+                             'tool_calls_block_recovery': e.callb2,
+                             'error_original': e.error1,
+                             'error_from_recovery': e.error2
+                         }, instr['result_addr']))
         
         except Exception as e:
             print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")
             conn.rollback()
-            print("RESTART OF CORES NOT YET IMPLEMENTED, please restart the system or implement it")
-            raise e from e
+            print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
 def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
     loop = asyncio.new_event_loop()

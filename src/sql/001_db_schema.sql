@@ -111,10 +111,17 @@ CREATE TABLE IF NOT EXISTS results (
             ON DELETE CASCADE,
     content_str TEXT,
     ready BOOLEAN NOT NULL DEFAULT FALSE,
-    CONSTRAINT content_present_when_ready CHECK(
+    status TEXT, -- Status, e.g. error, paradox, impossible instruction.
+    status_inf JSONB, -- additional unstructured information, with per status different keys and values.
+    CONSTRAINT content_present_when_ready CHECK (
         (ready IS FALSE AND content_str IS NULL)
         OR 
         (ready IS TRUE AND content_str IS NOT NULL)
+    ),
+    CONSTRAINT status_inf_not_without_status CHECK (
+        (status_inf IS NULL)
+        OR
+        (status_inf IS NOT NULL and status IS NOT NULL)
     )
 );
 

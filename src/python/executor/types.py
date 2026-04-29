@@ -26,6 +26,7 @@ class instr_json(TypedDict):
     instruction: str
     master_addr: int
     context: str
+    # TODO : ADD slave address forwarding
 
 class tool_call(TypedDict, total=False):
     """ A single tool call, directly executable """
@@ -39,3 +40,4 @@ class _exec_tool_meta_data(TypedDict):
     master_id: int
     conn: psycopg.Connection
     _embedder_queue: Uqueue
+    slave_id: int

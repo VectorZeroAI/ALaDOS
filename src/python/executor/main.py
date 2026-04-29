@@ -101,7 +101,8 @@ async def core(
             metadata_c: _exec_tool_meta_data = {
                     'conn': conn,
                     'master_id': instr['master_addr'],
-                    '_embedder_queue': Uqueue[ReferenceTo]()
+                    '_embedder_queue': Uqueue[ReferenceTo](),
+                    '
                     }
 
             for call in tool_calls:

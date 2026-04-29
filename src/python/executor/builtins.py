@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-from typing import TypeAlias
+from typing import Sequence, TypeAlias
 
 from numpy import ndarray
 import psycopg
@@ -467,7 +467,21 @@ def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfir
 @register_tool("result.write")
 def result_write(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
-    Function that writes text you provide it as the result of your instruction. 
-    Your normal output is inaccesable to anyone, so responses to informational instructions must be wrapped into this tool call.
+    Function that writes text you provide it as the result of your instruction.
     """
     return f"Result: {text}"
+
+
+def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+    """
+    Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
+    paradox: the paradox in the information
+    items: the list of items addresses or names that contain the paradoxal information.
+    """
+
+    conn = _meta['conn']
+
+    conn.execute("""
+    SELECT new_slave(%s, %s, '__paradox_recovery', %s);
+                 """, (_meta['master_id'], _meta['']))
+    

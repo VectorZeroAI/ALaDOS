@@ -53,8 +53,7 @@ def new_slave_listener_thread():
             try:
                 if n.channel != "slaves_ready":
                     continue
-                instr = slave_addr_to_instr(int(n.payload), qconn)
-                executor_queue.put(instr)
+                executor_queue.put(int(n.payload))
             except Exception as e:
                 print(f"sceduler new_slave_listener_thread errored: {e}")
                 # TODO : IMPLEMENT ACTUAL LOGGING

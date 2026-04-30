@@ -7,6 +7,8 @@ import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence, TypedDict
 
+from python.sceduler.main import slave_addr_to_instr
+
 
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
@@ -49,7 +51,7 @@ class ExecutionFailed(Exception):
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
-        queue: Uqueue[instr_json],
+        queue: Uqueue[int],
         apis: Sequence[api],
         ) -> None:
 
@@ -59,7 +61,11 @@ async def core(
 
     while True:
         await checkpoint()
-        instr = await queue.get()
+
+        slave_addr = await queue.get()
+
+        instr = slave_addr_to_instr(slave_addr, conn)
+
         try:
 
             str_instr = " ".join((instr["context"], instr["instruction"]))
@@ -102,7 +108,7 @@ async def core(
                     'conn': conn,
                     'master_id': instr['master_addr'],
                     '_embedder_queue': Uqueue[ReferenceTo](),
-                    '
+                    'slave_id': slave_addr
                     }
 
             for call in tool_calls:

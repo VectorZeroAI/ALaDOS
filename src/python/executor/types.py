@@ -26,7 +26,7 @@ class instr_json(TypedDict):
     instruction: str
     master_addr: int
     context: str
-    # TODO : ADD slave address forwarding
+    slave_addr: int
 
 class tool_call(TypedDict, total=False):
     """ A single tool call, directly executable """

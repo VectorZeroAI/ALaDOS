@@ -467,7 +467,7 @@ def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfir
 @register_tool("result.write")
 def result_write(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
-    Function that writes text you provide it as the result of your instruction.
+    Writes plaintext passed in as the result to your current instruction, NOT to the master instruction.
     """
     return f"Result: {text}"
 

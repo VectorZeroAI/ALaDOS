@@ -4,14 +4,13 @@ from typing import Callable
 from ..executor.types import tool_call
 import inspect
 import re
-import psycopg
 from .types import _exec_tool_meta_data
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
 
 TOOL_USAGE_INSTRUCTION = """
-You must ALWAYS call tools, not outputting tool calls is FORBIDDEN.
+You should output tool calls. Otherwise your response will be treated as plaintext result. 
 When calling tools you must follow this instruction format:
 [
     {
@@ -63,5 +62,4 @@ def execute_tool(call: tool_call, _meta: _exec_tool_meta_data) -> None:
     return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _meta = _meta) # pyright: ignore
 
 # register all the tools
-from . import builtins # # pyright: ignore # ruff: ignore 
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

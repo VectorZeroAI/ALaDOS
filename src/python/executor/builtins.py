@@ -371,8 +371,8 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
 @register_tool("result.add_master_result")
 def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
-    This funtion adds a result for the whole master, e.g. the task that consists of many slaves.
-    Doesnt actually terminate the master, and can be used multiple times.
+    This funtion writes a result for the whole master, e.g. the task that consists of many slaves.
+    Newly written result is appended to the master result, it does not overwrite the result.
     """
     conn = _meta['conn']
     conn.execute("""

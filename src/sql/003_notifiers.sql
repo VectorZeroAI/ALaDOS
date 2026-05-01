@@ -88,9 +88,8 @@ CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
     BEGIN
         PERFORM new_slave(NEW.addr, 
-            'Your task is to decompose the following task into the initial steps, OR to directly execute the task, if the task is simple.
-            You can use "goal.add_slave" tool to add slaves. '||NEW.instruction||' You should only plan a few steps deep, and end the plan with a planner slave, for further incremental planning based on concerete results from already executed steps. 
-            and end the initial plan with an "create further plan steps" step, wich you must add via the "goal.add_planner_slave" tool OR if the task is simple, directly write a result to the master_result via the "result.addr_master_result" tool.'
+            ' Your task is to create a plan for the following instruction (wich MUST end with an planner slave IF its done) OR IF the task is simple, directly write a result via result.add_master_result tool. Master instruction: "
+            ' || NEW.instruction || '" \n You can add slaves vie "goal.add_slave" tool. Slaves are steps in the plan, wich is called master. A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all.'
         );
     RETURN NULL;
 END;

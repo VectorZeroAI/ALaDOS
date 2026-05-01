@@ -284,22 +284,6 @@ def add_slave(instruction: str,
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
-
-    Example:
-        {
-            "tool": "goal.add_slave",
-            "args": {
-                "instruction": "print 'test_slave_executed_success' to console",
-                "result_name": "printer_task"
-            }
-        },
-        {
-            "tool": "goal.add_slave",
-            "args": {
-                "required_results_names": ["printer_task"],
-                "instruction": "Print 'second_slave_executed_successfully'"
-            }
-        }
     """
     conn = _meta['conn']
     if required_results_addrs is None:
@@ -351,19 +335,17 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
                          """, (_meta['master_id'],)).fetchall()
 
-    prompt = """
-    Your task is to decide how to further proceed. For the given task, and the given results and master result, 
-    ether formulate the direct next few steps and add a planner slave, or, if the task is completed, write the results to the master result, and do not add new slaves.
-    For adding slaves and planner slaves, use the tools goal.add_slave and goal.add_planner_slave.
+    prompt  =  """
+    You task is to decide how to further proceed. For a given task,
+    the given results and the master results,
+    ether formulate the next plan steps,
+    or finalise the master result, if you already have enough information from the previous steps and their results,
+    or do nothing, if the master result is already finalised enough. 
     DO NOT ADD SLAVES WITH THE SAME TASK REPETETIVELY!!!
-    """ + special_context_str + masters_result_so_far_str
+    The task is complete if the master instruction is fully answered via the current master result. 
+    """
 
-#    prompt = """
-#    Your task is to provide additional steps for the following task, given the previous steps and their results.
-#    You must only provide the direct next steps, after wich you must add the planner step via its dedicated tool, unless the task would be done.
-#    If the task is done, add a slave that gets all the finalised results and writes them as "result.master_result".
-#    For adding new steps, use the goal.add_slave tool. For adding a planner tool, use the goal.add_planner_slave tool.
-#    """ + special_context_str + masters_result_so_far_str
+    prompt = prompt + special_context_str + masters_result_so_far_str
 
     conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"

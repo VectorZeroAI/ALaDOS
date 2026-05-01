@@ -3,10 +3,10 @@
 """
 The sceduler subsystem.
 
-Has the function setup(), wich first reconstructs the state in memory from the DB, and then spawns the thread. 
+Has the function setup(), which first reconstructs the state in memory from the DB, and then spawns the thread. 
 
 Consists of 1 thread, that listens on the "new_result_inserted" postgres chanell,
-Tracks wich tasks are already being executed, and executes all the other tasks. 
+Tracks which tasks are already being executed, and executes all the other tasks. 
 """
 
 from pydantic import TypeAdapter

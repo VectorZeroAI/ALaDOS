@@ -69,7 +69,7 @@ def embedder_thread():
                      UPDATE {desc_and_type[1]} SET emb = %s::vector(768) WHERE addr = %s;
                      """, (emb, item_addr)) # pyright: ignore
         # The table name in there is SQL schema enforced to be only knowledge or executables, so I dont see a python whitelist nesesary.
-        # The ignore is nesesary because it just says that fstring cannot be used as SQK, wich works at runtime, so I dont care.
+        # The ignore is nesesary because it just says that fstring cannot be used as SQK, which works at runtime, so I dont care.
 
 def _call_jina_embedding(api: api, text: str):
     with httpx.Client(timeout=15) as client:

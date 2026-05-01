@@ -26,7 +26,7 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _exec
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
-    Content is the actual content, and name is name wich can be used a access the item.
+    Content is the actual content, and name is name which can be used a access the item.
     Name of a knowledge item CANNOT be used in goal.add_slave required_results_names.
     """
     conn = _meta['conn']

@@ -44,7 +44,7 @@ Each task, e.g. master goal has a task shared context window. It consists of:
 - loaded addrs
 - owned entires
 
-That is managed by tools, wich are part of executor, not task manager. Task manager just loads them from the DB. 
+That is managed by tools, which are part of executor, not task manager. Task manager just loads them from the DB. 
 
 ### On startup 
 

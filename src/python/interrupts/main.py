@@ -35,7 +35,7 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
             pause_event.set()
 
             async def checkpoint():
-                """ The point at wich the function is interruptable by an interrupt. """
+                """ The point at which the function is interruptable by an interrupt. """
                 await pause_event.wait()
 
             async def listen_to(q: Uqueue[str]):

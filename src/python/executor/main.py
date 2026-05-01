@@ -64,11 +64,18 @@ async def core(
 
         slave_addr = await queue.get()
 
-        instr = slave_addr_to_instr(slave_addr, conn)
+        try:
+            instr = slave_addr_to_instr(slave_addr, conn)
+        except Exception as e:
+            print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+            conn.execute("""
+        UPDATE slaves SET status = 'error' WHERE addr = %s;
+                         """, (slave_addr,))
+            continue
 
         try:
 
-            str_instr = " ".join((instr["context"], instr["instruction"]))
+            str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
             print(str_instr)
 
             while True:

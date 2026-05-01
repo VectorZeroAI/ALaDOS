@@ -85,7 +85,7 @@ def setup():
         JOIN results r ON sr.req_addr = r.addr
         WHERE sr.slave_addr = s.addr
         AND r.ready IS FALSE
-    ) AND WHERE NOT EXISTS (
+    ) AND NOT EXISTS (
         SELECT 1 FROM results r INNER JOIN slaves s ON s.result_addr = r.addr WHERE r.ready = TRUE
     )
                  """).fetchall()

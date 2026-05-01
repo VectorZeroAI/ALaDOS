@@ -66,21 +66,27 @@ def resolve_context(slave_obj: SlaveObj):
 
     TOOL_HEADERS = "\n\n".join(HEADERS_REGISTRY.values())
 
-    return "\n\n\n".join([window_context, load_context, results_context, TOOL_HEADERS])
+    return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
+                          f"Currently loaded items are: [{load_context}]",
+                          f"Previous steps results are: [{results_context}]",
+                          f"Tool headers are: {TOOL_HEADERS}"])
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
                              """, (slave_obj["addr"], )).fetchall()
-    req_results_content = []
-    for i in req_results_addrs:
-        content = conn.execute("""
-        SELECT content_str FROM results WHERE addr = %s;
-                               """, (*i,)).fetchone()[0] # TODO : Use an IN clause insdead of a loop
-        req_results_content.append(content)
+    
+    fetch = conn.execute("""
+    SELECT r.content, s.instruction FROM results r JOIN slaves s ON s.result_addr = r.addr WHERE r.addr = ANY(%s)
+                         """, (req_results_addrs,)).fetchall()
+    req_results_str_list = []
+    for i in fetch:
+        req_results_str_list.extend(["(", "previous step instruction: ", i[1], "result it produced: ", i[0], ")"])
 
-    results_str = "\n\n".join(req_results_content)
+    req_results_str = "\n".join(req_results_str_list)
+
+    results_str = "\n\n".join(req_results_str)
     return results_str
     
 

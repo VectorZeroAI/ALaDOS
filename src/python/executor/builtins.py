@@ -51,7 +51,7 @@ def k_edit(addr: int|None = None,
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 
-    Ether addr or name must be provided
+    Either addr or name must be provided
     change is in the same format as tool.edits change format.
     """
     conn = _meta['conn']
@@ -191,8 +191,8 @@ def edit_tool(name: str|None = None,
               _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """
     Edit a tool.
-    You must provide ether header_change or body_change or new_description.
-    You must provide ether name or addr of the tool you want to edit.
+    You must provide either header_change or body_change or new_description.
+    You must provide either name or addr of the tool you want to edit.
     Header change or body change format is 'SEARCH AND REPLACE blocks'
     The format is the following:
     <SEARCH>
@@ -338,7 +338,7 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     prompt  =  """
     You task is to decide how to further proceed. For a given task,
     the given results and the master results,
-    ether formulate the next plan steps,
+    either formulate the next plan steps,
     or finalise the master result, if you already have enough information from the previous steps and their results,
     or do nothing, if the master result is already finalised enough. 
     DO NOT ADD SLAVES WITH THE SAME TASK REPETETIVELY!!!

@@ -34,11 +34,9 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
     The api calls block. Returns None if no API worked. Returns llm_result str if one API worked.
     """
     await checkpoint()
-    api_specs_sorted = insertion_sort_by_key(api_specs, 'rate_limited_until')
-    api_specs_sorted = sorted(api_specs_sorted, key=lambda x: x['rate_limited_until'])
+    api_specs_sorted = sorted(api_specs, key=lambda x: x['rate_limited_until'])
     await checkpoint()
-
-    print(f"BEGIN API CALLS BLOCK, APIS SPECS STATUS: {api_specs}")
+    print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.monotonic() for r in api_specs_sorted]}")
 
     for api_spec in api_specs_sorted:
         await checkpoint()

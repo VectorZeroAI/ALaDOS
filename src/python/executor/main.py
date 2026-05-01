@@ -5,7 +5,7 @@ import json
 import re
 import threading
 import tomllib
-from typing import Any, Callable, Coroutine, Sequence, TypedDict
+from typing import Any, Callable, Coroutine, Sequence
 
 from python.sceduler.main import slave_addr_to_instr
 
@@ -23,7 +23,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
-from .types import _exec_tool_meta_data, api, instr_json, tool_calls_block, tool_call
+from .types import _exec_tool_meta_data, api, tool_calls_block, tool_call
 from .api_calls_handler import api_calls_block
 
 config_dir = config_dir_resolver()
@@ -195,6 +195,7 @@ def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
         loop.run_until_complete(coroutine(queue, apis)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
     except Exception as e:
         print(f"CORE THREAD ERRORED OUT: {e}")
+        raise RuntimeError(f"CORE THREAD FAILED: {e}") from e
     finally:
         loop.close()
 

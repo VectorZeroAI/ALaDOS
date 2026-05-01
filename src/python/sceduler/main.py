@@ -21,6 +21,7 @@ instr_json_validator = TypeAdapter(instr_json)
 
 def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json:
     """ resolves a slave addr to an instruction object, including context resolution. """
+
     context_prefetch = conn.execute("""
     SELECT instruction, master_addr, result_name, result_addr FROM slaves WHERE addr = %s;
                                     """, (slave_addr,)).fetchone()
@@ -38,7 +39,8 @@ def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json
         "result_addr": context_prefetch[3],
         "instruction": context_prefetch[0],
         "master_addr": context_prefetch[1],
-        "context": context
+        "context": context,
+        "slave_addr": slave_addr
         })
     return instruction
 
@@ -52,11 +54,12 @@ def new_slave_listener_thread():
         for n in conn.notifies():
             try:
                 if n.channel != "slaves_ready":
+                    print(f"notification {n} arrived, but chanell wasnt slaves_ready")
                     continue
                 executor_queue.put(int(n.payload))
+                print(f"Put {int(n.payload)} into the executor queue")
             except Exception as e:
                 print(f"sceduler new_slave_listener_thread errored: {e}")
-                # TODO : IMPLEMENT ACTUAL LOGGING
                 continue
     finally:
         try:
@@ -71,6 +74,8 @@ def new_slave_listener_thread():
                
 
 def setup():
+    threading.Thread(target=new_slave_listener_thread, daemon=True).start()
+
     conn = conn_factory()
 
     unblocked_slave_addrs = conn.execute("""
@@ -80,12 +85,12 @@ def setup():
         JOIN results r ON sr.req_addr = r.addr
         WHERE sr.slave_addr = s.addr
         AND r.ready IS FALSE
+    ) AND WHERE NOT EXISTS (
+        SELECT 1 FROM results r INNER JOIN slaves s ON s.result_addr = r.addr WHERE r.ready = TRUE
     )
                  """).fetchall()
 
     for addr in unblocked_slave_addrs:
-        instruction = slave_addr_to_instr(addr[0], conn)
-        executor_queue.put(instruction)
+        executor_queue.put(addr[0])
 
-    threading.Thread(target=new_slave_listener_thread, daemon=True).start()
     print("startup of the sceduler finished.")

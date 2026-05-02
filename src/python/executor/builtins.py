@@ -342,6 +342,7 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     or finalise the master result, if you already have enough information from the previous steps and their results,
     or do nothing, if the master result is already finalised enough. 
     DO NOT ADD SLAVES WITH THE SAME TASK REPETETIVELY!!!
+    DO NOT TRY TO PLAN ALL STEPS AT ONCE.
     The task is complete if the master instruction is fully answered via the current master result. 
     """
 

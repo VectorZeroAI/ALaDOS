@@ -7,9 +7,13 @@ Architecture is simple:
     websocket for new events. 
     
 """
+from typing import TypeAlias
 from flask import Flask, request, jsonify
 from ..utils.conn_factory import conn_factory
 import psycopg
+
+ai_msg: TypeAlias = str
+h_msg: TypeAlias = str
 
 webserver = Flask(__name__)
 conn = conn_factory()
@@ -18,9 +22,9 @@ conn = conn_factory()
 def root_webpage():
     return 'MAIN PAGE! Go to /chat to chat.', 200
 
-@webserver.route('/chat', methods=['POST'])
-def chat_page():
-    return 'PLACEHOLDER PAGE, to be filled in with HTML CSS AND JS later', 200
+@webserver.route('/chat/<session_id>', methods=['POST'])
+def chat_page(session_id: int):
+    return 'PLACEHOLDER PAGE, to be filled in with HTML CSS AND JS later. Also has to somehow get the session.', 200
 
 
 @webserver.route('/_/create_session', methods=['POST'])
@@ -30,11 +34,21 @@ def create_session():
     if not data or 'first_msg' not in data:
         return jsonify({'success': False, 'reason': 'first_msg is missing from the json payload'}), 400
 
-    session_id = _create_session_sql(data['first_msg'])
+    session_name = _create_session_sql(data['first_msg'])
 
     return jsonify({
-        'success': True, 'session_id': session_id
+        'success': True, 'session_name': session_name
     }), 201
+
+
+@webserver.route("/_/load_session", methods=['POST'])
+def load_session(session_name: str):
+
+    messages_array = _get_messages(session_name)
+    
+    return jsonify(messages_array), 200
+
+
     
 
 
@@ -50,8 +64,13 @@ def _create_session_sql(first_msg: str):
     result_addr = conn.execute(r"""
     INSERT INTO results DEFAULT VALUES RETURNING addr;
                  """, (first_msg,)).fetchone()[0]
+
+    conn.execute("""
+    INSERT INTO names(addr, name) VALUES (%s, 'human_message_1')
+                 """, (result_addr,))
+
     conn.execute(r"""
-    SELECT new_slave(%s, %s, NULL, %s)
+    SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_1')
     """, (master_addr,
           'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.',
           result_addr))
@@ -60,23 +79,50 @@ def _create_session_sql(first_msg: str):
                  """, (f"User message: '{first_msg}'", result_addr))
     return session_name
 
+
+
+
+
+
+def _get_messages(session_name: str):
+    session_addr = conn.execute("""
+    SELECT resolve_name(%s)
+                 """, (session_name,) ).fetchone()[0]
     
+    human_messages = conn.execute(r"""
+SELECT r.content_str, turn AS regexp_replace(n.name, '^human_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr WHERE n.name LIKE 'human_message\_*' ORDER BY turn;
+                                  """).fetchall()
+    ai_messages = conn.execute(r"""
+SELECT r.content_str, turn AS regexp_replace(n.name, '^ai_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr, WHERE n.name LIKE 'ai_message\_*' ORDER BY turn;
+                               """).fetchall()
+
+    messages_array: list[tuple[h_msg, ai_msg]] = []
+
+    for t in human_messages[1]:
+        if not ai_messages[t][0]:
+            messages_array.append((human_messages[t][0], 'AI did not yet answer'))
+            continue
+        if not human_messages[t][0]:
+            messages_array.append(('NONE', 'NONE'))
+            continue
+
+        messages_array.append((human_messages[t][0], ai_messages[t][0]))
+
+    return messages_array
 
 
 
 
 
 
+"""
+The graph structure of messages in a session is the following:
+    result with name "human_message_{int}" --> slave with name "ai_action_{int}", on the same int = the user message and its response. 
+    So we have to iterate over the ints from max to bottom and grab those tuples, wich are r.content_str and turn id. 
+    So basically the 2 results with the same turn id, e.g. the the number at the end, are of the same turn. 
+    So we can just grab every tunrs human messages and ai_actions, via the ~ or LIKE comparasons, and then turn them into an array in python.
 
-
-
-
-
-
-
-
-
-
+"""
 
 
 

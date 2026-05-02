@@ -30,7 +30,7 @@ class Uqueue(Generic[T]):
         items = []
         while True:
             try:
-                items.append(self._queue.get())
+                items.append(self._queue.get_nowait())
             except queue.Empty:
                 break
         return items

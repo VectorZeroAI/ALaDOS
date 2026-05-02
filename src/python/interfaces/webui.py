@@ -49,6 +49,11 @@ def load_session(session_name: str):
     
     return jsonify(messages_array), 200
 
+@webserver.route("/_/submit_user_message", methods=["POST"])
+def submit_user_message():
+    data = request.get_json()
+    if not data or any('user_message', 'session_name') not in data:
+        return jsonify({'success': False, 'reason': 'provided json was invalid.', 'provided_json': data}), 500
 
     
 
@@ -78,6 +83,16 @@ def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     conn.execute(r"""
     SELECT new_result(%s, %s);
                  """, (f"User message: '{first_msg}'", usr_msg_result_addr))
+    next_user_msg_addr = conn.execute("""
+    INSERT INTO results DEFAULT VALUES RETURNING addr;
+                 """ ).fetchone()[0]
+
+    conn.execute("""
+    SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1) FROM names WHERE name LIKE 'ai_message_*')
+    """, (master_addr, 
+        'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.',
+        [next_user_msg_addr]))
+
     return session_name
 
 
@@ -112,6 +127,17 @@ SELECT r.content_str, turn AS regexp_replace(n.name, '^ai_message_', '')::int FR
     return messages_array
 
 
+
+def _submit_message(msg: str, session_name: str, conn: psycopg.Connection):
+
+    session_addr = conn.execute(r"""
+SELECT resolve_name(%s);
+                 """, (session_name,)).fetchone()[0]
+    
+
+    conn.execute("""
+    SELECT new_result()
+                 """)
 
 
 

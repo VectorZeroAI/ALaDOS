@@ -121,8 +121,8 @@ async def core(
             for call in tool_calls:
                 await checkpoint()
                 try:
-                    conn.transaction()
-                    tool_result = execute_tool(call, metadata_c)
+                    with conn.transaction():
+                        tool_result = execute_tool(call, metadata_c)
                 except Exception as e:
                     conn.rollback()
                     log_json({
@@ -153,16 +153,22 @@ async def core(
                         'new_tool_calls': new_calls
                     })
                     nresults = []
-                    for ncall in new_calls:
-                        await checkpoint()
-                        try:
-                            ntool_result = execute_tool(ncall, metadata_c)
-                        except Exception as e2:
-                            raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
-                        await checkpoint()
-                        nresults.append(ntool_result)
-                    results.extend(nresults)
+                    with conn.transaction():
+                        for ncall in new_calls:
+                            await checkpoint()
+                            try:
+                                ntool_result = execute_tool(ncall, metadata_c)
+                            except Exception as e2:
+                                raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
+                            else:
+                                conn.commit()
+                            await checkpoint()
+                            nresults.append(ntool_result)
+                        results.extend(nresults)
                     continue
+
+                else:
+                    conn.commit() # This goes to the try statement.
 
                 results.append(tool_result)
 

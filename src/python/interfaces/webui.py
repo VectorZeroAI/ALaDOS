@@ -16,7 +16,6 @@ ai_msg: TypeAlias = str
 h_msg: TypeAlias = str
 
 webserver = Flask(__name__)
-conn = conn_factory()
 
 @webserver.route('/', methods=['GET', 'POST'])
 def root_webpage():
@@ -30,11 +29,12 @@ def chat_page(session_id: int):
 @webserver.route('/_/create_session', methods=['POST'])
 def create_session():
     data = request.get_json()
+    conn = conn_factory()
 
     if not data or 'first_msg' not in data:
         return jsonify({'success': False, 'reason': 'first_msg is missing from the json payload'}), 400
 
-    session_name = _create_session_sql(data['first_msg'])
+    session_name = _create_session_sql(data['first_msg'], conn)
 
     return jsonify({
         'success': True, 'session_name': session_name
@@ -43,8 +43,9 @@ def create_session():
 
 @webserver.route("/_/load_session", methods=['POST'])
 def load_session(session_name: str):
+    conn = conn_factory()
 
-    messages_array = _get_messages(session_name)
+    messages_array = _get_messages(session_name, conn)
     
     return jsonify(messages_array), 200
 
@@ -52,31 +53,31 @@ def load_session(session_name: str):
     
 
 
-def _create_session_sql(first_msg: str):
+def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     master_addr = conn.execute(r"""
     INSERT INTO masters(instruction) VALUES('Be a good assistant to the user. Do what the user says.') RETURNING addr;
                  """).fetchone()[0]
 
     session_name = conn.execute(r"""
-    INSERT INTO names(addr, name) VALUES (%s, (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1) FROM names WHERE name ~ '^session_\d+$')
+    INSERT INTO names(addr, name) VALUES (%s, (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1) FROM names WHERE name ~ '^session_\d+$') RETURNING name;
                                 """, (master_addr, )).fetchone()[0]
 
-    result_addr = conn.execute(r"""
+    usr_msg_result_addr = conn.execute(r"""
     INSERT INTO results DEFAULT VALUES RETURNING addr;
-                 """, (first_msg,)).fetchone()[0]
+                 """ ).fetchone()[0]
 
     conn.execute("""
     INSERT INTO names(addr, name) VALUES (%s, 'human_message_1')
-                 """, (result_addr,))
+                 """, (usr_msg_result_addr,))
 
     conn.execute(r"""
     SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_1')
     """, (master_addr,
           'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.',
-          result_addr))
+          [usr_msg_result_addr]))
     conn.execute(r"""
     SELECT new_result(%s, %s);
-                 """, (f"User message: '{first_msg}'", result_addr))
+                 """, (f"User message: '{first_msg}'", usr_msg_result_addr))
     return session_name
 
 
@@ -84,7 +85,7 @@ def _create_session_sql(first_msg: str):
 
 
 
-def _get_messages(session_name: str):
+def _get_messages(session_name: str, conn: psycopg.Connection):
     session_addr = conn.execute("""
     SELECT resolve_name(%s)
                  """, (session_name,) ).fetchone()[0]

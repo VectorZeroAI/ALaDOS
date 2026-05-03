@@ -5,6 +5,7 @@ CREATE OR REPLACE FUNCTION create_session(
 RETURNS BIGINT AS $$
 DECLARE
     v_session_addr BIGINT;
+    v_session_name TEXT;
     v_usr_msg_addr BIGINT;
     v_usr_msg_placeholder_addr BIGINT;
 BEGIN
@@ -16,7 +17,7 @@ BEGIN
     INSERT INTO names(addr, name)
     VALUES (v_session_addr, 
         (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1)::text 
-            FROM names WHERE name ~ '^session_\d+$') RETURNING name);
+            FROM names WHERE name ~ '^session_\d+$') RETURNING name INTO v_session_name);
 
     INSERT INTO results DEFAULT VALUES RETURNING addr INTO v_usr_msg_addr;
     INSERT INTO names(addr, name) VALUES (v_usr_msg_addr, 'human_message_1')
@@ -35,6 +36,6 @@ BEGIN
         'ai_message_'||(SELECT MAX(regexp_replace(name, '^ai_message_', '')::int) + 1 
         FROM names WHERE name LIKE 'ai_message_%')::text)
     
-    RETURN v_session_addr;
+    RETURN v_session_name;
 END;
 $$ LANGUAGE plpgsql;

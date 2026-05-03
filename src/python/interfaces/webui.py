@@ -63,41 +63,9 @@ def submit_user_message():
 
 
 def _create_session_sql(first_msg: str, conn: psycopg.Connection):
-    master_addr = conn.execute(r"""
-                 """).fetchone()[0]
-
-    session_name = conn.execute(r"""
-INSERT INTO names(addr, name) VALUES (%s, (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1) FROM names WHERE name ~ '^session_\d+$') RETURNING name;
-                                """, (master_addr, )).fetchone()[0]
-
-    usr_msg_result_addr = conn.execute(r"""
-INSERT INTO results DEFAULT VALUES RETURNING addr;
-                 """ ).fetchone()[0]
-
-    conn.execute("""
-INSERT INTO names(addr, name) VALUES (%s, 'human_message_1')
-                 """, (usr_msg_result_addr,))
-
-    conn.execute(r"""
-SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_1')
-    """, (master_addr,
-         AI_SESSION_HANDLER_PROMPT,
-         [usr_msg_result_addr]))
-    conn.execute(r"""
-SELECT new_result(%s, %s);
-                 """, (f"User message: '{first_msg}'", usr_msg_result_addr))
-    next_user_msg_addr = conn.execute("""
-INSERT INTO results DEFAULT VALUES RETURNING addr;
-                 """ ).fetchone()[0]
-    conn.execute(r"""
-INSERT INTO names(addr, name) VALUES(%s, 'human_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1)::text FROM names WHERE name LIKE 'session\_%' ESCAPE '\')
-                 """, (next_user_msg_addr,))
-
-    conn.execute("""
-SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1)::text FROM names WHERE name LIKE 'ai_message_%')
-    """, (master_addr, 
-        AI_SESSION_HANDLER_PROMPT,
-        [next_user_msg_addr]))
+    session_name = conn.execute("""
+    SELECT create_session(%s, %s)
+                 """, (first_msg, AI_SESSION_HANDLER_PROMPT))
 
     return session_name
 

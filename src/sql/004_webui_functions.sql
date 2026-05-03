@@ -39,3 +39,46 @@ BEGIN
     RETURN v_session_name;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_messages(
+    session_name TEXT
+)
+RETURNS table(human_msg TEXT, ai_msg TEXT, turn INT) AS $$
+DECLARE
+    v_session_addr BIGINT;
+BEGIN
+    v_session_addr := resolve_name(session_name);
+
+    RETURN QUERRY
+    WITH hm AS(
+        SELECT r.content_str as message,
+            regexp_replace(name, '^human_message_', '')::int AS turn
+        FROM results r
+            INNER JOIN names n ON n.addr = r.addr
+            INNER JOIN slave_req sr ON sr.req_addr = r.addr
+            INNER JOIN slaves s ON s.addr = sr.slave_addr
+        WHERE n.name ~ 'human\_message\_%' ESCAPE '\'
+            AND s.master_addr = v_session_addr
+            AND r.ready = TRUE
+        ORDER BY turn ASC
+    ), WITH am AS (
+        SELECT r.content_str as message,
+            regexp_replace(name, '^ai_message_', '')::int AS turn
+        FROM results r
+            INNER JOIN names n ON n.addr = r.addr
+            INNER JOIN slave_req sr ON sr.req_addr = r.addr
+            INNER JOIN slaves s ON s.addr = sr.slave_addr
+        WHERE n.name ~ 'ai\_message\_%' ESCAPE '\'
+            AND s.master_addr = v_session_addr
+            AND r.ready = TRUE
+        ORDER BY turn ASC
+    )
+    SELECT hm.turn,
+        hm.message,
+        COALESCE(a.ai, 'ai did not answer yet')
+    FROM hm
+    LEFT JOIN am USING (turn)
+    ORDER BY hm.turn;
+
+END;
+$$ LANGUAGE plpgsql;

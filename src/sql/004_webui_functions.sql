@@ -73,12 +73,52 @@ BEGIN
             AND r.ready = TRUE
         ORDER BY turn ASC
     )
-    SELECT hm.turn,
-        hm.message,
-        COALESCE(a.ai, 'ai did not answer yet')
+    SELECT hm.turn as turn,
+        hm.message as human_msg,
+        COALESCE(a.ai, 'ai did not answer yet') as ai_msg
     FROM hm
     LEFT JOIN am USING (turn)
     ORDER BY hm.turn;
 
 END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION submit_human_msg(
+    msg_text TEXT,
+    session_name TEXT
+)
+RETURNS VOID AS $$
+DECLARE
+    v_session_addr BIGINT;
+    human_msg_destination_addr BIGINT;
+    next_result_addr BIGINT;
+BEGIN
+    v_session_addr := resolve_name(msg_text);
+
+    SELECT n.addr, regexp_replace(name, 'human_message_', '')::INT as turn
+    FROM names n
+        INNER JOIN results r ON r.addr = n.addr
+        INNER JOIN slave_req sr ON sr.req_addr = r.addr
+        INNER JOIN slaves s ON sr.slave_addr = s.addr
+    WHERE name ~ 'human\_message\_%' ESCAPE '\'
+        AND r.ready = FALSE
+        AND s.master_addr = v_session_addr
+    ORDER BY turn ASC
+    LIMIT 1 INTO human_msg_destination_addr;
+
+    PERFORM new_result(msg_text, human_msg_desctination_addr);
+
+    INSERT INTO results DEFAULT VALUES RETURNING addr INTO next_result_addr;
+    INSERT INTO names(addr, name) VALUES (next_result_addr, 
+        'human_message_'||(SELECT regexp_replace(name, 'human_message_', '')::int + 1 
+            FROM names WHERE name ~ 'human\_message\_%' ESCAPE '\')
+    )
+
+    PERFORM new_slave
+    
+    
+    
+    
+
 $$ LANGUAGE plpgsql;

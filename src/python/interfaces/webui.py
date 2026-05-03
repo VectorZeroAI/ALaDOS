@@ -75,29 +75,11 @@ def _create_session_sql(first_msg: str, conn: psycopg.Connection):
 
 
 def _get_messages(session_name: str, conn: psycopg.Connection):
-    session_addr = conn.execute("""
-    SELECT resolve_name(%s)
-                 """, (session_name,) ).fetchone()[0]
+
+    messages_array = conn.execute("""
+    SELECT turn, human_msg, ai_msg FROM get_messages(%s);
+                 """, (session_name)).fetchall()
     
-    human_messages = conn.execute(r"""
-SELECT r.content_str, turn AS regexp_replace(n.name, '^human_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr WHERE n.name LIKE 'human_message\_%' ORDER BY turn;
-                                  """).fetchall()
-    ai_messages = conn.execute(r"""
-SELECT r.content_str, turn AS regexp_replace(n.name, '^ai_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr, WHERE n.name LIKE 'ai_message\_%' ORDER BY turn;
-                               """).fetchall()
-
-    messages_array: list[tuple[h_msg, ai_msg]] = []
-
-    for t in human_messages[1]:
-        if not ai_messages[t][0]:
-            messages_array.append((human_messages[t][0], 'AI did not yet answer'))
-            continue
-        if not human_messages[t][0]:
-            messages_array.append(('NONE', 'NONE'))
-            continue
-
-        messages_array.append((human_messages[t][0], ai_messages[t][0]))
-
     return messages_array
 
 

@@ -86,39 +86,10 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
 
 def _submit_human_message(msg: str, session_name: str, conn: psycopg.Connection):
 
-    
-    addr_next_result = conn.execute(r"""
-SELECT n.addr
-FROM names n 
-    INNER JOIN results r ON n.addr = r.addr 
-    INNER JOIN slave_req sr ON r.addr = sr.req_addr
-    INNER JOIN slaves s ON sr.slave_addr = s.addr
-WHERE name LIKE 'human\_message\_%' ESCAPE '\'
-    AND r.ready = FALSE
-    AND s.master_addr = %s
-ORDER BY regexp_replace(n.name, '^human_message_', '')::int DESC
-LIMIT 1;
-                                        """, (session_addr,)).fetchone()[0]
-
     conn.execute("""
-SELECT new_result(%s, %s);
-                 """, (msg, addr_next_result))
-
-    new_human_msg_addr = conn.execute("""
-INSERT INTO results DEFAULT VALUES RETURNING addr;
-                 """)
-    
-    conn.execute(r"""
-INSERT INTO names(addr, name) VALUES(%s, 'human_message_'||(SELECT MAX(regexp_replace(name, '^human_message_', '')::int) FROM names WHERE name LIKE 'human\_message\_%')::text)
-                 """, (new_human_msg_addr,))
-    
-    conn.execute("""
-SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, 'ai_message'))));
-     """, (
-         session_addr,
-         AI_SESSION_HANDLER_PROMPT,
-         [new_human_msg_addr]
-     ))
+    SELECT submit_human_msg(%s, %s, %s);
+                 """, (msg, session_name, AI_SESSION_HANDLER_PROMPT))
+    return
 
 
 
@@ -132,6 +103,10 @@ The graph structure of messages in a session is the following:
 
 """
 
+"""
+My lazy ass doesnt want to refactor these notes now, but just know that they may not be valid any longer,
+because I added a metadata JSONB field to the results table, where a lot of the stuff that I used a ton of logic to infer just lives plaintext now.
+"""
 
 
 """

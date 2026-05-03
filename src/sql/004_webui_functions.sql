@@ -13,28 +13,45 @@ BEGIN
     VALUES('YOU WILL BE ANSWERING HUMAN MESSAGES.
         THERE IS NO NEED TO PLAN ANYTHING. JUST OUTPUT OKAY AND THATS IT.')
     RETURNING addr INTO v_session_addr;
+
+    INSERT INTO names(addr, name) VALUES(
+        v_session_addr, 'session_'||(SELECT COALESCE(MAX(
+                (regexp_replace(name, 'session_', '')::int) + 1 
+            ), 0))::TEXT
+    ) RETURNING name INTO v_session_name;
     
-    INSERT INTO names(addr, name)
-    VALUES (v_session_addr, 
-        (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1)::text 
-            FROM names WHERE name ~ '^session_\d+$') RETURNING name INTO v_session_name);
+    INSERT INTO results (metadata) VALUES (
+        jsonb_build_object('type', 'human_message',
+            'turn', 1,
+            'session_name', 
+    )) RETURNING addr INTO v_usr_msg_addr;
 
-    INSERT INTO results DEFAULT VALUES RETURNING addr INTO v_usr_msg_addr;
-    INSERT INTO names(addr, name) VALUES (v_usr_msg_addr, 'human_message_1')
-
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_msg_addr), NULL, 'ai_message_1');
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_msg_addr), NULL, NULL, 
+        jsonb_build_object(
+            'type', 'human_message',
+            'turn', 1,
+            'session_name', v_session_name
+        )
+    );
 
     PERFORM new_result('User message: "'||p_first_msg||' "', v_usr_msg_addr);
     
-    INSERT INTO results DEFAULT VALUES RETURNING addr INTO v_usr_placeholder_addr;
-    INSERT INTO names(addr, name) VALUES(v_usr_placeholder_addr,
-        'human_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1)::text
-        FROM names 
-        WHERE name LIKE 'session\_%' ESCAPE '\')
+    INSERT INTO results(metadata) VALUES (
+        jsonv_build_object(
+            'type', 'human_message', 
+            'session_name', v_session_name,
+            'turn', 2
+        )
+    ) RETURNING addr INTO v_usr_placeholder_addr;
     
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_placeholder_addr), NULL,
-        'ai_message_'||(SELECT MAX(regexp_replace(name, '^ai_message_', '')::int) + 1 
-        FROM names WHERE name LIKE 'ai_message_%')::text)
+    
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_placeholder_addr), NULL, NULL,
+        jsonb_build_object(
+            'type', 'ai_message',
+            'session_name', v_session_name,
+            'turn', 2
+        )
+    )
     
     RETURN v_session_name;
 END;
@@ -51,26 +68,18 @@ BEGIN
 
     RETURN QUERRY
     WITH hm AS(
-        SELECT r.content_str as message,
-            regexp_replace(name, '^human_message_', '')::int AS turn
-        FROM results r
-            INNER JOIN names n ON n.addr = r.addr
-            INNER JOIN slave_req sr ON sr.req_addr = r.addr
-            INNER JOIN slaves s ON s.addr = sr.slave_addr
-        WHERE n.name ~ 'human\_message\_%' ESCAPE '\'
-            AND s.master_addr = v_session_addr
-            AND r.ready = TRUE
+        SELECT content_str AS message, (metadata->>'turn')::int AS turn
+        FROM results
+        WHERE ready = TRUE
+            AND metadata->>'type' = 'human_message'
+            AND metadata->>'session_name' = session_name
         ORDER BY turn ASC
     ), WITH am AS (
-        SELECT r.content_str as message,
-            regexp_replace(name, '^ai_message_', '')::int AS turn
-        FROM results r
-            INNER JOIN names n ON n.addr = r.addr
-            INNER JOIN slave_req sr ON sr.req_addr = r.addr
-            INNER JOIN slaves s ON s.addr = sr.slave_addr
-        WHERE n.name ~ 'ai\_message\_%' ESCAPE '\'
-            AND s.master_addr = v_session_addr
-            AND r.ready = TRUE
+        SELECT content as message, (metadata ->> 'turn')::int AS turn
+        FROM results
+        WHERE ready = TRUE
+            AND metadata->>'type' = 'ai_message'
+            AND metadata->>'session_name' = p_session_name
         ORDER BY turn ASC
     )
     SELECT hm.turn as turn,

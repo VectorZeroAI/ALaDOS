@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS results (
     ready BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT, -- Status, e.g. error, paradox, impossible instruction.
     status_inf JSONB, -- additional unstructured information, with per status different keys and values.
-    metadata JSONB,
+    metadata JSONB, -- for things such as type for webui sessions, and other crap
     CONSTRAINT content_present_when_ready CHECK (
         (ready IS FALSE AND content_str IS NULL)
         OR 

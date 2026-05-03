@@ -86,37 +86,44 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION submit_human_msg(
     msg_text TEXT,
-    session_name TEXT
+    session_name TEXT,
+    ai_instruction TEXT,
 )
 RETURNS VOID AS $$
 DECLARE
-    v_session_addr BIGINT;
+    session_addr BIGINT;
     human_msg_destination_addr BIGINT;
     next_result_addr BIGINT;
+    next_result_turn INT;
 BEGIN
-    v_session_addr := resolve_name(msg_text);
+    session_addr := resolve_name(session_name);
 
-    SELECT n.addr, regexp_replace(name, 'human_message_', '')::INT as turn
-    FROM names n
-        INNER JOIN results r ON r.addr = n.addr
-        INNER JOIN slave_req sr ON sr.req_addr = r.addr
-        INNER JOIN slaves s ON sr.slave_addr = s.addr
-    WHERE name ~ 'human\_message\_%' ESCAPE '\'
-        AND r.ready = FALSE
-        AND s.master_addr = v_session_addr
-    ORDER BY turn ASC
+    SELECT addr FROM results
+    WHERE metadata->>'type' = 'human_message'
+        AND metadata->>'session_name' = p_session_name
+    ORDER BY metadata->>'turn'::int
     LIMIT 1 INTO human_msg_destination_addr;
 
     PERFORM new_result(msg_text, human_msg_desctination_addr);
 
-    INSERT INTO results DEFAULT VALUES RETURNING addr INTO next_result_addr;
-    INSERT INTO names(addr, name) VALUES (next_result_addr, 
-        'human_message_'||(SELECT regexp_replace(name, 'human_message_', '')::int + 1 
-            FROM names WHERE name ~ 'human\_message\_%' ESCAPE '\')
-    )
+    SELECT MAX((metadata ->> 'turn')::int) + 1
+    FROM results
+    WHERE metadata @> jsonb_build_object('type', 'human_message', 'session_name', p_session_name)
+    INTO next_result_turn;
 
-    
-    
-    
+    INSERT INTO results(metadata) 
+    VALUES (jsonb_build_object('type', 'human_message',
+            'session_name', p_session_name,
+            'turn', next_result_turn))
+    RETURNING addr INTO next_result_addr;
 
+    PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY(next_result_addr), NULL, NULL, 
+        jsonb_build_object('type', 'ai_message',
+            'turn', next_result_turn,
+            'session_name', p_session_name
+        )
+    );
+    RETURN NULL;
+
+END;
 $$ LANGUAGE plpgsql;

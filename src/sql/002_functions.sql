@@ -4,7 +4,8 @@ CREATE OR REPLACE FUNCTION new_slave(
     p_name TEXT DEFAULT NULL,
     p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
-    p_result_name TEXT DEFAULT NULL
+    p_result_name TEXT DEFAULT NULL,
+    p_result_metadata JSONB DEFAULT NULL
     )
 
     RETURNS BIGINT AS $$
@@ -18,9 +19,7 @@ CREATE OR REPLACE FUNCTION new_slave(
         new_slave_addr := new_addr();
         v_result_addr := COALESCE(p_result_addr, new_addr());
 
-        IF p_result_addr IS NULL THEN
-            INSERT INTO results (addr) VALUES (v_result_addr);
-        END IF;
+        INSERT INTO results (addr, metadata) VALUES (v_result_addr, p_result_metadata);
 
         IF p_result_name IS NOT NULL THEN
             INSERT INTO names (addr, name) VALUES (v_result_addr, p_result_name);

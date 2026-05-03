@@ -7,13 +7,17 @@ Architecture is simple:
     websocket for new events. 
     
 """
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 from flask import Flask, request, jsonify
 from ..utils.conn_factory import conn_factory
 import psycopg
 
 ai_msg: TypeAlias = str
 h_msg: TypeAlias = str
+
+
+AI_SESSION_HANDLER_PROMPT = 'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.'
+
 
 webserver = Flask(__name__)
 
@@ -60,37 +64,40 @@ def submit_user_message():
 
 def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     master_addr = conn.execute(r"""
-    INSERT INTO masters(instruction) VALUES('Be a good assistant to the user. Do what the user says.') RETURNING addr;
+INSERT INTO masters(instruction) VALUES('YOU WILL BE ANSWERING HUMAN MESSAGES. THERE IS NO NEED TO PLAN ANYTHING. JUST OUTPUT OKAY AND THATS IT.') RETURNING addr;
                  """).fetchone()[0]
 
     session_name = conn.execute(r"""
-    INSERT INTO names(addr, name) VALUES (%s, (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1) FROM names WHERE name ~ '^session_\d+$') RETURNING name;
+INSERT INTO names(addr, name) VALUES (%s, (SELECT 'session_'||(COALESCE(MAX(regexp_replace(name, '^session_', '')::int), 0) + 1) FROM names WHERE name ~ '^session_\d+$') RETURNING name;
                                 """, (master_addr, )).fetchone()[0]
 
     usr_msg_result_addr = conn.execute(r"""
-    INSERT INTO results DEFAULT VALUES RETURNING addr;
+INSERT INTO results DEFAULT VALUES RETURNING addr;
                  """ ).fetchone()[0]
 
     conn.execute("""
-    INSERT INTO names(addr, name) VALUES (%s, 'human_message_1')
+INSERT INTO names(addr, name) VALUES (%s, 'human_message_1')
                  """, (usr_msg_result_addr,))
 
     conn.execute(r"""
-    SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_1')
+SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_1')
     """, (master_addr,
-          'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.',
-          [usr_msg_result_addr]))
+         AI_SESSION_HANDLER_PROMPT,
+         [usr_msg_result_addr]))
     conn.execute(r"""
-    SELECT new_result(%s, %s);
+SELECT new_result(%s, %s);
                  """, (f"User message: '{first_msg}'", usr_msg_result_addr))
     next_user_msg_addr = conn.execute("""
-    INSERT INTO results DEFAULT VALUES RETURNING addr;
+INSERT INTO results DEFAULT VALUES RETURNING addr;
                  """ ).fetchone()[0]
+    conn.execute(r"""
+INSERT INTO names(addr, name) VALUES(%s, 'human_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1)::text FROM names WHERE name LIKE 'session\_%' ESCAPE '\')
+                 """, (next_user_msg_addr,))
 
     conn.execute("""
-    SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1) FROM names WHERE name LIKE 'ai_message_*')
+SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, '^session_', '')::int) + 1)::text FROM names WHERE name LIKE 'ai_message_%')
     """, (master_addr, 
-        'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.',
+        AI_SESSION_HANDLER_PROMPT,
         [next_user_msg_addr]))
 
     return session_name
@@ -106,10 +113,10 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
                  """, (session_name,) ).fetchone()[0]
     
     human_messages = conn.execute(r"""
-SELECT r.content_str, turn AS regexp_replace(n.name, '^human_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr WHERE n.name LIKE 'human_message\_*' ORDER BY turn;
+SELECT r.content_str, turn AS regexp_replace(n.name, '^human_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr WHERE n.name LIKE 'human_message\_%' ORDER BY turn;
                                   """).fetchall()
     ai_messages = conn.execute(r"""
-SELECT r.content_str, turn AS regexp_replace(n.name, '^ai_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr, WHERE n.name LIKE 'ai_message\_*' ORDER BY turn;
+SELECT r.content_str, turn AS regexp_replace(n.name, '^ai_message_', '')::int FROM results INNER JOIN names ON r.addr = n.addr, WHERE n.name LIKE 'ai_message\_%' ORDER BY turn;
                                """).fetchall()
 
     messages_array: list[tuple[h_msg, ai_msg]] = []
@@ -134,10 +141,38 @@ def _submit_message(msg: str, session_name: str, conn: psycopg.Connection):
 SELECT resolve_name(%s);
                  """, (session_name,)).fetchone()[0]
     
+    addr_next_result = conn.execute(r"""
+SELECT n.addr
+FROM names n 
+    INNER JOIN results r ON n.addr = r.addr 
+    INNER JOIN slave_req sr ON r.addr = sr.req_addr
+    INNER JOIN slaves s ON sr.slave_addr = s.addr
+WHERE name LIKE 'human\_message\_%' ESCAPE '\'
+    AND r.ready = FALSE
+    AND s.master_addr = %s
+ORDER BY regexp_replace(n.name, '^human_message_', '')::int DESC
+LIMIT 1;
+                                        """, (session_addr,)).fetchone()[0]
 
     conn.execute("""
-    SELECT new_result()
+SELECT new_result(%s, %s);
+                 """, (msg, addr_next_result))
+
+    new_human_msg_addr = conn.execute("""
+INSERT INTO results DEFAULT VALUES RETURNING addr;
                  """)
+    
+    conn.execute(r"""
+INSERT INTO names(addr, name) VALUES(%s, 'human_message_'||(SELECT MAX(regexp_replace(name, '^human_message_', '')::int) FROM names WHERE name LIKE 'human\_message\_%')::text)
+                 """, (new_human_msg_addr,))
+    
+    conn.execute("""
+SELECT new_slave(%s, %s, NULL, %s, NULL, 'ai_message_'||(SELECT MAX(regexp_replace(name, 'ai_message'))));
+     """, (
+         session_addr,
+         AI_SESSION_HANDLER_PROMPT,
+         [new_human_msg_addr]
+     ))
 
 
 

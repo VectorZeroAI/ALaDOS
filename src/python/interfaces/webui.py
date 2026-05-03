@@ -84,11 +84,8 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
 
 
 
-def _submit_message(msg: str, session_name: str, conn: psycopg.Connection):
+def _submit_human_message(msg: str, session_name: str, conn: psycopg.Connection):
 
-    session_addr = conn.execute(r"""
-SELECT resolve_name(%s);
-                 """, (session_name,)).fetchone()[0]
     
     addr_next_result = conn.execute(r"""
 SELECT n.addr

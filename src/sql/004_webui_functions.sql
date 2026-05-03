@@ -115,8 +115,6 @@ BEGIN
             FROM names WHERE name ~ 'human\_message\_%' ESCAPE '\')
     )
 
-    PERFORM new_slave
-    
     
     
     

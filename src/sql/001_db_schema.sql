@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS results (
     ready BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT, -- Status, e.g. error, paradox, impossible instruction.
     status_inf JSONB, -- additional unstructured information, with per status different keys and values.
+    metadata JSONB,
     CONSTRAINT content_present_when_ready CHECK (
         (ready IS FALSE AND content_str IS NULL)
         OR 
@@ -147,7 +148,7 @@ CREATE TABLE IF NOT EXISTS slave_req (
         REFERENCES slaves(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    req_addr BIGINT 
+    req_addr BIGINT
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,

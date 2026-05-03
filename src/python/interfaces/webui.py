@@ -55,9 +55,12 @@ def load_session(session_name: str):
 
 @webserver.route("/_/submit_user_message", methods=["POST"])
 def submit_user_message():
+    conn = conn_factory()
     data = request.get_json()
-    if not data or any('user_message', 'session_name') not in data:
+    if not data or any(['user_message', 'session_name']) not in data:
         return jsonify({'success': False, 'reason': 'provided json was invalid.', 'provided_json': data}), 500
+    _submit_human_message(data['user_message'], data['session_name'], conn)
+    return jsonify({'success': True}), 200
 
     
 

@@ -64,7 +64,6 @@ def submit_user_message():
 
 def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     master_addr = conn.execute(r"""
-INSERT INTO masters(instruction) VALUES('YOU WILL BE ANSWERING HUMAN MESSAGES. THERE IS NO NEED TO PLAN ANYTHING. JUST OUTPUT OKAY AND THATS IT.') RETURNING addr;
                  """).fetchone()[0]
 
     session_name = conn.execute(r"""

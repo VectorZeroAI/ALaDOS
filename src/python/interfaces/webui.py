@@ -7,8 +7,8 @@ Architecture is simple:
     websocket for new events. 
     
 """
-from typing import Literal, TypeAlias
-from flask import Flask, request, jsonify
+from typing import Generator, Literal, TypeAlias
+from flask import Flask, Response, request, jsonify
 from ..utils.conn_factory import conn_factory
 import psycopg
 
@@ -53,28 +53,49 @@ def load_session(session_name: str):
     
     return jsonify(messages_array), 200
 
+
 @webserver.route("/_/submit_user_message", methods=["POST"])
 def submit_user_message():
     conn = conn_factory()
+
     data = request.get_json()
+
     if not data or any(['user_message', 'session_name']) not in data:
         return jsonify({'success': False, 'reason': 'provided json was invalid.', 'provided_json': data}), 500
+
     _submit_human_message(data['user_message'], data['session_name'], conn)
+
     return jsonify({'success': True}), 200
 
-    
+
+@webserver.route('/_/ai_msg_stream', methods=['POST'])
+def stream_ai_responses():
+    conn = conn_factory()
+    data = request.json()
+
+    if not data or 'session' in data:
+        return jsonify({'success': False, 'reason': 'session or json not present in json', 'json': data}), 500
+
+    def ai_messages_yielder():
+        conn.execute("LISTEN %s", (data['session'],))
+        for n in conn.notifies():
+            if not n.channel == data['session']:
+                continue
+            yield n.payload
+
+    return Response(
+        ai_messages_yielder(),
+        mimetype='text/event-stream',
+        headers={"Cache-Control": 'no-cache', "X-Accel-Buffering": 'no'}
+    )
 
 
 def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     session_name = conn.execute("""
-    SELECT create_session(%s, %s)
-                 """, (first_msg, AI_SESSION_HANDLER_PROMPT))
+    SELECT create_session(%s, %s);
+                 """, (first_msg, AI_SESSION_HANDLER_PROMPT)).fetchone()[0]
 
     return session_name
-
-
-
-
 
 
 def _get_messages(session_name: str, conn: psycopg.Connection):
@@ -86,13 +107,13 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
     return messages_array
 
 
-
 def _submit_human_message(msg: str, session_name: str, conn: psycopg.Connection):
 
     conn.execute("""
     SELECT submit_human_msg(%s, %s, %s);
                  """, (msg, session_name, AI_SESSION_HANDLER_PROMPT))
     return
+
 
 
 

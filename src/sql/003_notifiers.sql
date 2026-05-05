@@ -114,3 +114,13 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER init_master_context
 AFTER INSERT ON masters
 FOR EACH ROW EXECUTE FUNCTION init_master_context();
+
+
+CREATE OR REPLACE FUNCTION notify_for_ai_msg();
+RETURNS TRIGGER AS $$
+    BEGIN
+        IF NEW.metadata->>'type' = 'ai_message' THEN
+            NOTIFY NEW.metadata ->> 'session_name', 'ai_message'||NEW.content_str::TEXT
+        END IF;
+    END
+$$ LANGUAGE plpgsql;

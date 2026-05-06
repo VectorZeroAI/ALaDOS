@@ -80,20 +80,14 @@ def setup():
 
     unblocked_slave_addrs = conn.execute("""
     SELECT s.addr FROM slaves s
+        INNER JOIN results own ON s.result_addr = own.addr
     WHERE NOT EXISTS (
         SELECT 1
         FROM slave_req sr
             INNER JOIN results r ON sr.req_addr = r.addr
         WHERE sr.slave_addr = s.addr
             AND r.ready IS FALSE
-    ) AND NOT EXISTS (
-        SELECT 1
-        FROM results r2
-            INNER JOIN slaves s2 ON s2.result_addr = r.addr
-        WHERE s2.addr = s.addr
-            AND r2.ready IS TRUE
-    )
-
+    ) AND own.ready = FALSE
                                          """).fetchall()
 
     for addr in unblocked_slave_addrs:

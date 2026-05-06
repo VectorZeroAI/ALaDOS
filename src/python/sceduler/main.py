@@ -81,14 +81,14 @@ def setup():
     unblocked_slave_addrs = conn.execute("""
     SELECT s.addr FROM slaves s
     WHERE NOT EXISTS (
-        SELECT 1 FROM slave_req sr
-        JOIN results r ON sr.req_addr = r.addr
+        SELECT 1
+        FROM slave_req sr
+            INNER JOIN results r ON sr.req_addr = r.addr
+            INNER JOIN results r2 ON s.result_addr = r2.addr
         WHERE sr.slave_addr = s.addr
-        AND r.ready IS FALSE
-    ) AND NOT EXISTS (
-        SELECT 1 FROM results r INNER JOIN slaves s ON s.result_addr = r.addr WHERE r.ready = TRUE
-    )
-                 """).fetchall()
+            AND r.ready IS FALSE
+            AND r2.ready IS FALSE
+    )                 """).fetchall()
 
     for addr in unblocked_slave_addrs:
         executor_queue.put(addr[0])

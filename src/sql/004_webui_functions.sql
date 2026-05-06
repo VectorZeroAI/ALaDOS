@@ -28,7 +28,7 @@ BEGIN
 
     PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_msg_addr), NULL, NULL, 
         jsonb_build_object(
-            'type', 'human_message',
+            'type', 'ai_message',
             'turn', 1,
             'session_name', v_session_name
         )

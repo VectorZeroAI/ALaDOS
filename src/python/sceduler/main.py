@@ -84,11 +84,17 @@ def setup():
         SELECT 1
         FROM slave_req sr
             INNER JOIN results r ON sr.req_addr = r.addr
-            INNER JOIN results r2 ON s.result_addr = r2.addr
         WHERE sr.slave_addr = s.addr
             AND r.ready IS FALSE
-            AND r2.ready IS FALSE
-    )                 """).fetchall()
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM results r2
+            INNER JOIN slaves s2 ON s2.result_addr = r.addr
+        WHERE s2.addr = s.addr
+            AND r2.ready IS TRUE
+    )
+
+                                         """).fetchall()
 
     for addr in unblocked_slave_addrs:
         executor_queue.put(addr[0])

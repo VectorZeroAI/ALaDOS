@@ -30,16 +30,16 @@ CREATE OR REPLACE FUNCTION position_calculation()
         item_2_distance_e DOUBLE PRECISION;
     BEGIN 
         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos, item_1_distance
-        FROM knowledge WHERE emb IS NOT NULL ORDER BY distance LIMIT 1;
+        FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
 
         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos_e, item_1_distance_e
-        FROM executables WHERE emb IS NOT NULL ORDER BY distance LIMIT 1;
+        FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
         
         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
-        FROM knowledge WHERE emb IS NOT NULL ORDER BY distance LIMIT 1 OFFSET 1;
+        FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
 
         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos_e, item_2_distance_e
-        FROM executables WHERE emb IS NOT NULL ORDER BY distance LIMIT 1 OFFSET 1;
+        FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
 
         IF item_1_distance_e < item_1_distance THEN
             item_1_distance := item_1_distance_e;

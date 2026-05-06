@@ -23,7 +23,7 @@ BEGIN
     INSERT INTO results (metadata) VALUES (
         jsonb_build_object('type', 'human_message',
             'turn', 1,
-            'session_name', 
+            'session_name', v_session_name
     )) RETURNING addr INTO v_usr_msg_addr;
 
     PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_msg_addr), NULL, NULL, 
@@ -74,7 +74,7 @@ BEGIN
             AND metadata->>'type' = 'human_message'
             AND metadata->>'session_name' = session_name
         ORDER BY turn ASC
-    ), WITH am AS (
+    ), am AS (
         SELECT content as message, (metadata ->> 'turn')::int AS turn
         FROM results
         WHERE ready = TRUE
@@ -84,7 +84,7 @@ BEGIN
     )
     SELECT hm.turn as turn,
         hm.message as human_msg,
-        COALESCE(a.ai, 'ai did not answer yet') as ai_msg
+        COALESCE(am.ai, 'ai did not answer yet') as ai_msg
     FROM hm
     LEFT JOIN am USING (turn)
     ORDER BY hm.turn;
@@ -96,7 +96,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION submit_human_msg(
     msg_text TEXT,
     session_name TEXT,
-    ai_instruction TEXT,
+    ai_instruction TEXT
 )
 RETURNS VOID AS $$
 DECLARE

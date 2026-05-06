@@ -116,7 +116,7 @@ AFTER INSERT ON masters
 FOR EACH ROW EXECUTE FUNCTION init_master_context();
 
 
-CREATE OR REPLACE FUNCTION notify_for_ai_msg();
+CREATE OR REPLACE FUNCTION notify_for_ai_msg);
 RETURNS TRIGGER AS $$
     BEGIN
         IF NEW.metadata->>'type' = 'ai_message' THEN

@@ -116,7 +116,7 @@ AFTER INSERT ON masters
 FOR EACH ROW EXECUTE FUNCTION init_master_context();
 
 
-CREATE OR REPLACE FUNCTION notify_for_ai_msg);
+CREATE OR REPLACE FUNCTION notify_for_ai_msg()
 RETURNS TRIGGER AS $$
     BEGIN
         IF NEW.metadata->>'type' = 'ai_message' THEN
@@ -124,3 +124,7 @@ RETURNS TRIGGER AS $$
         END IF;
     END
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER notify_for_ai_msg
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION notify_for_ai_msg();

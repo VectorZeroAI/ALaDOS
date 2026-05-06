@@ -37,7 +37,7 @@ BEGIN
     PERFORM new_result('User message: "'||p_first_msg||' "', v_usr_msg_addr);
     
     INSERT INTO results(metadata) VALUES (
-        jsonv_build_object(
+        jsonb_build_object(
             'type', 'human_message', 
             'session_name', v_session_name,
             'turn', 2
@@ -66,7 +66,7 @@ DECLARE
 BEGIN
     v_session_addr := resolve_name(session_name);
 
-    RETURN QUERRY
+    RETURN QUERY
     WITH hm AS(
         SELECT content_str AS message, (metadata->>'turn')::int AS turn
         FROM results
@@ -84,7 +84,7 @@ BEGIN
     )
     SELECT hm.turn as turn,
         hm.message as human_msg,
-        COALESCE(am.ai, 'ai did not answer yet') as ai_msg
+        COALESCE(am.message, 'ai did not answer yet') as ai_msg
     FROM hm
     LEFT JOIN am USING (turn)
     ORDER BY hm.turn;
@@ -109,7 +109,8 @@ BEGIN
 
     SELECT addr FROM results
     WHERE metadata->>'type' = 'human_message'
-        AND metadata->>'session_name' = p_session_name
+        AND metadata->>'session_name' = session_name
+        AND ready = FALSE
     ORDER BY metadata->>'turn'::int
     LIMIT 1 INTO human_msg_destination_addr;
 
@@ -117,19 +118,19 @@ BEGIN
 
     SELECT MAX((metadata ->> 'turn')::int) + 1
     FROM results
-    WHERE metadata @> jsonb_build_object('type', 'human_message', 'session_name', p_session_name)
+    WHERE metadata @> jsonb_build_object('type', 'human_message', 'session_name', session_name)
     INTO next_result_turn;
 
     INSERT INTO results(metadata) 
     VALUES (jsonb_build_object('type', 'human_message',
-            'session_name', p_session_name,
+            'session_name', session_name,
             'turn', next_result_turn))
     RETURNING addr INTO next_result_addr;
 
     PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY(next_result_addr), NULL, NULL, 
         jsonb_build_object('type', 'ai_message',
             'turn', next_result_turn,
-            'session_name', p_session_name
+            'session_name', session_name
         )
     );
     RETURN NULL;

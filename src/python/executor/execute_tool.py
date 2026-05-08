@@ -63,3 +63,4 @@ def execute_tool(call: tool_call, _meta: _exec_tool_meta_data) -> None:
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!
+from . import builtins

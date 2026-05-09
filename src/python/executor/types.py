@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import TypeAlias, TypedDict, Optional, List
+from typing import Literal, Sequence, TypeAlias, TypedDict, Optional, List
 import psycopg
 from pydantic import JsonValue
 from python.utils.uqueue import Uqueue
@@ -9,6 +9,14 @@ from python.utils.uqueue import Uqueue
 JsonSerializable: TypeAlias = JsonValue
 
 addr: TypeAlias = int
+
+slave_scope: TypeAlias = Sequence[
+    Literal['all']|
+    Literal['general']|
+    Literal['context']|
+    Literal['task']|
+    Literal['communication']
+]
 
 class api(TypedDict, total=False):
     """ An api endpoint representation """
@@ -33,7 +41,7 @@ class tool_call(TypedDict, total=False):
     tool: str
     args: Optional[dict[str, JsonSerializable]]
 
-tool_calls_block: TypeAlias = List[tool_call]
+tool_calls_block: TypeAlias = list[tool_call]
 
 class _exec_tool_meta_data(TypedDict):
     """ Typed dict for the metadata transfer to the executed tools. """

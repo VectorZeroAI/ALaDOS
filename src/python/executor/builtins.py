@@ -5,6 +5,7 @@ from typing import Sequence, TypeAlias, get_args
 
 from numpy import ndarray
 import psycopg
+from psycopg.types.json import Jsonb
 from .execute_tool import register_tool
 import subprocess
 import re
@@ -36,11 +37,6 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
     return (search, replacement)
 
 
-# EXAMPLE: 
-@register_tool("print.to_console")
-def print_to_console(input_str: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
-    print(input_str)
-    return "printed something to console."
 
 @register_tool("K.create", ['all', 'general', 'context'])
 def k_create(content: str, description: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
@@ -62,6 +58,8 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
     _meta['_embedder_queue'].put(addr)
 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
+
+
 
 @register_tool("K.edit", ['all', 'general', 'context'])
 def k_edit(addr: int|None = None,
@@ -109,6 +107,8 @@ def k_edit(addr: int|None = None,
 
 
 
+
+
 @register_tool("K.read", ['all', 'general', 'context'])
 def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
@@ -125,6 +125,8 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
         raise TypeError("ADDR OR NAME MUST BE PROVIDED")
 
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
+
+
 
 @register_tool("tool.execute", ['all', 'general'])
 def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
@@ -158,6 +160,8 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
                                  )
 
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
+
+
 
 @register_tool("tool.create", ['all', 'context'])
 def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
@@ -261,6 +265,9 @@ def edit_tool(name: str|None = None,
 
     return f"Applied the edits to the tool {name}@{addr}"
 
+
+
+
 @register_tool("context.add", ['all', 'general', 'context'])
 def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
@@ -274,6 +281,9 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_meta['master_id'], addr))
     return f"Added context {name if name is not None else "No name"}@{addr}."
+
+
+
 
 @register_tool("goal.add_slave", ['all', 'general', 'task'])
 def add_slave(instruction: str,
@@ -308,6 +318,9 @@ def add_slave(instruction: str,
         """, 
     (_meta['master_id'], instruction, slave_name, required_results_addrs, None, result_name, slave_type))
     return "Added a new slave"
+
+
+
 
 @register_tool("goal.add_planner_slave", ['all', 'task'])
 def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
@@ -359,6 +372,9 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"
 
+
+
+
 @register_tool("result.add_master_result", ALL)
 def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
@@ -370,6 +386,9 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation
     UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
                  """, (text, _meta['master_id']))
     return "Added a master result."
+
+
+
 
 @register_tool("context.window.semantic_land", ['all', 'context'])
 def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
@@ -390,6 +409,9 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
     SELECT s_land(%s, %s::vector(768))
                  """, (_meta['master_id'], emb))
     return 'Semantically moved the viewing window anchor.'
+
+
+
 
 @register_tool("context.window.land_by_addr", ['all', 'context'])
 def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
@@ -428,6 +450,9 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
     return f"Moved context window center to {addr}"
 
 
+
+
+
 @register_tool("context.window.change_size", ['all', 'context'])
 def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
@@ -440,6 +465,9 @@ def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMe
     UPDATE master_context SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
                  """, (left, right, _meta['master_id']))
     return "Changed context window size."
+
+
+
 
 @register_tool("context.window.move_anchor", ['all', 'context'])
 def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
@@ -455,6 +483,9 @@ def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmat
     return "moved context window anchor"
 
 
+
+
+
 @register_tool("result.write", ALL)
 def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
@@ -463,16 +494,25 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     return f"Result: {text}"
 
 
-def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def report_paradoxal_information(items: Sequence[str|int], paradox: str, proceed: bool, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
     paradox: the paradox in the information
     items: the list of items addresses or names that contain the paradoxal information.
+    proceed: the boolean flag that signals if you can proceed with the information as is, or if you require the paradoxes resolution before proceeding. 
     """
 
     conn = _meta['conn']
+    if not proceed:
+        conn.execute("""
+        UPDATE results r 
+            JOIN slaves s ON s.result_addr = r.addr
+        SET r.status = 'paradox',
+            r.status_inf = %s
+        WHERE s.addr = %s;
+        """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))
+        raise 
 
-    conn.execute("""
-    SELECT new_slave(%s, %s, '__paradox_recovery', %s);
-                 """, (_meta['master_id'], _meta['']))
-    
+
+
+

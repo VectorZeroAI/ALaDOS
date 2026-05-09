@@ -51,10 +51,12 @@ def _construct_header(func: Callable, name: str|None = None) -> str:
     return signature_str
 
 
-def register_tool(name: str|None = None):
+def register_tool(name: str|None = None, scope: list[str] = ['all', 'general'] ):
     def decorator(func: Callable):
         TOOL_REGISTRY[name or func.__name__] = func
-        HEADERS_REGISTRY[name or func.__name__] = _construct_header(func, name)
+        header = _construct_header(func, name)
+        for i in scope:
+            HEADERS_REGISTRY[i] = header
         return func
     return decorator
 

@@ -23,7 +23,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
-from .types import _exec_tool_meta_data, api, tool_calls_block, tool_call
+from .types import _ExecToolMetaData, api, tool_calls_block, tool_call
 from .api_calls_handler import api_calls_block
 
 config_dir = config_dir_resolver()
@@ -111,7 +111,7 @@ async def core(
 
             results = []
 
-            metadata_c: _exec_tool_meta_data = {
+            metadata_c: _ExecToolMetaData = {
                     'conn': conn,
                     'master_id': instr['master_addr'],
                     '_embedder_queue': Uqueue[ReferenceTo](),

@@ -5,7 +5,8 @@ CREATE OR REPLACE FUNCTION new_slave(
     p_requires BIGINT[] DEFAULT NULL,
     p_result_addr BIGINT DEFAULT NULL,
     p_result_name TEXT DEFAULT NULL,
-    p_result_metadata JSONB DEFAULT NULL
+    p_result_metadata JSONB DEFAULT NULL,
+    p_slave_scope slave_scope DEFAULT 'general'
     )
 
     RETURNS BIGINT AS $$
@@ -25,8 +26,8 @@ CREATE OR REPLACE FUNCTION new_slave(
             INSERT INTO names (addr, name) VALUES (v_result_addr, p_result_name);
         END IF;
 
-        INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr)
-        VALUES (p_master_addr, p_instruction, v_result_addr, p_result_name, new_slave_addr);
+        INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr, scope)
+        VALUES (p_master_addr, p_instruction, v_result_addr, p_result_name, new_slave_addr, p_slave_scope);
         
         IF p_name IS NOT NULL THEN
             INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);

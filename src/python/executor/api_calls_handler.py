@@ -6,7 +6,7 @@ import httpx
 import asyncio
 import time
 
-from ..executor.types import api
+from ..executor.types import Api
 from ..utils.logger import log_json
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..queue import global_interrupt_queue
@@ -29,7 +29,7 @@ def insertion_sort_by_key(arr, key):
 
 
 
-async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt: str) -> str|None:
+async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str) -> str|None:
     """
     The api calls block. Returns None if no API worked. Returns llm_result str if one API worked.
     """
@@ -90,7 +90,7 @@ async def api_calls_block(api_specs: Sequence[api], checkpoint: Callable, prompt
 
     return llm_result
 
-def _llm_call_claude(api: api, prompt: str) -> str:
+def _llm_call_claude(api: Api, prompt: str) -> str:
     raise NotImplementedError("claude format not implemented yet!") # TODO: IMPLEMENT
 #    with httpx.Client() as client:
 #        response = client.post(
@@ -105,7 +105,7 @@ def _llm_call_claude(api: api, prompt: str) -> str:
 #        return response.json()["choices"][0]["message"]["content"]
 
 
-def _llm_call_openai(api: api, prompt: str) -> str:
+def _llm_call_openai(api: Api, prompt: str) -> str:
     """
     This is the function that calls an openai compatable endpoint.  
     THE FULL ENDPOINT URL MUST BE PROVIDED, INCLUDING THE v1/chat/completions whatever path.
@@ -130,7 +130,7 @@ def _llm_call_openai(api: api, prompt: str) -> str:
         return response.json()["choices"][0]["message"]["content"]
 
 
-def llm_call(api: api, prompt: str) -> str:
+def llm_call(api: Api, prompt: str) -> str:
     if api.get('claude'):
         return _llm_call_claude(api, prompt)
     else:

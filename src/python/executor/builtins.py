@@ -10,12 +10,12 @@ import subprocess
 import re
 import json
 from .embedder import embedder
-from .types import _exec_tool_meta_data, slave_scope
+from .types import _ExecToolMetaData, SlaveScope
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
 
-ALL = get_args(slave_scope)
+ALL = get_args(SlaveScope)
 
 
 def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
@@ -38,12 +38,12 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
 
 # EXAMPLE: 
 @register_tool("print.to_console")
-def print_to_console(input_str: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def print_to_console(input_str: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     print(input_str)
     return "printed something to console."
 
 @register_tool("K.create", ['all', 'general', 'context'])
-def k_create(content: str, description: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def k_create(content: str, description: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
@@ -68,7 +68,7 @@ def k_edit(addr: int|None = None,
            name: str|None = None,
            description_change: search_and_replace_block = None,
            content_change: search_and_replace_block = None,
-           _meta: _exec_tool_meta_data = None
+           _meta: _ExecToolMetaData = None
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 
@@ -110,7 +110,7 @@ def k_edit(addr: int|None = None,
 
 
 @register_tool("K.read", ['all', 'general', 'context'])
-def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = _meta['conn']
     if addr is not None:
@@ -127,7 +127,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
 @register_tool("tool.execute", ['all', 'general'])
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -160,7 +160,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
 @register_tool("tool.create", ['all', 'context'])
-def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
     Creates a python tool, to be executed with tool.execute .
     Description is a short description used for searching and identifing the tool.
@@ -193,7 +193,7 @@ def edit_tool(name: str|None = None,
               header_change: search_and_replace_block|None = None,
               body_change: search_and_replace_block|None = None,
               new_description: str|None = None,
-              _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+              _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
     Edit a tool.
     You must provide either header_change or body_change or new_description.
@@ -262,7 +262,7 @@ def edit_tool(name: str|None = None,
     return f"Applied the edits to the tool {name}@{addr}"
 
 @register_tool("context.add", ['all', 'general', 'context'])
-def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta['conn']
     if addr is None:
@@ -277,11 +277,12 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_d
 
 @register_tool("goal.add_slave", ['all', 'general', 'task'])
 def add_slave(instruction: str,
+              slave_type: str = 'general',
               required_results_names: list[str]|None=None,
               required_results_addrs: list[int]|None=None,
-              goal_name: str|None=None,
+              slave_name: str|None=None,
               result_name: str|None=None,
-              _meta: _exec_tool_meta_data=None) -> ActionConfirmation:
+              _meta: _ExecToolMetaData=None) -> ActionConfirmation:
     """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
@@ -289,6 +290,7 @@ def add_slave(instruction: str,
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
+
     """
     conn = _meta['conn']
     if required_results_addrs is None:
@@ -301,13 +303,13 @@ def add_slave(instruction: str,
                   """, (i,)).fetchone()[0])
 
     conn.execute("""
-    SELECT new_slave(%s, %s, %s, %s, %s, %s);
+    SELECT new_slave(%s, %s, %s, %s, %s, %s, %s);
         """, 
-    (_meta['master_id'], instruction, goal_name, required_results_addrs, None, result_name))
+    (_meta['master_id'], instruction, slave_name, required_results_addrs, None, result_name, slave_type))
     return "Added a new slave"
 
 @register_tool("goal.add_planner_slave", ['all', 'task'])
-def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
+def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
     conn = _meta['conn']
     special_context = []
@@ -357,7 +359,7 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     return "added a replanner slave"
 
 @register_tool("result.add_master_result", ALL)
-def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     This funtion writes a result for the whole master, e.g. the task that consists of many slaves.
     Newly written result is appended to the master result, it does not overwrite the result.
@@ -369,7 +371,7 @@ def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmat
     return "Added a master result."
 
 @register_tool("context.window.semantic_land", ['all', 'context'])
-def context_window_lands(querry: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
     A viewing window is a dynamic automatic context window capable of providing you with relevant and highly controllable context
@@ -389,7 +391,7 @@ def context_window_lands(querry: str, _meta: _exec_tool_meta_data) -> ActionConf
     return 'Semantically moved the viewing window anchor.'
 
 @register_tool("context.window.land_by_addr", ['all', 'context'])
-def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, onto an addr.
     """
@@ -426,7 +428,7 @@ def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirm
 
 
 @register_tool("context.window.change_size", ['all', 'context'])
-def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
+def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
@@ -439,7 +441,7 @@ def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_
     return "Changed context window size."
 
 @register_tool("context.window.move_anchor", ['all', 'context'])
-def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Function to move the anchor of the viewing window.
     Moves to the left if amount if negative, to the right if amount is positive.
@@ -453,14 +455,14 @@ def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfir
 
 
 @register_tool("result.write", ALL)
-def result_write(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Writes plaintext passed in as the result to your current instruction, NOT to the master instruction.
     """
     return f"Result: {text}"
 
 
-def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
+def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
     paradox: the paradox in the information

@@ -6,7 +6,7 @@ from ..utils.config_dir_resolver import config_dir_resolver
 import tomllib
 from .queue import embedder_queue
 import httpx
-from .types import api
+from .types import Api
 from pydantic import ConfigDict, TypeAdapter
 from sentence_transformers import SentenceTransformer
 
@@ -24,7 +24,7 @@ except FileNotFoundError:
 config_method = "local" if config_file_emb.get("api") is None else config_file_emb.get("api")
 # config_file_emb api is a list of api objects, defined like this [[api]] in the file itself
 
-api_validator = TypeAdapter(api)
+api_validator = TypeAdapter(Api)
 
 embedder = SentenceTransformer("msmarco-distilbert-base-tas-b")
 
@@ -71,7 +71,7 @@ def embedder_thread():
         # The table name in there is SQL schema enforced to be only knowledge or executables, so I dont see a python whitelist nesesary.
         # The ignore is nesesary because it just says that fstring cannot be used as SQK, which works at runtime, so I dont care.
 
-def _call_jina_embedding(api: api, text: str):
+def _call_jina_embedding(api: Api, text: str):
     with httpx.Client(timeout=15) as client:
         response = client.post(
             url=api['url'],

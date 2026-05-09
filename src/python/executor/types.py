@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Literal, Sequence, TypeAlias, TypedDict, Optional
 import psycopg
 from pydantic import JsonValue
@@ -9,13 +8,13 @@ from python.utils.uqueue import Uqueue
 
 JsonSerializable: TypeAlias = JsonValue
 
-addr: TypeAlias = int
+Addr: TypeAlias = int
 
-slave_scope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
+SlaveScope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
 
-slave_scopes_list: TypeAlias = Sequence[slave_scope]
+SlaveScopesList: TypeAlias = Sequence[SlaveScope]
 
-class api(TypedDict, total=False):
+class Api(TypedDict, total=False):
     """ An api endpoint representation """
     url: str
     key: str
@@ -25,7 +24,7 @@ class api(TypedDict, total=False):
     rate_limited_until: float
     consecutive_ratelimits: int
 
-class instr_json(TypedDict):
+class InstrJson(TypedDict):
     """ An atomic instruction json representation """
     result_addr: int
     instruction: str
@@ -33,14 +32,14 @@ class instr_json(TypedDict):
     context: str
     slave_addr: int
 
-class tool_call(TypedDict, total=False):
+class ToolCall(TypedDict, total=False):
     """ A single tool call, directly executable """
     tool: str
     args: Optional[dict[str, JsonSerializable]]
 
-tool_calls_block: TypeAlias = list[tool_call]
+tool_calls_block: TypeAlias = list[ToolCall]
 
-class _exec_tool_meta_data(TypedDict):
+class _ExecToolMetaData(TypedDict):
     """ Typed dict for the metadata transfer to the executed tools. """
     master_id: int
     conn: psycopg.Connection

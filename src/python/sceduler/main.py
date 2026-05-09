@@ -12,14 +12,14 @@ Tracks which tasks are already being executed, and executes all the other tasks.
 from pydantic import TypeAdapter
 from ..utils.conn_factory import conn_factory
 from ..executor.queue import executor_queue
-from ..executor.types import instr_json
+from ..executor.types import InstrJson
 from .goal_stack.context import resolve_context
 import psycopg
 import threading
 
-instr_json_validator = TypeAdapter(instr_json)
+instr_json_validator = TypeAdapter(InstrJson)
 
-def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> instr_json:
+def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> InstrJson:
     """ resolves a slave addr to an instruction object, including context resolution. """
 
     context_prefetch = conn.execute("""

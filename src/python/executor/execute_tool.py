@@ -4,7 +4,7 @@ from typing import Callable, get_args
 from ..executor.types import tool_call
 import inspect
 import re
-from .types import _exec_tool_meta_data, slave_scope, slave_scopes_list
+from .types import _exec_tool_meta_data, slave_scope, SlaveScopesList
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
@@ -52,7 +52,7 @@ def _construct_header(func: Callable, name: str|None = None) -> str:
     return signature_str
 
 
-def register_tool(name: str|None = None, scope: slave_scopes_list = ['all', 'general'] ):
+def register_tool(name: str|None = None, scope: SlaveScopesList = ['all', 'general'] ):
     def decorator(func: Callable):
         TOOL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)

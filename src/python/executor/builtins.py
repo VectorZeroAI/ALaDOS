@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-from typing import Sequence, TypeAlias
+from typing import Sequence, TypeAlias, get_args
 
 from numpy import ndarray
 import psycopg
@@ -10,10 +10,31 @@ import subprocess
 import re
 import json
 from .embedder import embedder
-from .types import _exec_tool_meta_data
+from .types import _exec_tool_meta_data, slave_scope
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
+
+ALL = get_args(slave_scope)
+
+
+def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
+    """
+    retuns (search, replacement)
+    search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
+    """
+    match = re.search(
+        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
+        sr_block,
+        re.DOTALL
+    )
+    if not match:
+        raise ValueError("No matches found.")
+    
+    search = match.group(1).strip()
+    replacement = match.group(2)
+    return (search, replacement)
+
 
 # EXAMPLE: 
 @register_tool("print.to_console")
@@ -21,7 +42,7 @@ def print_to_console(input_str: str, _meta: _exec_tool_meta_data) -> ActionConfi
     print(input_str)
     return "printed something to console."
 
-@register_tool("K.create")
+@register_tool("K.create", ['all', 'general', 'context'])
 def k_create(content: str, description: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
@@ -42,7 +63,7 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _exec
 
     return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
-@register_tool("K.edit")
+@register_tool("K.edit", ['all', 'general', 'context'])
 def k_edit(addr: int|None = None,
            name: str|None = None,
            description_change: search_and_replace_block = None,
@@ -88,7 +109,7 @@ def k_edit(addr: int|None = None,
 
 
 
-@register_tool("K.read")
+@register_tool("K.read", ['all', 'general', 'context'])
 def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = _meta['conn']
@@ -105,7 +126,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _exec_tool_meta_
 
     return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
-@register_tool("tool.execute")
+@register_tool("tool.execute", ['all', 'general'])
 def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
@@ -138,7 +159,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
 
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
-@register_tool("tool.create")
+@register_tool("tool.create", ['all', 'context'])
 def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """
     Creates a python tool, to be executed with tool.execute .
@@ -165,24 +186,8 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
     return f"Created tool {name or description}@{addr}"
 
 
-def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
-    """
-    retuns (search, replacement)
-    search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
-    """
-    match = re.search(
-        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
-        sr_block,
-        re.DOTALL
-    )
-    if not match:
-        raise ValueError("No matches found.")
-    
-    search = match.group(1).strip()
-    replacement = match.group(2)
-    return (search, replacement)
 
-@register_tool("tool.edit")
+@register_tool("tool.edit", ['all', 'general', 'context'])
 def edit_tool(name: str|None = None,
               addr: int|None = None,
               header_change: search_and_replace_block|None = None,
@@ -256,7 +261,7 @@ def edit_tool(name: str|None = None,
 
     return f"Applied the edits to the tool {name}@{addr}"
 
-@register_tool("context.add")
+@register_tool("context.add", ['all', 'general', 'context'])
 def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta['conn']
@@ -270,7 +275,7 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _exec_tool_meta_d
                  """, (_meta['master_id'], addr))
     return f"Added context {name if name is not None else "No name"}@{addr}."
 
-@register_tool("goal.add_slave")
+@register_tool("goal.add_slave", ['all', 'general', 'task'])
 def add_slave(instruction: str,
               required_results_names: list[str]|None=None,
               required_results_addrs: list[int]|None=None,
@@ -301,7 +306,7 @@ def add_slave(instruction: str,
     (_meta['master_id'], instruction, goal_name, required_results_addrs, None, result_name))
     return "Added a new slave"
 
-@register_tool("goal.add_planner_slave")
+@register_tool("goal.add_planner_slave", ['all', 'task'])
 def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
     conn = _meta['conn']
@@ -351,7 +356,7 @@ def add_replanner_slave(_meta: _exec_tool_meta_data) -> ActionConfirmation:
     conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"
 
-@register_tool("result.add_master_result")
+@register_tool("result.add_master_result", ALL)
 def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     This funtion writes a result for the whole master, e.g. the task that consists of many slaves.
@@ -363,7 +368,7 @@ def master_result_add(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmat
                  """, (text, _meta['master_id']))
     return "Added a master result."
 
-@register_tool("context.window.semantic_land")
+@register_tool("context.window.semantic_land", ['all', 'context'])
 def context_window_lands(querry: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
@@ -383,7 +388,7 @@ def context_window_lands(querry: str, _meta: _exec_tool_meta_data) -> ActionConf
                  """, (_meta['master_id'], emb))
     return 'Semantically moved the viewing window anchor.'
 
-@register_tool("context.window.land_by_addr")
+@register_tool("context.window.land_by_addr", ['all', 'context'])
 def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, onto an addr.
@@ -420,7 +425,7 @@ def context_window_land(addr: int, _meta: _exec_tool_meta_data) -> ActionConfirm
     return f"Moved context window center to {addr}"
 
 
-@register_tool("context.window.change_size")
+@register_tool("context.window.change_size", ['all', 'context'])
 def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_meta_data = None) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
@@ -433,7 +438,7 @@ def context_window_size_change(left: int = 0, right: int = 0, _meta: _exec_tool_
                  """, (left, right, _meta['master_id']))
     return "Changed context window size."
 
-@register_tool("context.window.move_anchor")
+@register_tool("context.window.move_anchor", ['all', 'context'])
 def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Function to move the anchor of the viewing window.
@@ -447,7 +452,7 @@ def move_window_anchor(amount: int, _meta: _exec_tool_meta_data) -> ActionConfir
     return "moved context window anchor"
 
 
-@register_tool("result.write")
+@register_tool("result.write", ALL)
 def result_write(text: str, _meta: _exec_tool_meta_data) -> ActionConfirmation:
     """
     Writes plaintext passed in as the result to your current instruction, NOT to the master instruction.

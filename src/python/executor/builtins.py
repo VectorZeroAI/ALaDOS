@@ -12,6 +12,7 @@ import re
 import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, SlaveScope
+from .exceptions import ParadoxDetected
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
@@ -497,25 +498,23 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 
 
-def report_paradoxal_information(items: Sequence[str|int], paradox: str, proceed: bool, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
     paradox: the paradox in the information
     items: the list of items addresses or names that contain the paradoxal information.
-    proceed: the boolean flag that signals if you can proceed with the information as is, or if you require the paradoxes resolution before proceeding. 
     """
 
     conn = _meta['conn']
-    if not proceed:
-        conn.execute("""
-        UPDATE results r 
-            JOIN slaves s ON s.result_addr = r.addr
-        SET r.status = 'paradox',
-            r.status_inf = %s
-        WHERE s.addr = %s;
-        """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))
-        raise 
+    conn.execute("""
+    UPDATE results r 
+        JOIN slaves s ON s.result_addr = r.addr
+    SET r.status = 'paradox',
+        r.status_inf = %s
+    WHERE s.addr = %s;
+    """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))
+    raise ParadoxDetected(paradox, items)
 
-    return f"Reported a paradox with items {items}."
+
 
 

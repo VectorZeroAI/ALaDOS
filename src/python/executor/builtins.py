@@ -494,6 +494,9 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     return f"Result: {text}"
 
 
+
+
+
 def report_paradoxal_information(items: Sequence[str|int], paradox: str, proceed: bool, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
@@ -513,6 +516,6 @@ def report_paradoxal_information(items: Sequence[str|int], paradox: str, proceed
         """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))
         raise 
 
-
+    return f"Reported a paradox with items {items}."
 
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 from typing import Callable, get_args
-from ..executor.types import ToolCall
+from ..executor.types import tool_call
 import inspect
 import re
-from .types import _ExecToolMetaData, SlaveScope, SlaveScopesList
+from .types import _exec_tool_meta_data, slave_scope, SlaveScopesList
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
@@ -28,7 +28,7 @@ When calling tools you must follow this instruction format:
 ]
 """
 
-for i in get_args(SlaveScope): # TODO : Maybe make this a bit nicer, IDK, maybe
+for i in get_args(slave_scope): # TODO : Maybe make this a bit nicer, IDK, maybe
     HEADERS_REGISTRY[i] = TOOL_USAGE_INSTRUCTION
 
 # Pattern matches:
@@ -61,7 +61,7 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['all', 'gener
         return func
     return decorator
 
-def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> None:
+def execute_tool(call: tool_call, _meta: _exec_tool_meta_data) -> None:
     return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _meta = _meta) # pyright: ignore
 
 # register all the tools

@@ -277,20 +277,21 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
 
 @register_tool("goal.add_slave", ['all', 'general', 'task'])
 def add_slave(instruction: str,
-              slave_type: str = 'general',
+              slave_type: SlaveScope = 'general',
               required_results_names: list[str]|None=None,
               required_results_addrs: list[int]|None=None,
               slave_name: str|None=None,
               result_name: str|None=None,
               _meta: _ExecToolMetaData=None) -> ActionConfirmation:
-    """
+    f"""
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
     A step gets the results it requires when it is executed.
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
-
+    slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
+    Currently allowed slave_types are: {get_args(SlaveScope)}.
     """
     conn = _meta['conn']
     if required_results_addrs is None:

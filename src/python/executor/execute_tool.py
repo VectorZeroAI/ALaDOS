@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import Callable
+from typing import Callable, get_args
 from ..executor.types import tool_call
 import inspect
 import re
-from .types import _exec_tool_meta_data
+from .types import _exec_tool_meta_data, slave_scope
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
@@ -28,7 +28,8 @@ When calling tools you must follow this instruction format:
 ]
 """
 
-HEADERS_REGISTRY[" "] = TOOL_USAGE_INSTRUCTION # TODO : Maybe make this a bit nicer, IDK, maybe
+for i in get_args(slave_scope): # TODO : Maybe make this a bit nicer, IDK, maybe
+    HEADERS_REGISTRY[i] = TOOL_USAGE_INSTRUCTION
 
 # Pattern matches:
 # - optional comma and whitespace before (if not first param)
@@ -51,12 +52,12 @@ def _construct_header(func: Callable, name: str|None = None) -> str:
     return signature_str
 
 
-def register_tool(name: str|None = None, scope: list[str] = ['all', 'general'] ):
+def register_tool(name: str|None = None, scope: slave_scope = ['all', 'general'] ):
     def decorator(func: Callable):
         TOOL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)
         for i in scope:
-            HEADERS_REGISTRY[i] = header
+            HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
         return func
     return decorator
 

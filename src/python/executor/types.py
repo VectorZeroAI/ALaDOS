@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import Literal, Sequence, TypeAlias, TypedDict, Optional, List
+from enum import StrEnum
+from typing import Literal, Sequence, TypeAlias, TypedDict, Optional
 import psycopg
 from pydantic import JsonValue
 from python.utils.uqueue import Uqueue
@@ -10,13 +11,9 @@ JsonSerializable: TypeAlias = JsonValue
 
 addr: TypeAlias = int
 
-slave_scope: TypeAlias = Sequence[
-    Literal['all']|
-    Literal['general']|
-    Literal['context']|
-    Literal['task']|
-    Literal['communication']
-]
+slave_scope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
+
+slave_scopes_list: TypeAlias = Sequence[slave_scope]
 
 class api(TypedDict, total=False):
     """ An api endpoint representation """

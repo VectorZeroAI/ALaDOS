@@ -12,11 +12,122 @@ import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, SlaveScope
 
+ActionConfirmation: TypeAlias = str
+search_and_replace_block: TypeAlias = str
+
+def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
+    """
+    retuns (search, replacement)
+    search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
+    """
+    match = re.search(
+        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
+        sr_block,
+        re.DOTALL
+    )
+    if not match:
+        raise ValueError("No matches found.")
+    
+    search = match.group(1).strip()
+    replacement = match.group(2)
+    return (search, replacement)
+
+
+@register_tool("K.edit", ['all', 'general', 'context'])
+def k_edit(addr: int|None = None,
+           name: str|None = None,
+           description_change: search_and_replace_block = None,
+           content_change: search_and_replace_block = None,
+           _meta: _ExecToolMetaData = None
+           ) -> ActionConfirmation:
+    """
+    Edits a knowledge entry. 
+    Either addr or name must be provided
+    change is in the same format as tool.edits change format.
+    """
+    conn = _meta['conn']
+    if addr is None:
+        addr = conn.execute("""
+        SELECT resolve_name(%s);
+                     """, (name,)).fetchone()[0]
+
+    if content_change is not None:
+        old_k = conn.execute("""
+        SELECT content FROM knowledge WHERE addr = %s;
+                             """, (addr,)).fetchone()[0]
+        assert isinstance(old_k, str)
+        search, replace = _sr_block_parser(content_change)
+        new_k = old_k.replace(search, replace)
+        conn.execute("""
+        UPDATE knowledge SET content = %s WHERE addr = %s;
+                     """, (new_k, addr))
+
+    if description_change is not None:
+        old_d = conn.execute("""
+        SELECT description FROM knowledge WHERE addr = %s;
+                             """, (addr,)).fetchone()[0]
+        assert isinstance(old_d, str)
+        search, replace = _sr_block_parser(description_change)
+        new_d = old_d.replace(search, replace)
+        conn.execute("""
+        UPDATE knowledge SET description = %s WHERE addr = %s;
+                     """, (new_d, addr))
+
+        _meta['_embedder_queue'].put(addr)
+
+    return f"Edited the knowledge item {name if name is not None else "Nameless"}@{addr}"
 
 
 
+@register_tool("K.read", ['all', 'general', 'context'])
+def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """ Reads a knowledge item by address or by name. One of those must be provided. """
+    conn = _meta['conn']
+    if addr is not None:
+        result = conn.execute("""
+        SELECT content FROM knowledge WHERE addr = %s
+                     """, (addr,)).fetchone()[0]
+    elif name is not None:
+        result = conn.execute("""
+        SELECT k.content FROM knowledge k JOIN names n ON k.addr = n.addr WHERE n.name = %s
+                     """, (name,)).fetchone()[0]
+    else:
+        raise TypeError("ADDR OR NAME MUST BE PROVIDED")
 
+    return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
 
+@register_tool("tool.execute", ['all', 'general'])
+def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """ 
+    Executes a tool beyond buildins, from the database, by address or name.
+    One of addr or name must not be None. 
+    kwargs are the parameters you pass to the programm. They are json serialised, so do not try to pass in anything other then json.
+    Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
+
+    """
+    conn = _meta['conn']
+    if name is not None:
+        v_addr = conn.execute("""
+        SELECT resolve_name(%s);
+                              """, (name,)).fetchone()[0]
+    else:
+        v_addr = addr
+
+    body = conn.execute("""
+    SELECT body FROM executables WHERE addr = %s;
+                        """, (v_addr,)).fetchone()[0]
+    env = os.environ.copy()
+    env["KWARGS"] = json.dumps(kwargs)
+    
+    result = subprocess.run(["python3"],
+                                 input=body,
+                                 capture_output=True,
+                                 text=True,
+                                 timeout=timeout,
+                                 env=env
+                                 )
+
+    return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
 @register_tool("tool.create", ['all', 'context'])
 def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:

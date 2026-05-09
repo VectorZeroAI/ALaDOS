@@ -8,6 +8,7 @@ src/alados.egg-info/PKG-INFO
 src/alados.egg-info/SOURCES.txt
 src/alados.egg-info/dependency_links.txt
 src/alados.egg-info/requires.txt
+dump*.sql
 
 # Python bytecode
 __pycache__/

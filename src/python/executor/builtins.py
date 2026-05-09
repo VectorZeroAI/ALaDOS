@@ -15,9 +15,6 @@ from .types import _ExecToolMetaData, SlaveScope
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
 
-ALL = get_args(SlaveScope)
-
-
 def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
     """
     retuns (search, replacement)
@@ -35,33 +32,6 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
     replacement = match.group(2)
     return (search, replacement)
 
-
-# EXAMPLE: 
-@register_tool("print.to_console")
-def print_to_console(input_str: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
-    print(input_str)
-    return "printed something to console."
-
-@register_tool("K.create", ['all', 'general', 'context'])
-def k_create(content: str, description: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
-    """ 
-    Creates a knowledge item.
-    The description is a short definition of the items contents for semantic similarity search.
-    Content is the actual content, and name is name which can be used a access the item.
-    Name of a knowledge item CANNOT be used in goal.add_slave required_results_names.
-    """
-    conn = _meta['conn']
-
-    addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
-    conn.execute("""
-    INSERT INTO knowledge (addr, content, description) VALUES (%s, %s, %s);
-                 """, (addr, content, description))
-    if name is not None:
-        conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
-
-    _meta['_embedder_queue'].put(addr)
-
-    return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
 @register_tool("K.edit", ['all', 'general', 'context'])
 def k_edit(addr: int|None = None,

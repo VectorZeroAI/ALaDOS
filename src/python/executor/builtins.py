@@ -369,7 +369,7 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
 
     prompt = prompt + special_context_str + masters_result_so_far_str
 
-    conn.execute("SELECT new_slave(%s, %s, NULL, %s);", (_meta['master_id'], prompt, [r[0] for r in fetch]))
+    conn.execute("SELECT new_slave(%s, %s, NULL, %s, NULL, NULL, NULL, 'task');", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"
 
 
@@ -477,7 +477,7 @@ def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmat
     """
     conn = _meta['conn']
 
-    new_pos = conn.execute("""
+    conn.execute("""
     SELECT move_anchor(%s, %s);
                            """, (amount, _meta['master_id']))
     return "moved context window anchor"

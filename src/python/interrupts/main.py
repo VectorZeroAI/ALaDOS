@@ -62,4 +62,4 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
         return wrapper
     return decorator
 
-from ..interrupts import interrupts as _srgiusbeftsdrgfb # NOTE : WHy does this not register the interrupt?!!?!?!?!?!?
+from ..interrupts import interrupts as _srgiusbeftsdrgfb # NOTE : This is valid and works. Dont ask why. No one knows (python quirks)

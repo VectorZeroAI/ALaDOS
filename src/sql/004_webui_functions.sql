@@ -79,7 +79,7 @@ BEGIN
         FROM results
         WHERE ready = TRUE
             AND metadata->>'type' = 'ai_message'
-            AND metadata->>'session_name' = p_session_name
+            AND metadata->>'session_name' = session_name
         ORDER BY turn ASC
     )
     SELECT hm.turn as turn,
@@ -114,7 +114,7 @@ BEGIN
     ORDER BY metadata->>'turn'::int
     LIMIT 1 INTO human_msg_destination_addr;
 
-    PERFORM new_result(msg_text, human_msg_desctination_addr);
+    PERFORM new_result(msg_text, human_msg_destination_addr);
 
     SELECT MAX((metadata ->> 'turn')::int) + 1
     FROM results

@@ -7,8 +7,9 @@ Architecture is simple:
     websocket for new events. 
     
 """
-from typing import Generator, Literal, TypeAlias
+from typing import TypeAlias
 from flask import Flask, Response, request, jsonify
+from psycopg import sql
 from ..utils.conn_factory import conn_factory
 import psycopg
 
@@ -45,7 +46,7 @@ def create_session():
     }), 201
 
 
-@webserver.route("/_/load_session", methods=['POST'])
+@webserver.route("/_/load_session/<session_name>", methods=['GET', 'POST'])
 def load_session(session_name: str):
     conn = conn_factory()
 
@@ -60,7 +61,7 @@ def submit_user_message():
 
     data = request.get_json()
 
-    if not data or any(['user_message', 'session_name']) not in data:
+    if not data or ('user_message', 'session_name') not in data:
         return jsonify({'success': False, 'reason': 'provided json was invalid.', 'provided_json': data}), 500
 
     _submit_human_message(data['user_message'], data['session_name'], conn)
@@ -71,13 +72,15 @@ def submit_user_message():
 @webserver.route('/_/ai_msg_stream', methods=['POST'])
 def stream_ai_responses():
     conn = conn_factory()
-    data = request.json()
+    data = request.get_json()
 
     if not data or 'session' in data:
         return jsonify({'success': False, 'reason': 'session or json not present in json', 'json': data}), 500
 
     def ai_messages_yielder():
-        conn.execute("LISTEN %s", (data['session'],))
+        conn.execute(
+            sql.SQL("LISTEN {}").format(sql.Identifier(data['session'],)) # NOTE : Dynamic SQL shenanigan
+        )
         for n in conn.notifies():
             if not n.channel == data['session']:
                 continue

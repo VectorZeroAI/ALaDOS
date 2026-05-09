@@ -120,9 +120,11 @@ CREATE OR REPLACE FUNCTION notify_for_ai_msg()
 RETURNS TRIGGER AS $$
     BEGIN
         IF NEW.metadata->>'type' = 'ai_message' THEN
-            NOTIFY NEW.metadata ->> 'session_name', 'ai_message'||NEW.content_str::TEXT
+            EXECUTE format('NOTIFY %l, %L',
+                NEW.metadata ->> 'session_name',
+                'ai_message'||NEW.content_str::TEXT)
         END IF;
-    END
+    END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER notify_for_ai_msg

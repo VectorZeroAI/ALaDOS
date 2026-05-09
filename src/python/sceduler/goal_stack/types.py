@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 from typing import TypeAlias, TypedDict, List, Optional
+
+from ...executor.types import SlaveScope
 from ...types import ReferenceTo, ValidTables
 
 SlaveAddr: TypeAlias = int
@@ -12,6 +14,7 @@ class SlaveObj(TypedDict):
     instruction: str
     master_addr: MasterAddr
     result_name: Optional[str]
+    scope: SlaveScope
 
 class Anchor(TypedDict):
     ref_addr: ReferenceTo

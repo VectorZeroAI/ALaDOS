@@ -7,6 +7,7 @@ import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
 
+from python.executor.exceptions import ParadoxDetected
 from python.sceduler.main import slave_addr_to_instr
 
 
@@ -123,6 +124,13 @@ async def core(
                 try:
                     with conn.transaction():
                         tool_result = execute_tool(call, metadata_c)
+
+                except ParadoxDetected as e:
+                    prompt = f"""
+                    Your task is to resolve the following paradox in the following items.
+                    """
+
+
                 except Exception as e:
                     conn.rollback()
                     log_json({

@@ -64,7 +64,7 @@ def resolve_context(slave_obj: SlaveObj):
 
     results_context = resolve_req_results(slave_obj, conn)
 
-    TOOL_HEADERS = "\n\n".join(HEADERS_REGISTRY.values())
+    TOOL_HEADERS = HEADERS_REGISTRY[slave_obj['scope']]
 
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",

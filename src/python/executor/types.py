@@ -14,6 +14,8 @@ SlaveScope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communicat
 
 SlaveScopesList: TypeAlias = Sequence[SlaveScope]
 
+ActionConfirmation: TypeAlias = str
+
 class Api(TypedDict, total=False):
     """ An api endpoint representation """
     url: str

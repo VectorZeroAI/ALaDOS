@@ -2,7 +2,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
-CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication');
+DO $$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typename = 'slave_scope') THEN
+        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication');
+    END IF;
+END
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     DECLARE

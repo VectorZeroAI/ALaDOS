@@ -123,7 +123,7 @@ RETURNS TRIGGER AS $$
         IF NEW.metadata->>'type' = 'ai_message' THEN
             EXECUTE format('NOTIFY %I, %L',
                 NEW.metadata ->> 'session_name',
-                'ai_message'||NEW.content_str::TEXT)
+                'ai_message'||NEW.content_str::TEXT);
         END IF;
     END;
 $$ LANGUAGE plpgsql;

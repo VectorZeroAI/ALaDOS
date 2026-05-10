@@ -24,7 +24,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
-from .types import _ExecToolMetaData, api, tool_calls_block, tool_call
+from .types import _ExecToolMetaData, Api, ToolCallsBlock, ToolCall
 from .api_calls_handler import api_calls_block
 
 config_dir = config_dir_resolver()
@@ -32,9 +32,9 @@ config_file = config_dir / "executor.toml"
 config = tomllib.loads(config_file.read_text())
 
 class ExecutionFailed(Exception):
-    def __init__(self, message: str, call1: tool_call,
-                 call2: tool_call, callb1: tool_calls_block,
-                 callb2: tool_calls_block, error1: Exception,
+    def __init__(self, message: str, call1: ToolCall,
+                 call2: ToolCall, callb1: ToolCallsBlock,
+                 callb2: ToolCallsBlock, error1: Exception,
                  error2: Exception,
                  ) -> None:
         super().__init__(message)
@@ -53,7 +53,7 @@ class ExecutionFailed(Exception):
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
         queue: Uqueue[int],
-        apis: Sequence[api],
+        apis: Sequence[Api],
         ) -> None:
 
     await checkpoint()
@@ -98,7 +98,7 @@ async def core(
                 'response': llm_response
             })
             try:
-                tool_calls: tool_calls_block = llm_to_json(llm_response)
+                tool_calls: ToolCallsBlock = llm_to_json(llm_response)
             except ValueError:
                 llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
                 tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
@@ -210,7 +210,7 @@ async def core(
             conn.rollback()
             print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
-def core_thread(coroutine, queue: Uqueue, apis: Sequence[api]) -> None:
+def core_thread(coroutine, queue: Uqueue, apis: Sequence[Api]) -> None:
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(coroutine(queue, apis)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 

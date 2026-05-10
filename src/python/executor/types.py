@@ -37,7 +37,7 @@ class ToolCall(TypedDict, total=False):
     tool: str
     args: Optional[dict[str, JsonSerializable]]
 
-tool_calls_block: TypeAlias = list[ToolCall]
+ToolCallsBlock: TypeAlias = list[ToolCall]
 
 class _ExecToolMetaData(TypedDict):
     """ Typed dict for the metadata transfer to the executed tools. """

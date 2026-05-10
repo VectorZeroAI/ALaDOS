@@ -75,7 +75,7 @@ BEGIN
             AND metadata->>'session_name' = session_name
         ORDER BY turn ASC
     ), am AS (
-        SELECT content as message, (metadata ->> 'turn')::int AS turn
+        SELECT content_str as message, (metadata ->> 'turn')::int AS turn
         FROM results
         WHERE ready = TRUE
             AND metadata->>'type' = 'ai_message'

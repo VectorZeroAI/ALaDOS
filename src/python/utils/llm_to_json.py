@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from json_repair import repair_json
-from ..executor.types import tool_calls_block
+from ..executor.types import ToolCallsBlock
 from pydantic import TypeAdapter, ValidationError
 import json
 
@@ -59,11 +59,11 @@ def extract_json_block(text: str) -> str:
 
     raise ValueError("No valid JSON block found")
 
-def llm_to_json(input_str: str) -> tool_calls_block:
+def llm_to_json(input_str: str) -> ToolCallsBlock:
     json_str = extract_json_block(input_str)
     print(f"extracted json block = {json_str}")
 
-    validator = TypeAdapter(tool_calls_block)
+    validator = TypeAdapter(ToolCallsBlock)
     validator.rebuild()
 
     # Attempt direct validation

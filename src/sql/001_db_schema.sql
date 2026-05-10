@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
-CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication')
+CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication');
 
 CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     DECLARE
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS slaves (
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    scope slave_scope NOT NULL DEFAULT 'general',
+    scope slave_scope NOT NULL DEFAULT 'general'
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (

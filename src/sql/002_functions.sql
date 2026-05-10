@@ -184,7 +184,7 @@ BEGIN
         window_anchor_knowledge = NULL
         WHERE addr = p_master_id;
     ELSE 
-        RAISE EXCEPTION'unexpected type of anchor. Type: ';
+        RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;
     END IF;
 
     RETURN;

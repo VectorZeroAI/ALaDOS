@@ -222,7 +222,7 @@ def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
         return f"DOES NOT EXIST@{addr}"
 
     result = "@".join((item[0], f"{addr}", "log_item"))
-    result = "\n".join(("", "", result, str(item[1]), item[2], item[3], "", "", ""))
+    result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
     return result
 
 def resolve_window(window_data: WindowData) -> str:

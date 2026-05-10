@@ -61,7 +61,7 @@ def submit_user_message():
 
     data = request.get_json()
 
-    if not data or ('user_message', 'session_name') not in data:
+    if not data or 'user_message' not in data or 'session_name' not in data:
         return jsonify({'success': False, 'reason': 'provided json was invalid.', 'provided_json': data}), 500
 
     _submit_human_message(data['user_message'], data['session_name'], conn)

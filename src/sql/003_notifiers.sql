@@ -121,7 +121,7 @@ CREATE OR REPLACE FUNCTION notify_for_ai_msg()
 RETURNS TRIGGER AS $$
     BEGIN
         IF NEW.metadata->>'type' = 'ai_message' THEN
-            EXECUTE format('NOTIFY %l, %L',
+            EXECUTE format('NOTIFY %I, %L',
                 NEW.metadata ->> 'session_name',
                 'ai_message'||NEW.content_str::TEXT)
         END IF;

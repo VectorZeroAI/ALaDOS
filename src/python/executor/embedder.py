@@ -9,6 +9,7 @@ import httpx
 from .types import Api
 from pydantic import ConfigDict, TypeAdapter
 from sentence_transformers import SentenceTransformer
+from pgvector.psycopg import register_vector
 
 config_dir = config_dir_resolver()
 config_file_exe_f = config_dir / "executor.toml"
@@ -32,6 +33,13 @@ def setup():
     """ Set up the embeder threads """
     for _ in range(config_file_exe['cores_number']):
         threading.Thread(target=embedder_thread, daemon=True, ).start()
+    conn = conn_factory()
+    addrs = conn.execute("""
+    SELECT addr FROM viewing_window WHERE emb = NULL;
+                 """).fetchall()
+    for i in addrs:
+        embedder_queue.put(i[0])
+
 
 def embedder_thread():
     """ A single embeder thread object """
@@ -41,6 +49,8 @@ def embedder_thread():
         return embedder.encode(text)
 
     conn = conn_factory()
+    register_vector(conn)
+
 
     while True:
         item_addr = embedder_queue.get_blocking()

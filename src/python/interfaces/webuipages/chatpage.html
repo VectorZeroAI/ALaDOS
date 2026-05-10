@@ -3,106 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALaDOS Sessions</title>
+    <title>Chat – {{ session_name }}</title>
     <style>
         :root { color-scheme: light dark; }
         body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        h1 { margin-bottom: 0.5rem; }
-        .session-list { list-style: none; padding: 0; }
-        .session-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 1rem; margin-bottom: 0.5rem; background: #f0f0f0; border-radius: 6px;
-        }
-        a { text-decoration: none; color: #0d6efd; font-weight: bold; }
-        button { padding: 0.5rem 1rem; cursor: pointer; background: #0d6efd; color: white; border: none; border-radius: 4px; }
-        button:hover { background: #0b5ed7; }
-        .new-session-area { margin: 2rem 0; padding: 1rem; background: #f9f9f9; border-radius: 8px; }
-        #new-msg { flex: 1; padding: 0.5rem; font-size: 1rem; }
-        .error { color: #721c24; background: #f8d7da; padding: 0.5rem; border-radius: 4px; }
+        #chat-box { height: 60vh; overflow-y: auto; border: 1px solid #ccc; padding: 1rem; border-radius: 8px; background: #f9f9f9; }
+        .message { margin-bottom: 1rem; padding: 0.5rem 1rem; border-radius: 6px; max-width: 80%; clear: both; }
+        .human { background: #d1e7dd; text-align: left; float: right; }
+        .ai { background: #e2e3e5; text-align: left; float: left; word-wrap: break-word; }
+        .error { background: #f8d7da; color: #721c24; }
+        .waiting { color: gray; font-style: italic; }
+        #input-area { margin-top: 1rem; display: flex; gap: 0.5rem; }
+        #msg-input { flex: 1; padding: 0.5rem; font-size: 1rem; }
+        button { padding: 0.5rem 1rem; cursor: pointer; }
+        nav { margin-bottom: 1rem; }
+        nav a { text-decoration: none; color: #0d6efd; }
     </style>
 </head>
 <body>
-    <h1>ALaDOS Chat Sessions</h1>
-    
-    <div class="new-session-area">
-        <h3>Start a New Session</h3>
-        <p>Type your first message below and press Enter or click "Create Session".</p>
-        <div style="display: flex; gap: 0.5rem;">
-            <input type="text" id="new-msg" placeholder="Your first message..." autofocus>
-            <button id="create-btn">Create Session</button>
-        </div>
-        <div id="create-error" style="margin-top: 0.5rem;"></div>
+    <nav><a href="/">← Back to sessions list</a></nav>
+    <h2>Session: <span id="session-name">{{ session_name }}</span></h2>
+    <div id="chat-box"></div>
+    <div id="input-area">
+        <input type="text" id="msg-input" placeholder="Type your message..." autofocus>
+        <button id="send-btn">Send</button>
     </div>
 
-    <h2>Existing Sessions</h2>
-    <ul id="session-list" class="session-list">
-        <li class="empty">Loading...</li>
-    </ul>
-
     <script>
-        const newMsgInput = document.getElementById("new-msg");
-        const createBtn = document.getElementById("create-btn");
-        const errorDiv = document.getElementById("create-error");
-        const sessionList = document.getElementById("session-list");
+        const SESSION_NAME = "{{ session_name }}";
+        const chatBox = document.getElementById("chat-box");
+        const msgInput = document.getElementById("msg-input");
+        const sendBtn = document.getElementById("send-btn");
+        let eventSource = null;
+        let currentAiMessageDiv = null;
 
-        // Function to load session list
-        async function loadSessions() {
+        function scrollDown() {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function addMessage(role, text, className = "") {
+            const div = document.createElement("div");
+            div.className = `message ${role}`;
+            if (className) div.classList.add(className);
+            div.textContent = text;
+            chatBox.appendChild(div);
+            scrollDown();
+            return div;
+        }
+
+        // Load history from backend
+        async function loadHistory() {
             try {
-                const resp = await fetch("/_/list_session_names_and_ids");
-                const sessions = await resp.json();
-                sessionList.innerHTML = "";
-                if (sessions.length === 0) {
-                    sessionList.innerHTML = '<li class="empty">No sessions yet.</li>';
-                    return;
-                }
-                sessions.forEach(([name, addr]) => {
-                    const li = document.createElement("li");
-                    li.className = "session-item";
-                    li.innerHTML = `<span>${name}</span><a href="/chat/${name}">Open</a>`;
-                    sessionList.appendChild(li);
+                const resp = await fetch(`/_/load_session/${SESSION_NAME}`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const messages = await resp.json();
+                chatBox.innerHTML = "";
+                messages.forEach(([turn, human, ai]) => {
+                    if (human) addMessage("human", human);
+                    if (ai) addMessage("ai", ai);
                 });
+                scrollDown();
             } catch (err) {
-                sessionList.innerHTML = `<li class="error">Error loading sessions: ${err.message}</li>`;
+                addMessage("error", "Failed to load history: " + err.message, "error");
             }
         }
 
-        // Create a new session with the given first message
-        async function createSession() {
-            const firstMsg = newMsgInput.value.trim();
-            if (!firstMsg) return;
+        // Start listening for AI responses via SSE
+        function startStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
 
-            errorDiv.textContent = "";
-            createBtn.disabled = true;
-            newMsgInput.disabled = true;
+            // Create a new AI placeholder message
+            if (currentAiMessageDiv) {
+                currentAiMessageDiv.classList.remove("waiting");
+            }
+            currentAiMessageDiv = document.createElement("div");
+            currentAiMessageDiv.className = "message ai waiting";
+            currentAiMessageDiv.textContent = "";
+            chatBox.appendChild(currentAiMessageDiv);
+            scrollDown();
+
+            const url = `/_/ai_msg_stream/${SESSION_NAME}`;
+            eventSource = new EventSource(url);
+
+            eventSource.onmessage = function(event) {
+                if (currentAiMessageDiv.classList.contains("waiting")) {
+                    currentAiMessageDiv.classList.remove("waiting");
+                }
+                currentAiMessageDiv.textContent += event.data;
+                scrollDown();
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("Stream error", err);
+                if (currentAiMessageDiv) {
+                    currentAiMessageDiv.textContent += "\n[Stream ended]";
+                    currentAiMessageDiv.classList.add("error");
+                }
+                eventSource.close();
+                eventSource = null;
+                currentAiMessageDiv = null;
+                // Reload history to get final message
+                loadHistory();
+            };
+        }
+
+        // Send a normal message (session already exists)
+        async function sendMessage() {
+            const text = msgInput.value.trim();
+            if (!text) return;
+            msgInput.value = "";
+            addMessage("human", text);
 
             try {
-                const resp = await fetch("/_/create_session", {
+                const resp = await fetch("/_/submit_user_message", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ first_msg: firstMsg })
+                    body: JSON.stringify({ user_message: text, session_name: SESSION_NAME })
                 });
-                if (!resp.ok) throw new Error("Creation failed");
-                const data = await resp.json();
-                if (data.success) {
-                    // Redirect to the newly created session's chat page
-                    window.location.href = `/chat/${data.session_name}`;
-                } else {
-                    throw new Error(data.reason || "Unknown error");
-                }
+                if (!resp.ok) throw new Error("Send failed");
             } catch (err) {
-                errorDiv.textContent = `Error: ${err.message}`;
-                createBtn.disabled = false;
-                newMsgInput.disabled = false;
+                addMessage("error", "Could not send message: " + err.message, "error");
+                return;
             }
+
+            startStream();
         }
 
-        createBtn.addEventListener("click", createSession);
-        newMsgInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") createSession();
+        sendBtn.addEventListener("click", sendMessage);
+        msgInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") sendMessage();
         });
 
-        // Initial load
-        loadSessions();
+        // Initialize
+        loadHistory().then(() => {
+            // Also start listening for any new AI messages that might be arriving
+            startStream();
+        });
     </script>
 </body>
 </html>

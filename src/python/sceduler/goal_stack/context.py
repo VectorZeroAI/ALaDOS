@@ -83,7 +83,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     
     fetch = conn.execute("""
     SELECT r.content_str, s.instruction FROM results r JOIN slaves s ON s.result_addr = r.addr WHERE r.addr = ANY(%s)
-                         """, (req_results_addrs,)).fetchall()
+                         """, (list_req_results_addrs,)).fetchall()
     req_results_str_list = []
     for i in fetch:
         req_results_str_list.extend(["(", "previous step instruction: ", i[1], "result it produced: ", i[0], ")"])

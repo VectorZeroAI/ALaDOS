@@ -8,6 +8,18 @@ def add_master(instruction: list[str], conn: psycopg.Connection):
     INSERT INTO masters(instruction) VALUES (%s);
                  """, (" ".join(instruction),))
 
+
+def start_webui(port: str):
+    try:
+        port_int = int(port)
+    except Exception as e:
+        print(f"invalid port supplied. Supplied {port}, error {e}")
+        return
+    global webui
+    from . import webui
+    webui.webserver.run(port = port_int)
+    print(f"starting webui at port {port_int}, at host localhost, e.g. 127.0.0.1")
+
 def start_console():
     """ The function that starts the server side controll console of alados. """
     conn = conn_factory()
@@ -24,5 +36,7 @@ def start_console():
             case "add", "task", *_:
                 print(f"adding task {" ".join(command[2:])} as a master goal") # TODO: use slicing insdead of raw "2"
                 add_master(command[2:], conn)
+            case "start", "webui", *_:
+                start_webui(command[2])
             case _:
                 print("undefined command")

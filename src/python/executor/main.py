@@ -145,6 +145,9 @@ async def core(
                         tool_result = execute_tool(call, metadata_c)
 
                 except ParadoxDetected as e:
+                    # TODO : When reusable master templates are implemented
+                    # Turn this into a reusable master template
+                    # With all the required logic for a robust paradox resolver.
                     items = list(e.items)
                     n_items =  []
                     for i in items:

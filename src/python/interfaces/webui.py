@@ -8,10 +8,11 @@ Architecture is simple:
     
 """
 from typing import TypeAlias
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, render_template_string, request, jsonify
 from psycopg import sql
 from ..utils.conn_factory import conn_factory
 import psycopg
+from pathlib import Path
 
 ai_msg: TypeAlias = str
 h_msg: TypeAlias = str
@@ -24,11 +25,13 @@ webserver = Flask(__name__)
 
 @webserver.route('/', methods=['GET', 'POST'])
 def root_webpage():
-    return 'MAIN PAGE! Go to /chat to chat.', 200
+    with open(Path(__file__).resolve().parent / 'webuipages' / 'mainpage.html') as f:
+        return render_template_string(f.read())
 
-@webserver.route('/chat/<session_name>', methods=['POST'])
+@webserver.route('/chat/<session_name>', methods=['POST', 'GET'])
 def chat_page(session_name: str):
-    return 'PLACEHOLDER PAGE, to be filled in with HTML CSS AND JS later. Also has to somehow pass the session name in.', 200
+    with open(Path(__file__).resolve().parent / 'webuipages' / 'chatpage.html') as f:
+        return render_template_string(f.read(), session_name=session_name)
 
 
 @webserver.route('/_/create_session', methods=['POST'])

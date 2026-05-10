@@ -148,7 +148,8 @@ CREATE TABLE IF NOT EXISTS slaves (
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    scope slave_scope NOT NULL DEFAULT 'general'
+    scope slave_scope NOT NULL DEFAULT 'general',
+    result_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (

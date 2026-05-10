@@ -125,6 +125,7 @@ RETURNS TRIGGER AS $$
                 NEW.metadata ->> 'session_name',
                 'ai_message'||NEW.content_str::TEXT);
         END IF;
+        RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
 

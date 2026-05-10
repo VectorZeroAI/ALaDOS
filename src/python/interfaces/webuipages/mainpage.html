@@ -3,52 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Sessions</title>
+    <title>ALaDOS Sessions</title>
     <style>
         :root { color-scheme: light dark; }
         body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        h1 { margin-bottom: 1rem; }
+        h1 { margin-bottom: 0.5rem; }
         .session-list { list-style: none; padding: 0; }
         .session-item {
             display: flex; justify-content: space-between; align-items: center;
             padding: 1rem; margin-bottom: 0.5rem; background: #f0f0f0; border-radius: 6px;
         }
-        a { text-decoration: none; color: inherit; font-weight: bold; }
+        a { text-decoration: none; color: #0d6efd; font-weight: bold; }
         button { padding: 0.5rem 1rem; cursor: pointer; background: #0d6efd; color: white; border: none; border-radius: 4px; }
         button:hover { background: #0b5ed7; }
-        .empty { color: #666; font-style: italic; }
+        .new-session-area { margin: 2rem 0; padding: 1rem; background: #f9f9f9; border-radius: 8px; }
+        #new-msg { flex: 1; padding: 0.5rem; font-size: 1rem; }
+        .error { color: #721c24; background: #f8d7da; padding: 0.5rem; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>Chat Sessions</h1>
-    <button onclick="location.href='/chat/new'">Start New Session</button>
-    <hr>
+    <h1>ALaDOS Chat Sessions</h1>
+    
+    <div class="new-session-area">
+        <h3>Start a New Session</h3>
+        <p>Type your first message below and press Enter or click "Create Session".</p>
+        <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="new-msg" placeholder="Your first message..." autofocus>
+            <button id="create-btn">Create Session</button>
+        </div>
+        <div id="create-error" style="margin-top: 0.5rem;"></div>
+    </div>
+
     <h2>Existing Sessions</h2>
     <ul id="session-list" class="session-list">
         <li class="empty">Loading...</li>
     </ul>
 
     <script>
+        const newMsgInput = document.getElementById("new-msg");
+        const createBtn = document.getElementById("create-btn");
+        const errorDiv = document.getElementById("create-error");
+        const sessionList = document.getElementById("session-list");
+
+        // Function to load session list
         async function loadSessions() {
-            const listEl = document.getElementById("session-list");
             try {
                 const resp = await fetch("/_/list_session_names_and_ids");
-                const sessions = await resp.json();  // [[name, addr], ...]
-                listEl.innerHTML = "";
+                const sessions = await resp.json();
+                sessionList.innerHTML = "";
                 if (sessions.length === 0) {
-                    listEl.innerHTML = '<li class="empty">No sessions yet. Start a new one!</li>';
+                    sessionList.innerHTML = '<li class="empty">No sessions yet.</li>';
                     return;
                 }
                 sessions.forEach(([name, addr]) => {
                     const li = document.createElement("li");
                     li.className = "session-item";
                     li.innerHTML = `<span>${name}</span><a href="/chat/${name}">Open</a>`;
-                    listEl.appendChild(li);
+                    sessionList.appendChild(li);
                 });
             } catch (err) {
-                listEl.innerHTML = `<li class="empty error">Error loading sessions: ${err.message}</li>`;
+                sessionList.innerHTML = `<li class="error">Error loading sessions: ${err.message}</li>`;
             }
         }
+
+        // Create a new session with the given first message
+        async function createSession() {
+            const firstMsg = newMsgInput.value.trim();
+            if (!firstMsg) return;
+
+            errorDiv.textContent = "";
+            createBtn.disabled = true;
+            newMsgInput.disabled = true;
+
+            try {
+                const resp = await fetch("/_/create_session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ first_msg: firstMsg })
+                });
+                if (!resp.ok) throw new Error("Creation failed");
+                const data = await resp.json();
+                if (data.success) {
+                    // Redirect to the newly created session's chat page
+                    window.location.href = `/chat/${data.session_name}`;
+                } else {
+                    throw new Error(data.reason || "Unknown error");
+                }
+            } catch (err) {
+                errorDiv.textContent = `Error: ${err.message}`;
+                createBtn.disabled = false;
+                newMsgInput.disabled = false;
+            }
+        }
+
+        createBtn.addEventListener("click", createSession);
+        newMsgInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") createSession();
+        });
+
+        // Initial load
         loadSessions();
     </script>
 </body>

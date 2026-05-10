@@ -2,11 +2,17 @@
 import sys
 import psycopg
 from ..utils.conn_factory import conn_factory
+import threading
 
 def add_master(instruction: list[str], conn: psycopg.Connection):
     conn.execute("""
     INSERT INTO masters(instruction) VALUES (%s);
                  """, (" ".join(instruction),))
+
+def _webui_thread(port: int):
+    from . import webui
+    print(f"starting webui at port {port}, at host localhost, e.g. 127.0.0.1")
+    webui.webserver.run(port = port)
 
 
 def start_webui(port: str):
@@ -15,10 +21,9 @@ def start_webui(port: str):
     except Exception as e:
         print(f"invalid port supplied. Supplied {port}, error {e}")
         return
-    global webui
-    from . import webui
-    webui.webserver.run(port = port_int)
-    print(f"starting webui at port {port_int}, at host localhost, e.g. 127.0.0.1")
+    threading.Thread(target=_webui_thread, args=(port_int,), daemon=True).start()
+
+    
 
 def start_console():
     """ The function that starts the server side controll console of alados. """

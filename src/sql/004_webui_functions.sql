@@ -26,7 +26,7 @@ BEGIN
             'session_name', v_session_name
     )) RETURNING addr INTO v_usr_msg_addr;
 
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_msg_addr), NULL, NULL, 
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_addr], NULL, NULL, 
         jsonb_build_object(
             'type', 'ai_message',
             'turn', 1,
@@ -45,7 +45,7 @@ BEGIN
     ) RETURNING addr INTO v_usr_placeholder_addr;
     
     
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY(v_usr_placeholder_addr), NULL, NULL,
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_placeholder_addr], NULL, NULL,
         jsonb_build_object(
             'type', 'ai_message',
             'session_name', v_session_name,
@@ -127,7 +127,7 @@ BEGIN
             'turn', next_result_turn))
     RETURNING addr INTO next_result_addr;
 
-    PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY(next_result_addr), NULL, NULL, 
+    PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY[next_result_addr], NULL, NULL, 
         jsonb_build_object('type', 'ai_message',
             'turn', next_result_turn,
             'session_name', session_name

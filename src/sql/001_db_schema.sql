@@ -4,7 +4,7 @@ CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
 DO $$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typename = 'slave_scope') THEN
+    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
         CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication');
     END IF;
 END

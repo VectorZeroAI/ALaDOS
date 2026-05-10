@@ -99,7 +99,7 @@ async def core(
         except Exception as e:
             print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
             conn.execute("""
-        UPDATE slaves SET status = 'error' WHERE addr = %s;
+    UPDATE results r JOIN slaves s ON r.addr = s.result_addr SET status = 'error' WHERE s.addr = %s;
                          """, (slave_addr,))
             continue
 

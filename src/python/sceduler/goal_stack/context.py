@@ -76,6 +76,11 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
                              """, (slave_obj["addr"], )).fetchall()
     
+    list_req_results_addrs = [addr[0] for addr in req_results_addrs]
+    if len(list_req_results_addrs) < 1:
+        return "NO REQUIRED RESULTS PRESENT"
+
+    
     fetch = conn.execute("""
     SELECT r.content_str, s.instruction FROM results r JOIN slaves s ON s.result_addr = r.addr WHERE r.addr = ANY(%s)
                          """, (req_results_addrs,)).fetchall()

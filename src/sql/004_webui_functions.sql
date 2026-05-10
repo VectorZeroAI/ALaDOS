@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION create_session(
     p_first_msg TEXT,
     p_ai_prompt TEXT
 )
-RETURNS BIGINT AS $$
+RETURNS TEXT AS $$
 DECLARE
     v_session_addr BIGINT;
     v_session_name TEXT;
@@ -17,7 +17,7 @@ BEGIN
     INSERT INTO names(addr, name) VALUES(
         v_session_addr, 'session_'||(SELECT COALESCE(MAX(
                 (regexp_replace(name, 'session_', '')::int) + 1 
-            ), 0))::TEXT
+            ), 0) FROM names WHERE name LIKE 'session_%')::TEXT
     ) RETURNING name INTO v_session_name;
     
     INSERT INTO results (metadata) VALUES (

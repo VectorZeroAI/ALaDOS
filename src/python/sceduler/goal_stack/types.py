@@ -28,7 +28,6 @@ class WindowData(TypedDict):
 
 class LoadsData(TypedDict):
     items_addrs: List[ReferenceTo]
-    master_addr: MasterAddr
 
 class KnowledgeItem(TypedDict):
     addr: ReferenceTo

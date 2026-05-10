@@ -10,9 +10,8 @@ The architecture is structured roughly like this:
 1. DB 
 2. Executor
 3. Sceduler
-4. Task Manager
-5. Interrupt System
-6. User interface
+4. Interrupt System
+5. User interface
  
 Each component is explained in its own section of the docs more precisely. 
 
@@ -29,5 +28,3 @@ Or this:
 2. its decomposed into ReAct steps
 3. Steps are executed
 4. User gets results
-
-

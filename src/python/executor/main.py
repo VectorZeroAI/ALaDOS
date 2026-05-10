@@ -7,14 +7,13 @@ import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
 
-from python.executor.exceptions import ParadoxDetected
-from python.sceduler.main import slave_addr_to_instr
-
-
+from ..executor.exceptions import ParadoxDetected
+from ..sceduler.main import slave_addr_to_instr
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY
+from ..sceduler.goal_stack.context import resolve_loads
 from ..types import ReferenceTo
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.conn_factory import conn_factory
@@ -49,6 +48,10 @@ class ExecutionFailed(Exception):
         return f"call1: {self.call1}, call2: {self.call2}, callblock 1: {self.callb1}, callblock2: {self.callb2}, error1: {self.error1}, error2: {self.error2}"
 
 
+
+
+
+
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
 async def core(
         checkpoint: Callable[[], Coroutine[Any, Any, None]],
@@ -59,6 +62,32 @@ async def core(
     await checkpoint()
     conn = conn_factory()
     conn.autocommit = False
+
+    async def execute_llm_call(prompt: str) -> str:
+        while True:
+            await checkpoint()
+            llm_output_new = await api_calls_block(apis, checkpoint, prompt)
+            if llm_output_new is not None:
+                break
+            else:
+                continue
+        return llm_output_new
+
+
+    async def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
+        nresults = []
+        with conn.transaction():
+            for ncall in new_calls:
+                await checkpoint()
+                try:
+                    ntool_result = execute_tool(ncall, metadata_c)
+                except Exception as e2:
+                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
+                else:
+                    conn.commit()
+                await checkpoint()
+                nresults.append(ntool_result)
+        return nresults
 
     while True:
         await checkpoint()
@@ -79,17 +108,7 @@ async def core(
             str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
             print(str_instr)
 
-            while True:
-                llm_respone_or_none = await api_calls_block(apis, checkpoint, str_instr)
-                await checkpoint()
-                if llm_respone_or_none is None:
-                    await checkpoint()
-                    continue
-                else:
-                    break
-
-            llm_response = llm_respone_or_none
-                
+            llm_response = await execute_llm_call(str_instr)
             
             await checkpoint()
             log_json({
@@ -108,7 +127,7 @@ async def core(
                     'reason': 'did not find any tool calls.',
                     'new_tool_calls_block': tool_calls,
                     'llm_without_think': llm_without_think
-                })
+            })
 
             results = []
 
@@ -126,10 +145,34 @@ async def core(
                         tool_result = execute_tool(call, metadata_c)
 
                 except ParadoxDetected as e:
+                    items = list(e.items)
+                    n_items =  []
+                    for i in items:
+                        if isinstance(i, str):
+                            n_items.append(i)
+                    for i in n_items:
+                        items.remove(i)
+
+                    addrs_items: Sequence[int] = []
+                    for i in n_items:
+                         addrs_items.append(conn.execute("SELECT resolve_name(%s);", (i,)).fetchone()[0])
+
                     prompt = f"""
                     Your task is to resolve the following paradox in the following items.
-                    """
+                    Your task is to resolve the following paradox in the following items.
+                    Your task is to resolve the following paradox in the following items.
+                    ITEMS BEGIN: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
+                    PARADOX BEGIN: {e.paradox} PARADOX END.
+                    AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
+                        """
+                    llm_response = await execute_llm_call(prompt)
 
+                    tool_calls_block = llm_to_json(llm_response)
+
+                    nresults = await execute_tool_calls(tool_calls_block)
+                    results.extend(nresults)
+
+                    continue
 
                 except Exception as e:
                     conn.rollback()
@@ -144,14 +187,9 @@ async def core(
                     Your task is to figure out what went wrong there, and create a working tool call.
                     Here is what it attempted to do "{instr['instruction']}".
                     The following is the tool call format instructions and all the valid tools:
-                    """ + "\n".join(HEADERS_REGISTRY.values())
-                    while True:
-                        await checkpoint()
-                        llm_output_new = await api_calls_block(apis, checkpoint, prompt)
-                        if llm_output_new is not None:
-                            break
-                        else:
-                            continue
+                    """ + "\n".join(HEADERS_REGISTRY['general'])
+
+                    llm_output_new = await execute_llm_call(prompt)
 
                     new_calls = llm_to_json(llm_output_new)
                     log_json({
@@ -160,19 +198,10 @@ async def core(
                         'new_llm_output': llm_output_new,
                         'new_tool_calls': new_calls
                     })
-                    nresults = []
-                    with conn.transaction():
-                        for ncall in new_calls:
-                            await checkpoint()
-                            try:
-                                ntool_result = execute_tool(ncall, metadata_c)
-                            except Exception as e2:
-                                raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
-                            else:
-                                conn.commit()
-                            await checkpoint()
-                            nresults.append(ntool_result)
-                        results.extend(nresults)
+
+                    nresults = await execute_tool_calls(new_calls)
+                    results.extend(nresults)
+
                     continue
 
                 else:

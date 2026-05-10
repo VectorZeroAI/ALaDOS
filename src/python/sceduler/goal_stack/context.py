@@ -49,7 +49,6 @@ def resolve_context(slave_obj: SlaveObj):
 
         loads_data_python: LoadsData = {
                 "items_addrs": [addr[0] for addr in load_data],
-                "master_addr": slave_obj["master_addr"]
             }
         loads_data_validator = TypeAdapter(LoadsData)
         try:
@@ -120,7 +119,7 @@ def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 
 def resolve_loads(loads_data: LoadsData) -> str:
     """ Resolves loads raw data to context string """
-    conn = conn_factory() # FIXME: make ruff ignore E703 in ruff config.
+    conn = conn_factory()
 
     result_str: list[str] = []
     for addr in loads_data['items_addrs']:

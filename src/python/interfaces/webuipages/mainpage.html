@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Sessions</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { margin-bottom: 1rem; }
+        .session-list { list-style: none; padding: 0; }
+        .session-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem; margin-bottom: 0.5rem; background: #f0f0f0; border-radius: 6px;
+        }
+        a { text-decoration: none; color: inherit; font-weight: bold; }
+        button { padding: 0.5rem 1rem; cursor: pointer; background: #0d6efd; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0b5ed7; }
+        .empty { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>Chat Sessions</h1>
+    <button onclick="location.href='/chat/new'">Start New Session</button>
+    <hr>
+    <h2>Existing Sessions</h2>
+    <ul id="session-list" class="session-list">
+        <li class="empty">Loading...</li>
+    </ul>
+
+    <script>
+        async function loadSessions() {
+            const listEl = document.getElementById("session-list");
+            try {
+                const resp = await fetch("/_/list_session_names_and_ids");
+                const sessions = await resp.json();  // [[name, addr], ...]
+                listEl.innerHTML = "";
+                if (sessions.length === 0) {
+                    listEl.innerHTML = '<li class="empty">No sessions yet. Start a new one!</li>';
+                    return;
+                }
+                sessions.forEach(([name, addr]) => {
+                    const li = document.createElement("li");
+                    li.className = "session-item";
+                    li.innerHTML = `<span>${name}</span><a href="/chat/${name}">Open</a>`;
+                    listEl.appendChild(li);
+                });
+            } catch (err) {
+                listEl.innerHTML = `<li class="empty error">Error loading sessions: ${err.message}</li>`;
+            }
+        }
+        loadSessions();
+    </script>
+</body>
+</html>

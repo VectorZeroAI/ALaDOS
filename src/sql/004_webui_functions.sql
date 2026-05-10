@@ -42,16 +42,16 @@ BEGIN
             'session_name', v_session_name,
             'turn', 2
         )
-    ) RETURNING addr INTO v_usr_placeholder_addr;
+    ) RETURNING addr INTO v_usr_msg_placeholder_addr;
     
     
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_placeholder_addr], NULL, NULL,
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_placeholder_addr], NULL, NULL,
         jsonb_build_object(
             'type', 'ai_message',
             'session_name', v_session_name,
             'turn', 2
         )
-    )
+    );
     
     RETURN v_session_name;
 END;
@@ -133,7 +133,7 @@ BEGIN
             'session_name', session_name
         )
     );
-    RETURN NULL;
+    RETURN;
 
 END;
 $$ LANGUAGE plpgsql;

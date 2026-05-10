@@ -30,18 +30,21 @@ def start_console():
     conn = conn_factory()
     print("ALaDOS sever side console started.")
     while True:
-        command_str = input("admin > ")
-        command = command_str.split(" ")
-        match command:
-            case "exit", *_:
-                print("exit is not implemented yet. This terminal will remain utilised until alados server is shut down in the current version") # TODO : Fix this
-            case "shutdown", *_:
-                print("shutdown initiated")
-                sys.exit(0)
-            case "add", "task", *_:
-                print(f"adding task {" ".join(command[2:])} as a master goal") # TODO: use slicing insdead of raw "2"
-                add_master(command[2:], conn)
-            case "start", "webui", *_:
-                start_webui(command[2])
-            case _:
-                print("undefined command")
+        try:
+            command_str = input("admin > ")
+            command = command_str.split(" ")
+            match command:
+                case "exit", *_:
+                    print("exit is not implemented yet. This terminal will remain utilised until alados server is shut down in the current version") # TODO : Fix this
+                case "shutdown", *_:
+                    print("shutdown initiated")
+                    sys.exit(0)
+                case "add", "task", *_:
+                    print(f"adding task {" ".join(command[2:])} as a master goal") # TODO: use slicing insdead of raw "2"
+                    add_master(command[2:], conn)
+                case "start", "webui", *_:
+                    start_webui(command[2])
+                case _:
+                    print("undefined command")
+        except Exception as e:
+            print(f"encoutered error {e}. ignoring because i am a console")

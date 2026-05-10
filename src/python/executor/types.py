@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Literal, Sequence, TypeAlias, TypedDict, Optional
 import psycopg
 from pydantic import JsonValue
-from python.utils.uqueue import Uqueue
+from ..utils.uqueue import Uqueue
 
 JsonSerializable: TypeAlias = JsonValue
 

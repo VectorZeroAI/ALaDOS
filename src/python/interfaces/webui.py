@@ -74,7 +74,7 @@ def stream_ai_responses():
     conn = conn_factory()
     data = request.get_json()
 
-    if not data or 'session' in data:
+    if not data or 'session' not in data:
         return jsonify({'success': False, 'reason': 'session or json not present in json', 'json': data}), 500
 
     def ai_messages_yielder():

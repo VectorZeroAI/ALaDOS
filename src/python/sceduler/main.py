@@ -33,7 +33,7 @@ def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> InstrJson:
         "instruction": context_prefetch[0],
         "master_addr": context_prefetch[1],
         "result_name": context_prefetch[2],
-        "scope": context_prefetch[3]
+        "scope": context_prefetch[4]
         })
 
     instruction = instr_json_validator.validate_python({

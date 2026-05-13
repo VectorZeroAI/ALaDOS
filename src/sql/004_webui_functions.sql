@@ -60,7 +60,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_messages(
     session_name TEXT
 )
-RETURNS table(human_msg TEXT, ai_msg TEXT, turn INT) AS $$
+RETURNS table(turn INT, human_msg TEXT, ai_msg TEXT) AS $$
 DECLARE
     v_session_addr BIGINT;
 BEGIN
@@ -111,7 +111,7 @@ BEGIN
     WHERE metadata->>'type' = 'human_message'
         AND metadata->>'session_name' = session_name
         AND ready = FALSE
-    ORDER BY metadata->>'turn'::int
+    ORDER BY (metadata->>'turn')::int
     LIMIT 1 INTO human_msg_destination_addr;
 
     PERFORM new_result(msg_text, human_msg_destination_addr);

@@ -117,7 +117,7 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
 
     messages_array = conn.execute("""
     SELECT turn, human_msg, ai_msg FROM get_messages(%s);
-                 """, (session_name)).fetchall()
+                 """, (session_name, )).fetchall()
     
     return messages_array
 

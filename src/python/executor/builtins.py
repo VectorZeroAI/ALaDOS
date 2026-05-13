@@ -294,7 +294,7 @@ def add_slave(instruction: str,
               slave_name: str|None=None,
               result_name: str|None=None,
               _meta: _ExecToolMetaData=None) -> ActionConfirmation:
-    f"""
+    """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
     A step gets the results it requires when it is executed.
@@ -302,7 +302,7 @@ def add_slave(instruction: str,
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
     slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
-    Currently allowed slave_types are: {get_args(SlaveScope)}.
+    Currently allowed slave_types are: 
     """
     conn = _meta['conn']
     if required_results_addrs is None:
@@ -320,8 +320,7 @@ def add_slave(instruction: str,
     (_meta['master_id'], instruction, slave_name, required_results_addrs, None, result_name, slave_type))
     return "Added a new slave"
 
-
-
+add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(SlaveScope)) , " ]" , "."])
 
 @register_tool("goal.add_planner_slave", ['all', 'task'])
 def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:

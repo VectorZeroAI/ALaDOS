@@ -52,12 +52,13 @@ def _construct_header(func: Callable, name: str|None = None) -> str:
     return signature_str
 
 
-def register_tool(name: str|None = None, scope: SlaveScopesList = ['all', 'general'] ):
+def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
     def decorator(func: Callable):
         TOOL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)
         for i in scope:
             HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
+        HEADERS_REGISTRY['all'] = "\n\n".join([HEADERS_REGISTRY['all'], header])
         return func
     return decorator
 

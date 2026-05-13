@@ -39,7 +39,7 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
 
 
 
-@register_tool("K.create", ['all', 'general', 'context'])
+@register_tool("K.create", ['general', 'context'])
 def k_create(content: str, description: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
@@ -62,7 +62,7 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
 
 
 
-@register_tool("K.edit", ['all', 'general', 'context'])
+@register_tool("K.edit", ['general', 'context'])
 def k_edit(addr: int|None = None,
            name: str|None = None,
            description_change: search_and_replace_block = None,
@@ -110,7 +110,7 @@ def k_edit(addr: int|None = None,
 
 
 
-@register_tool("K.read", ['all', 'general', 'context'])
+@register_tool("K.read", ['general', 'context'])
 def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = _meta['conn']
@@ -129,7 +129,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
 
 
 
-@register_tool("tool.execute", ['all', 'general'])
+@register_tool("tool.execute", ['general'])
 def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
@@ -164,7 +164,7 @@ def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict
 
 
 
-@register_tool("tool.create", ['all', 'context'])
+@register_tool("tool.create", ['context'])
 def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
     Creates a python tool, to be executed with tool.execute .
@@ -192,7 +192,7 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
 
 
 
-@register_tool("tool.edit", ['all', 'general', 'context'])
+@register_tool("tool.edit", ['general', 'context'])
 def edit_tool(name: str|None = None,
               addr: int|None = None,
               header_change: search_and_replace_block|None = None,
@@ -269,7 +269,7 @@ def edit_tool(name: str|None = None,
 
 
 
-@register_tool("context.add", ['all', 'general', 'context'])
+@register_tool("context.add", ['general', 'context'])
 def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta['conn']
@@ -286,7 +286,7 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
 
 
 
-@register_tool("goal.add_slave", ['all', 'general', 'task'])
+@register_tool("goal.add_slave", ['general', 'task'])
 def add_slave(instruction: str,
               slave_type: SlaveScope = 'general',
               required_results_names: list[str]|None=None,
@@ -322,7 +322,7 @@ def add_slave(instruction: str,
 
 add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(SlaveScope)) , " ]" , "."])
 
-@register_tool("goal.add_planner_slave", ['all', 'task'])
+@register_tool("goal.add_planner_slave", ['task'])
 def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
     conn = _meta['conn']
@@ -390,7 +390,7 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation
 
 
 
-@register_tool("context.window.semantic_land", ['all', 'context'])
+@register_tool("context.window.semantic_land", ['context'])
 def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
@@ -413,7 +413,7 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
 
 
 
-@register_tool("context.window.land_by_addr", ['all', 'context'])
+@register_tool("context.window.land_by_addr", ['context'])
 def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window, or a context window, these are the same thing, onto an addr.
@@ -453,7 +453,7 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
 
 
 
-@register_tool("context.window.change_size", ['all', 'context'])
+@register_tool("context.window.change_size", ['context'])
 def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
@@ -469,7 +469,7 @@ def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMe
 
 
 
-@register_tool("context.window.move_anchor", ['all', 'context'])
+@register_tool("context.window.move_anchor", ['context'])
 def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Function to move the anchor of the viewing window.

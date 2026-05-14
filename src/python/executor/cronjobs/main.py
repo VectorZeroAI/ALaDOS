@@ -20,7 +20,7 @@ def cronjob_executor():
     cronjob_conn = conn_factory()
     notifies_conn = conn_factory()
 
-    notifies_conn.execute("LISTEN 'cronjob_changes'")
+    notifies_conn.execute("LISTEN cronjob_changes")
 
     cronjob_changed = threading.Event()
 

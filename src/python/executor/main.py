@@ -6,8 +6,9 @@ import re
 import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
+import psycopg
 
-from ..executor.exceptions import ParadoxDetected
+from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..sceduler.main import slave_addr_to_instr
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
@@ -23,7 +24,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
-from .types import _ExecToolMetaData, Api, ToolCallsBlock, ToolCall
+from .types import _ExecToolMetaData, Api, InstrJson, ToolCallsBlock, ToolCall
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
 
@@ -48,6 +49,64 @@ class ExecutionFailed(Exception):
     def __str__(self) -> str:
         return f"call1: {self.call1}, call2: {self.call2}, callblock 1: {self.callb1}, callblock2: {self.callb2}, error1: {self.error1}, error2: {self.error2}"
 
+def prepare_context_shortening_prompt(error: ContextLimitExceededError,
+                                      conn: psycopg.Connection,
+                                      instr: InstrJson) -> str:
+    """ Prepares the special prompt that would make the LLM get it all done correctly. """
+
+    window_data = conn.execute("""
+SELECT mc.window_anchor_exe, mc.window_anchor_knowledge, mc.window_size_l, mc.window_size_r
+FROM slaves s
+    INNER JOIN masters m ON s.master_addr = m.addr
+    INNER JOIN master_context mc ON mc.addr = m.addr
+WHERE s.addr = %s
+                          """, (instr['slave_addr'],)).fetchone()
+    assert window_data is not None
+
+    viewing_window_shortened = conn.execute("""
+WITH ordered AS (
+    SELECT addr,
+        position,
+        type,
+        ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+), anchor AS (
+    SELECT rn FROM ordered WHERE addr = %s LIMIT 1
+)
+SELECT addr, rn
+FROM ordered o, anchor a
+WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
+                 """, ((window_data[0] if window_data[0] is not None else window_data[1]),
+                        window_data[2],
+                       window_data[3]
+                       )).fetchall()
+    viewing_window_context_list_str = []
+    for i in viewing_window_shortened:
+        viewing_window_context_list_str.append(f"Item at address: {i[0]}, at coordinate {i[0]}.")
+
+    context_chunk_1 = "\n".join(viewing_window_context_list_str)
+    
+    loaded_items_addr = conn.execute("SELECT ml.item_addr, vw.description FROM master_loads ml LEFT JOIN viewing_window vw WHERE master_addr = %s", (instr['master_addr'],)).fetchall()
+
+    loaded_items_list_str = []
+    for i in loaded_items_addr:
+        loaded_items_list_str.append(f"Item at address {i[0]}, with description '{i[1]}' loaded.")
+
+    context_chunk_2 = "\n".join(loaded_items_list_str)
+    context = "\n\n\n".join([f"CONTEXT START: {context_chunk_1}",
+                             f"{context_chunk_2} CONTEXT END.",
+                             f"TOOLS REGISTRY START {HEADERS_REGISTRY['context']} TOOLS REGISTRY END.",
+                             f"""INSTRUCTION START
+                             Your task is to reduce the context size.
+                             Evict entries you deem less important.
+                             Start by shrinking the context window.
+                             You may also evict loaded items.
+                             If there is nothing to evict, do absolutely nothing,
+                             I will go handle the work.
+                             Current full context lenght: {error.len_payload}, you are only looking at a very reduced context.
+                             INSTRUCTION END"""])
+
+    return context
+
 
 
 
@@ -66,12 +125,17 @@ async def core(
 
     async def execute_llm_call(prompt: str) -> str:
         while True:
-            await checkpoint()
-            llm_output_new = await api_calls_block(apis, checkpoint, prompt)
-            if llm_output_new is not None:
-                break
-            else:
-                continue
+            try:
+                await checkpoint()
+                llm_output_new = await api_calls_block(apis, checkpoint, prompt)
+                if llm_output_new is not None:
+                    break
+                else:
+                    continue
+            except ContextLimitExceededError as e:
+                llm_output = await execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
+                tool_calls = llm_to_json(llm_output)
+                await execute_tool_calls(tool_calls)
         return llm_output_new
 
 
@@ -103,9 +167,7 @@ async def core(
     UPDATE results r SET status = 'error' FROM slaves s WHERE s.addr = %s AND r.addr = s.result_addr;
                          """, (slave_addr,))
             continue
-
         try:
-
             str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
             print(str_instr)
 

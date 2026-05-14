@@ -91,7 +91,7 @@ RETURNS TRIGGER AS $$
     BEGIN
         SELECT name INTO v_name FROM names WHERE addr = NEW.addr;
 
-        IF name LIKE 'session_%' THEN
+        IF v_name LIKE 'session_%' THEN
             RETURN NEW;
         END IF;
 

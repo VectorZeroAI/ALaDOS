@@ -16,10 +16,11 @@ def setup():
 
 def cronjob_executor():
     conn = conn_factory()
-    conn.execute("LISTEN 'cronjob_changes'")
-
+    
     cronjob_conn = conn_factory()
     notifies_conn = conn_factory()
+
+    notifies_conn.execute("LISTEN 'cronjob_changes'")
 
     cronjob_changed = threading.Event()
 
@@ -44,7 +45,7 @@ def cronjob_executor():
             cronjob_changed.wait()
             continue
 
-        wait_time = cronjob_fetch[2] - time.time()
+        wait_time = cronjob_fetch[2] - time.time() # RUN AT IS EPOCH
         changed_flag = cronjob_changed.wait(wait_time if wait_time > 0 else 0.001)
 
         if changed_flag:
@@ -54,11 +55,13 @@ def cronjob_executor():
         try:
             exec(cronjob_fetch[1]) # Do you have a better solution? Propse a better solution if you want. 
             # I need to execute a cronjob stored in postgres. 
+            if "cronjob_function" not in locals():
+                raise NameError("Cronjob function not in locals")
 
-            if isinstance(cronjob_function, CoroutineType): # pyright: ignore
-                loop.run(cronjob_function(sys_state)) # pyright: ignore
+            if isinstance(cronjob_function, CoroutineType):
+                loop.run_until_complete(cronjob_function(sys_state))
             else:
-                cronjob_function(sys_state) # pyright: ignore
+                cronjob_function(sys_state)
             # NOTE: IGNORE BECAUSE THIS FUNCTION WILL APPEAR AFTER EXEC, and also any error will be just logged, the cronjob no more executed, and we move on.
         except Exception as e:
             match cronjob_fetch[3]:

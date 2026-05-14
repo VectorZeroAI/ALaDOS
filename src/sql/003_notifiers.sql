@@ -86,7 +86,15 @@ FOR EACH ROW EXECUTE FUNCTION position_calculation();
 
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
+    DECLARE
+        name TEXT;
     BEGIN
+        name := SELECT name FROM names WHERE addr = NEW.addr;
+
+        IF name LIKE 'session_%' THEN
+            RETURN NEW;
+        END IF;
+
         PERFORM new_slave(NEW.addr, 
             ' Your task is to create a plan for the following instruction OR IF the task is simple, directly write a result via result.add_master_result tool. Master instruction: "
             ' || NEW.instruction || '" 
@@ -94,7 +102,7 @@ RETURNS TRIGGER AS $$
             YOU MUST OUTPUT A JSON ARRAY OF TOOL CALLS!!! DO NOT TRY TO MAKE THE ENTIRE PLAN AT ONCE, leave it to be incrementally produced via further planner slaves.',
             NULL, NULL, NULL, NULL, NULL, 'task'
         );
-    RETURN NULL;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 

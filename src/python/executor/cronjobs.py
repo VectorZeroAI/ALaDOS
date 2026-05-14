@@ -32,17 +32,18 @@ async def cronjob_executor():
             "conn": conn_factory()
         }
 
-        cronjob = conn.execute("""
-SELECT addr, body, run_at FROM cronjobs_to_run LIMIT 1
+        cronjob_fetch = conn.execute("""
+SELECT addr, body, run_at, type FROM cronjobs_to_run LIMIT 1
                      """).fetchone()
-        if cronjob is None:
+        if cronjob_fetch is None:
             await asyncio.wait_for(cronjob_changed, None)
             continue
 
-        exec(cronjob[1])
+        exec(cronjob_fetch[1]) # Do you have a better solution? Propse a better solution if you want. 
+        # I need to execute a cronjob stored in postgres. 
 
         try:
-            await asyncio.wait_for(cronjob_changed, cronjob[2])
+            await asyncio.wait_for(cronjob_changed, cronjob_fetch[2])
         except TimeoutError:
             pass
         else:
@@ -52,6 +53,14 @@ SELECT addr, body, run_at FROM cronjobs_to_run LIMIT 1
             cronjob_function(sys_state)
             # NOTE: IGNORE BECAUSE THIS FUNCTION WILL APPEAR AFTER EXEC
         except NameError:
-            conn.execute("""
-    
-                         """)
+            match cronjob_fetch[3]:
+                case "cronjob_once":
+                    conn.execute("""
+            UPDATE cronjob_once SET error = TRUE WHERE addr = %s;
+                                 """, (cronjob_fetch[0],))
+                case "cronjob_loop":
+                     conn.execute("""
+            UPDATE cronjob_loop SET error = TRUE WHERE addr = %s;
+                                  """, (cronjob_fetch[0],))
+                case _:
+                     raise psycopg.DataError(f"unexpected type. Type got {cronjob_fetch[3]}, expected cronjob_once OR cronjob_loop")

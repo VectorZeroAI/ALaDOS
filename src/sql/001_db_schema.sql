@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 
-    SELECT addr, body, start_after AS run_at FROM cronjob_once WHERE finished = FALSE AND error = FALSE
+    SELECT addr, body, start_after AS run_at, 'cronjob_once' AS type FROM cronjob_once WHERE finished = FALSE AND error = FALSE
     UNION ALL
-    SELECT addr, body, (last_ran + execute_every) as run_at FROM cronjob_loop WHERE error = FALSE
+    SELECT addr, body, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type FROM cronjob_loop WHERE error = FALSE
     ORDER BY run_at ASC;

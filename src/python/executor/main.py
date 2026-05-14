@@ -85,7 +85,10 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
     context_chunk_1 = "\n".join(viewing_window_context_list_str)
     
-    loaded_items_addr = conn.execute("SELECT ml.item_addr, vw.description FROM master_loads ml LEFT JOIN viewing_window vw WHERE master_addr = %s", (instr['master_addr'],)).fetchall()
+    loaded_items_addr = conn.execute("""SELECT ml.item_addr, vw.description
+                                     FROM master_loads ml 
+                                        LEFT JOIN ON ml.item_addr = vw.addr viewing_window vw
+                                     WHERE master_addr = %s""", (instr['master_addr'],)).fetchall()
 
     loaded_items_list_str = []
     for i in loaded_items_addr:

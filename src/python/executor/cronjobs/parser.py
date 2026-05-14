@@ -23,6 +23,8 @@ def parse(input: CronjobExpression):
             func_body = func_body + f"    do_this_later({input["params"]})"
         case 'notify_user':
             raise NotImplementedError("Not implemented user notifications yet")
+        case _:
+            raise ValueError("INVALID ACTION")
 
     if input['cronjob_type'] == "once":
         conn.execute("""

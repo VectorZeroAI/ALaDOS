@@ -201,7 +201,8 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
-    finished BOOLEAN NOT NULL DEFAULT FALSE
+    finished BOOLEAN NOT NULL DEFAULT FALSE,
+    error BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS cronjob_loop(
@@ -211,11 +212,12 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
-    last_ran INTEGER NOT NULL DEFAULT 0 -- unix epoch
+    last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch
+    error BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 
-    SELECT addr, body, start_after AS run_at FROM cronjob_once WHERE finished = FALSE
+    SELECT addr, body, start_after AS run_at FROM cronjob_once WHERE finished = FALSE AND error = FALSE
     UNION ALL
-    SELECT addr, body, (last_ran + execute_every) as run_at FROM cronjob_loop
+    SELECT addr, body, (last_ran + execute_every) as run_at FROM cronjob_loop WHERE error = FALSE
     ORDER BY run_at ASC;

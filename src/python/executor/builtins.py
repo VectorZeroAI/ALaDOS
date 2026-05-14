@@ -126,7 +126,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
     else:
         raise TypeError("ADDR OR NAME MUST BE PROVIDED")
 
-    return f"Knowledge entry {name if name is not None else "no name"}@{addr} contents: {result}."
+    return f"Knowledge entry {name if name is not None else "no name"}@{addr if addr is not None else "Did not resolve address."} contents: {result}."
 
 
 

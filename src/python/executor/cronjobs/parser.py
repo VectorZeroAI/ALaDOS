@@ -32,7 +32,7 @@ def parse(input: CronjobExpression):
                      """, (func_body, time.time() + input['run_after_or_every_s']))
     elif input['cronjob_type'] == "loop":
         conn.execute("""
-    INSERT INTO cronjob_once(body, execute_every) VALUES(%s, %s);
+    INSERT INTO cronjob_loop(body, execute_every) VALUES(%s, %s);
                      """, (func_body, input['run_after_or_every_s']))
 
 

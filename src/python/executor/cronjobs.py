@@ -52,15 +52,23 @@ SELECT addr, body, run_at, type FROM cronjobs_to_run LIMIT 1
         try:
             cronjob_function(sys_state)
             # NOTE: IGNORE BECAUSE THIS FUNCTION WILL APPEAR AFTER EXEC
-        except NameError:
+        except Exception as e:
             match cronjob_fetch[3]:
                 case "cronjob_once":
                     conn.execute("""
             UPDATE cronjob_once SET error = TRUE WHERE addr = %s;
                                  """, (cronjob_fetch[0],))
+                    if isinstance(e, NameError):
+                        conn.execute("""
+                UPDATE cronjob_once SET error_text = %s WHERE addr = %s;
+                                     """, ("NAME ERROR. cronjob_function not found in cronjob text.",))
                 case "cronjob_loop":
                      conn.execute("""
             UPDATE cronjob_loop SET error = TRUE WHERE addr = %s;
                                   """, (cronjob_fetch[0],))
+                     if isinstance(e, NameError):
+                          conn.execute("""
+                UPDATE cronjob_loop SET error_text = %s WHERE addr = %s;
+                                       """, ("NAME ERROR. cronjob_function not found in cronjob text.",))
                 case _:
                      raise psycopg.DataError(f"unexpected type. Type got {cronjob_fetch[3]}, expected cronjob_once OR cronjob_loop")

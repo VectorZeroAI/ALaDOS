@@ -202,7 +202,15 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
     body TEXT NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE,
-    error BOOLEAN NOT NULL DEFAULT FALSE
+    error BOOLEAN NOT NULL DEFAULT FALSE,
+    error_text TEXT,
+    CONSTRAINT error_text_not_without_error CHECK (
+        (error IS TRUE AND error_text IS NOT NULL)
+        OR
+        (error IS TRUE AND error_text IS NULL)
+        OR
+        (error is FALSE AND error_text IS NULL)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS cronjob_loop(
@@ -213,7 +221,16 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
     body TEXT NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
     last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch
-    error BOOLEAN NOT NULL DEFAULT FALSE
+    error BOOLEAN NOT NULL DEFAULT FALSE,
+    error_text TEXT,
+    CONSTRAINT error_text_not_without_error CHECK (
+        (error IS TRUE AND error_text IS NOT NULL)
+        OR
+        (error IS TRUE AND error_text IS NULL)
+        OR
+        (error is FALSE AND error_text IS NULL)
+    )
+
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 

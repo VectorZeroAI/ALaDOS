@@ -87,9 +87,9 @@ FOR EACH ROW EXECUTE FUNCTION position_calculation();
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
     DECLARE
-        name TEXT;
+        v_name TEXT;
     BEGIN
-        name := SELECT name FROM names WHERE addr = NEW.addr;
+        SELECT name INTO v_name FROM names WHERE addr = NEW.addr;
 
         IF name LIKE 'session_%' THEN
             RETURN NEW;

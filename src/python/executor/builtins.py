@@ -497,7 +497,7 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 
 
-
+@register_tool("K.report_paradoxal_information", ALL)
 def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
@@ -536,6 +536,7 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
     parse({
         "action": cronjob_action,
         "cronjob_type": cronjob_type,
-        "params"
+        "params": params,
+        "run_after_or_every_s": time_between_runs
     })
     return f"Added a cronjob doing {cronjob_action}"

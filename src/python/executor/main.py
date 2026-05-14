@@ -25,6 +25,7 @@ from .queue import embedder_queue
 from .queue import executor_interrupt_queue, executor_queue
 from .types import _ExecToolMetaData, Api, ToolCallsBlock, ToolCall
 from .api_calls_handler import api_calls_block
+from .cronjobs import main as cronjob_handler
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
@@ -273,6 +274,8 @@ def startup() -> None:
     print("startup of the executor finished")
 
     embedder.setup()
+    cronjob_handler.setup()
+
 
 """
 

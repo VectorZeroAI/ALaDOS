@@ -78,7 +78,7 @@ async def core(
     async def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
         nresults = []
         with conn.transaction():
-            for ncall in new_calls:
+            for ncall in tool_calls_block:
                 await checkpoint()
                 try:
                     ntool_result = execute_tool(ncall, metadata_c)

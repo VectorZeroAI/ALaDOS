@@ -339,7 +339,7 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
                          """, (_meta['master_id'],)).fetchall()
     special_context.extend(fetch)
 
-    special_context_str = f"Task instruction: {special_context.pop(0)}"
+    special_context_str = f"Task instruction: {special_context.pop(0)[0]}"
 
     tmp = []
     for i in special_context: # NOTE : the first element is removed in special_context.pop(0) call.

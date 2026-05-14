@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import inspect
-from types import CoroutineType
 
 import asyncio
 from typing import TypedDict
 import time
 import psycopg
-from ..utils.conn_factory import conn_factory
+from ...utils.conn_factory import conn_factory
 import threading
-import ast
 
 class SysState(TypedDict):
     conn: psycopg.Connection

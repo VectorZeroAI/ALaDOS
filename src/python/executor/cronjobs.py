@@ -44,7 +44,7 @@ def cronjob_executor():
             cronjob_changed.wait()
             continue
 
-        wait_time = time.time() - cronjob_fetch[2]
+        wait_time = cronjob_fetch[2] - time.time()
         changed_flag = cronjob_changed.wait(wait_time if wait_time > 0 else 0.001)
 
         if changed_flag:

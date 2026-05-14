@@ -13,26 +13,6 @@ import ast
 class SysState(TypedDict):
     conn: psycopg.Connection
 
-
-ALLOWED_NODES = (ast.FunctionDef,
-                 ast.Call,
-                 ast.Assign,
-                 ast.Add,
-                 ast.And,
-                 ast.Assert,
-                 ast.Break,
-                 ast.Compare,
-                 ast.Expression,
-                 ast.For,
-                 ast.Continue,
-                 ast.While,
-                 ast.Yield,
-                 ast.Match,
-                 ast.Not)
-ALLOWED_FUNCTIONS = ("print", "")
-# NOTE: This is for later, for validation of what AI typed in there. 
-# NOTE: I still think DSL is a good idea, because like, why not?
-
 def setup():
     threading.Thread(target=cronjob_executor, daemon=True).start()
 
@@ -75,8 +55,10 @@ def cronjob_executor():
             continue
 
         try:
-            exec(cronjob_fetch[1]) # Do you have a better solution? Propse a better solution if you want. 
-            # I need to execute a cronjob stored in postgres. 
+            exec(cronjob_fetch[1]) # THis is fine, because the AI wont have a way to modify what the code is
+            # The code will be generated at the database side, from the JSON DSL that the AI generates. 
+            # Basically action: {One of the list}, type: "loop"|"once", time: arbitrary_int
+
             if "cronjob_function" not in locals():
                 raise NameError("Cronjob function not in locals")
 

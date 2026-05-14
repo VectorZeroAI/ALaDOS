@@ -132,3 +132,28 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER notify_for_ai_msg
 AFTER UPDATE ON results
 FOR EACH ROW EXECUTE FUNCTION notify_for_ai_msg();
+
+
+CREATE OR REPLACE FUNCTION notify_cronjob_changes()
+RETURNS TRIGGER AS $$
+    BEGIN
+        PERFORM pg_notify('cronjob_changes', TRUE);
+        RETURN NEW;
+    END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER notify_cronjob_once_deleted
+AFTER DELETE ON cronjob_once
+FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
+
+CREATE OR REPLACE TRIGGER notify_cronjob_loop_deleted
+AFTER DELETE ON cronjob_loop
+FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
+
+CREATE OR REPLACE TRIGGER notify_cronjob_once_added
+AFTER INSERT ON cronjob_once
+FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
+
+CREATE OR REPLACE TRIGGER notify_cronjob_loop_added
+AFTER INSERT ON cronjob_loop
+FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();

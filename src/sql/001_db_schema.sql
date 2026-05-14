@@ -193,3 +193,29 @@ CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'slaves' AS type FROM slaves
     UNION ALL
     SELECT addr, 'results' AS type FROM results;
+
+CREATE TABLE IF NOT EXISTS cronjob_once(
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY
+        REFERENCES addrs(addr)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE,
+    body TEXT NOT NULL,
+    start_after TIMESTAMPZ NOT NULL,
+    finished BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS cronjob_loop(
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY
+        REFERENCES addrs(addr)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE,
+    body TEXT NOT NULL,
+    execute_every INT NOT NULL,
+    last_ran INT NOT NULL DEFAULT 0
+);
+
+CREATE OR REPLACE VIEW cronjobs_to_run AS 
+    SELECT addr, body, start_after AS run_at FROM cronjob_once WHERE finished = FALSE
+    UNION ALL
+    SELECT addr, body, (last_ran + execute_every) as run_at FROM cronjob_loop
+    ORDER BY run_at ASC;

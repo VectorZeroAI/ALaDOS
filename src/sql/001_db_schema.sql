@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
-    start_after TIMESTAMPZ NOT NULL,
+    start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE
 );
 
@@ -210,8 +210,8 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
-    execute_every INT NOT NULL,
-    last_ran INT NOT NULL DEFAULT 0
+    execute_every INTEGER NOT NULL, -- seconds
+    last_ran INTEGER NOT NULL DEFAULT 0 -- unix epoch
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 

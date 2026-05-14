@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import inspect
 from types import CoroutineType
 
 import asyncio
@@ -7,9 +8,30 @@ import time
 import psycopg
 from ..utils.conn_factory import conn_factory
 import threading
+import ast
 
 class SysState(TypedDict):
     conn: psycopg.Connection
+
+
+ALLOWED_NODES = (ast.FunctionDef,
+                 ast.Call,
+                 ast.Assign,
+                 ast.Add,
+                 ast.And,
+                 ast.Assert,
+                 ast.Break,
+                 ast.Compare,
+                 ast.Expression,
+                 ast.For,
+                 ast.Continue,
+                 ast.While,
+                 ast.Yield,
+                 ast.Match,
+                 ast.Not)
+ALLOWED_FUNCTIONS = ("print", "")
+# NOTE: This is for later, for validation of what AI typed in there. 
+# NOTE: I still think DSL is a good idea, because like, why not?
 
 def setup():
     threading.Thread(target=cronjob_executor, daemon=True).start()
@@ -58,7 +80,7 @@ def cronjob_executor():
             if "cronjob_function" not in locals():
                 raise NameError("Cronjob function not in locals")
 
-            if isinstance(cronjob_function, CoroutineType):
+            if inspect.iscoroutinefunction(cronjob_function):
                 loop.run_until_complete(cronjob_function(sys_state))
             else:
                 cronjob_function(sys_state)

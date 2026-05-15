@@ -542,4 +542,25 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
     return f"Added a cronjob doing {cronjob_action}"
 
 
-def
+
+@register_tool("context.unload_item", ["context"])
+def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    addr or name must be given.
+    """
+    if not addr and not name:
+        raise TypeError("addr or name must be provided")
+
+    conn = _meta['conn']
+
+    if not addr:
+        addr = conn.execute("""
+    SELECT resolve_name(%s);
+                            """, (name,)).fetchone()[0]
+
+    conn.execute("""
+    DELETE master_addr, item_addr FROM master_loads WHERE master_addr = %s AND item_addr = %s;
+                 """, (_meta['master_id'], addr))
+
+    return f"Unloaded item {addr}."
+

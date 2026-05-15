@@ -45,3 +45,4 @@ class _ExecToolMetaData(TypedDict):
     conn: psycopg.Connection
     _embedder_queue: Uqueue
     slave_id: int
+    context_limit: int

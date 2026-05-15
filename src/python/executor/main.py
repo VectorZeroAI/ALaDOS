@@ -124,7 +124,6 @@ async def core(
 
     await checkpoint()
     conn = conn_factory()
-    conn.autocommit = False
 
     async def execute_llm_call(prompt: str) -> str:
         while True:
@@ -151,8 +150,6 @@ async def core(
                     ntool_result = execute_tool(ncall, metadata_c)
                 except Exception as e2:
                     raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
-                else:
-                    conn.commit()
                 await checkpoint()
                 nresults.append(ntool_result)
         return nresults
@@ -162,122 +159,119 @@ async def core(
 
         slave_addr = await queue.get()
 
-        try:
-            instr = slave_addr_to_instr(slave_addr, conn)
-        except Exception as e:
-            print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
-            conn.execute("""
-    UPDATE results r SET status = 'error' FROM slaves s WHERE s.addr = %s AND r.addr = s.result_addr;
-                         """, (slave_addr,))
-            continue
-        try:
-            str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
-            print(str_instr)
-
-            llm_response = await execute_llm_call(str_instr)
-            
-            await checkpoint()
-            log_json({
-                'type': 'llm_response',
-                'status': 'normal',
-                'response': llm_response
-            })
+        with conn.transaction():
             try:
-                tool_calls: ToolCallsBlock = llm_to_json(llm_response)
-            except ValueError:
-                llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
-                tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
+                instr = slave_addr_to_instr(slave_addr, conn)
+            except Exception as e:
+                print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+                conn.execute("""
+        UPDATE results r SET status = 'error' FROM slaves s WHERE s.addr = %s AND r.addr = s.result_addr;
+                             """, (slave_addr,))
+                continue
+            try:
+                str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+                print(str_instr)
+
+                llm_response = await execute_llm_call(str_instr)
+                
+                await checkpoint()
                 log_json({
                     'type': 'llm_response',
-                    'status': 'abnormal',
-                    'reason': 'did not find any tool calls.',
-                    'new_tool_calls_block': tool_calls,
-                    'llm_without_think': llm_without_think
-            })
-
-            results = []
-
-            metadata_c: _ExecToolMetaData = {
-                    'conn': conn,
-                    'master_id': instr['master_addr'],
-                    '_embedder_queue': Uqueue[ReferenceTo](),
-                    'slave_id': slave_addr
-                    'context_limit': config['']
-                    }
-
-            for call in tool_calls:
-                await checkpoint()
+                    'status': 'normal',
+                    'response': llm_response
+                })
                 try:
-                    with conn.transaction():
-                        tool_result = execute_tool(call, metadata_c)
-
-                except ParadoxDetected as e:
-                    # TODO : When reusable master templates are implemented
-                    # Turn this into a reusable master template
-                    # With all the required logic for a robust paradox resolver.
-                    items = list(e.items)
-                    n_items =  []
-                    for i in items:
-                        if isinstance(i, str):
-                            n_items.append(i)
-                    for i in n_items:
-                        items.remove(i)
-
-                    addrs_items: Sequence[int] = []
-                    for i in n_items:
-                         addrs_items.append(conn.execute("SELECT resolve_name(%s);", (i,)).fetchone()[0])
-
-                    prompt = f"""
-                    Your task is to resolve the following paradox in the following items.
-                    Your task is to resolve the following paradox in the following items.
-                    Your task is to resolve the following paradox in the following items.
-                    ITEMS BEGIN: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
-                    PARADOX BEGIN: {e.paradox} PARADOX END.
-                    AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
-                        """
-                    llm_response = await execute_llm_call(prompt)
-
-                    tool_calls_block = llm_to_json(llm_response)
-
-                    nresults = await execute_tool_calls(tool_calls_block)
-                    results.extend(nresults)
-
-                    continue
-
-                except Exception as e:
-                    conn.rollback()
+                    tool_calls: ToolCallsBlock = llm_to_json(llm_response)
+                except ValueError:
+                    llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
+                    tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
                     log_json({
-                        'type': 'tool',
-                        'status': 'error',
-                        'message': str(e),
-                        'tool': call,
-                        'metadata': metadata_c
-                    })
-                    prompt = f"""The following tool call failed for the following reason: {call}, {e}
-                    Your task is to figure out what went wrong there, and create a working tool call.
-                    Here is what it attempted to do "{instr['instruction']}".
-                    The following is the tool call format instructions and all the valid tools:
-                    """ + "\n".join(HEADERS_REGISTRY['general'])
+                        'type': 'llm_response',
+                        'status': 'abnormal',
+                        'reason': 'did not find any tool calls.',
+                        'new_tool_calls_block': tool_calls,
+                        'llm_without_think': llm_without_think
+                })
 
-                    llm_output_new = await execute_llm_call(prompt)
+                results = []
 
-                    new_calls = llm_to_json(llm_output_new)
-                    log_json({
-                        'type': 'tool_error_recovery',
-                        'status': 'normal',
-                        'new_llm_output': llm_output_new,
-                        'new_tool_calls': new_calls
-                    })
+                metadata_c: _ExecToolMetaData = {
+                        'conn': conn,
+                        'master_id': instr['master_addr'],
+                        '_embedder_queue': Uqueue[ReferenceTo](),
+                        'slave_id': slave_addr,
+                        'context_limit': config.get('context_limit', 10000)
+                        }
 
-                    nresults = await execute_tool_calls(new_calls)
-                    results.extend(nresults)
+                for call in tool_calls:
+                    await checkpoint()
+                    try:
+                        with conn.transaction():
+                            tool_result = execute_tool(call, metadata_c)
 
-                    continue
+                    except ParadoxDetected as e:
+                        # TODO : When reusable master templates are implemented
+                        # Turn this into a reusable master template
+                        # With all the required logic for a robust paradox resolver.
+                        items = list(e.items)
+                        n_items =  []
+                        for i in items:
+                            if isinstance(i, str):
+                                n_items.append(i)
+                        for i in n_items:
+                            items.remove(i)
 
-                else:
-                    conn.commit() # This goes to the try statement.
+                        addrs_items: Sequence[int] = []
+                        for i in n_items:
+                             addrs_items.append(conn.execute("SELECT resolve_name(%s);", (i,)).fetchone()[0])
 
-                results.append(tool_result)
+                        prompt = f"""
+                        Your task is to resolve the following paradox in the following items.
+                        Your task is to resolve the following paradox in the following items.
+                        Your task is to resolve the following paradox in the following items.
+                        ITEMS BEGIN: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
+                        PARADOX BEGIN: {e.paradox} PARADOX END.
+                        AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
+                            """
+                        llm_response = await execute_llm_call(prompt)
+
+                        tool_calls_block = llm_to_json(llm_response)
+                        with conn.transaction():
+                            nresults = await execute_tool_calls(tool_calls_block)
+                        results.extend(nresults)
+
+                        continue
+
+                    except Exception as e:
+                        log_json({
+                            'type': 'tool',
+                            'status': 'error',
+                            'message': str(e),
+                            'tool': call,
+                            'metadata': metadata_c
+                        })
+                        prompt = f"""The following tool call failed for the following reason: {call}, {e}
+                        Your task is to figure out what went wrong there, and create a working tool call.
+                        Here is what it attempted to do "{instr['instruction']}".
+                        The following is the tool call format instructions and all the valid tools:
+                        """ + "\n".join(HEADERS_REGISTRY['general'])
+
+                        llm_output_new = await execute_llm_call(prompt)
+
+                        new_calls = llm_to_json(llm_output_new)
+                        log_json({
+                            'type': 'tool_error_recovery',
+                            'status': 'normal',
+                            'new_llm_output': llm_output_new,
+                            'new_tool_calls': new_calls
+                        })
+                        with conn.transaction():
+                            nresults = await execute_tool_calls(new_calls)
+                        results.extend(nresults)
+
+                        continue
+
+                    results.append(tool_result)
 
                 result_str = "\n".join([str(r) for r in results])
 
@@ -285,29 +279,27 @@ async def core(
                 conn.execute("""
                 SELECT new_result(%s, %s);
                              """, (result_str, instr["result_addr"]))
-                conn.commit()
 
                 items = metadata_c['_embedder_queue'].get_all()
                 for i in items:
                     embedder_queue.put(i)
 
-        except ExecutionFailed as e:
-            conn.rollback()
-            conn.execute("""
-            UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
-                         """, ({
-                             'tool_call': e.call1,
-                             'tool_call_recovery': e.call2,
-                             'tool_calls_block': e.callb1,
-                             'tool_calls_block_recovery': e.callb2,
-                             'error_original': e.error1,
-                             'error_from_recovery': e.error2
-                         }, instr['result_addr']))
-        
-        except Exception as e:
-            print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")
-            conn.rollback()
-            print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
+            except ExecutionFailed as e:
+                with conn.transaction():
+                    conn.execute("""
+                    UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
+                                 """, ({
+                                     'tool_call': e.call1,
+                                     'tool_call_recovery': e.call2,
+                                     'tool_calls_block': e.callb1,
+                                     'tool_calls_block_recovery': e.callb2,
+                                     'error_original': e.error1,
+                                     'error_from_recovery': e.error2
+                                 }, instr['result_addr']))
+            
+            except Exception as e:
+                print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")
+                print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
 def core_thread(coroutine, queue: Uqueue, apis: Sequence[Api]) -> None:
     loop = asyncio.new_event_loop()

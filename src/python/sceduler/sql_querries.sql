@@ -12,4 +12,4 @@ WHERE NOT EXISTS (
 
 -- The SQL querry to get the master context of a master goal
 SELECT window_position, window_size_r, window_size_l FROM master_context WHERE addr = ?;
-SELECT item_addr FROM master_loads WHERE master_addr = ?;
+SELECT item_addr FROM master_load WHERE master_addr = ?;

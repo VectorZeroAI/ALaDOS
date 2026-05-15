@@ -305,6 +305,7 @@ def add_slave(instruction: str,
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
     slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
+    NOTE: "planner" is not a slave type, and must be added via its dedicated "goal.add_planner_slave" tool!
     Currently allowed slave_types are: 
     """
     conn = _meta['conn']
@@ -561,7 +562,7 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
                             """, (name,)).fetchone()[0]
 
     conn.execute("""
-    DELETE master_addr, item_addr FROM master_loads WHERE master_addr = %s AND item_addr = %s;
+    DELETE master_addr, item_addr FROM master_load WHERE master_addr = %s AND item_addr = %s;
                  """, (_meta['master_id'], addr))
 
     return f"Unloaded item {addr}."
@@ -573,3 +574,5 @@ def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: 
     Websearch function that returns fulltext of top websites_amount webpages texts. 
     """
     searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] / 2)
+
+

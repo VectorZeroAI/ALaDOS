@@ -175,13 +175,13 @@ BEGIN
 
     IF v_new_type = 'knowledge' THEN
         UPDATE master_context SET
-        window_anchor_knowledge = v_new_addr,
-        window_anchor_exe IS NULL
+            window_anchor_knowledge = v_new_addr,
+            window_anchor_exe = NULL
         WHERE addr = p_master_id;
     ELSIF v_new_type = 'executables' THEN
         UPDATE master_context SET
-        window_anchor_exe = v_new_addr,
-        window_anchor_knowledge IS NULL
+            window_anchor_exe = v_new_addr,
+            window_anchor_knowledge = NULL
         WHERE addr = p_master_id;
     ELSE 
         RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;

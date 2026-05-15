@@ -45,5 +45,5 @@ def parse(input: CronjobExpression):
 def do_this_later(ai_instruction: str):
     conn = conn_factory()
     conn.execute("""
-PERFORM new_slave(NULL, %s);
+SELECT new_slave(NULL, %s);
                  """, (f"Perform the following actions: '{ai_instruction}'",))

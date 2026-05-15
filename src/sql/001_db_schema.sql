@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
             ON DELETE CASCADE,
     content TEXT NOT NULL,
     description TEXT NOT NULL,
-    position NUMERIC NOT NULL,
+    position UNIQUE NUMERIC NOT NULL,
     emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS executables (
     description TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
-    position NUMERIC NOT NULL,
+    position UNIQUE NUMERIC NOT NULL,
     emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 

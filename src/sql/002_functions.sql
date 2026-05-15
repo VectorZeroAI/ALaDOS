@@ -128,7 +128,7 @@ BEGIN
     IF tttt = 'knowledge' THEN
         UPDATE master_context SET
         window_anchor_knowledge = result_addr,
-        window_anchor_exe = NULL,
+        window_anchor_exe IS NULL,
         window_size_l = 12,
         window_size_r = 12
         WHERE addr = master_addr_p;
@@ -136,7 +136,7 @@ BEGIN
     IF tttt = 'executables' THEN
         UPDATE master_context SET
         window_anchor_exe = result_addr,
-        window_anchor_knowledge = NULL,
+        window_anchor_knowledge IS NULL,
         window_size_l = 12,
         window_size_r = 12
         WHERE addr = master_addr_p;
@@ -176,12 +176,12 @@ BEGIN
     IF v_new_type = 'knowledge' THEN
         UPDATE master_context SET
         window_anchor_knowledge = v_new_addr,
-        window_anchor_exe = NULL
+        window_anchor_exe IS NULL
         WHERE addr = p_master_id;
     ELSIF v_new_type = 'executables' THEN
         UPDATE master_context SET
         window_anchor_exe = v_new_addr,
-        window_anchor_knowledge = NULL
+        window_anchor_knowledge IS NULL
         WHERE addr = p_master_id;
     ELSE 
         RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;

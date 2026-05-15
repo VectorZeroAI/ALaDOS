@@ -93,8 +93,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
 
     req_results_str = "\n".join(req_results_str_list)
 
-    results_str = "\n\n".join(req_results_str)
-    return results_str
+    return req_results_str
     
 
 def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:

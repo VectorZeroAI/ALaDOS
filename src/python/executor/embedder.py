@@ -35,7 +35,7 @@ def setup():
         threading.Thread(target=embedder_thread, daemon=True, ).start()
     conn = conn_factory()
     addrs = conn.execute("""
-    SELECT addr FROM viewing_window WHERE emb = NULL;
+    SELECT addr FROM viewing_window WHERE emb IS NULL;
                  """).fetchall()
     for i in addrs:
         embedder_queue.put(i[0])

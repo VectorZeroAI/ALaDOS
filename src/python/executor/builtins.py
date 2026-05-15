@@ -433,7 +433,7 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
         conn.execute("""
         UPDATE master_context SET
         window_anchor_knowledge = %s,
-        window_anchor_exe = NULL,
+        window_anchor_exe IS NULL,
         window_size_r = 12,
         window_size_l = 12
         WHERE addr = %s;
@@ -443,7 +443,7 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
         conn.execute("""
         UPDATE master_context SET
         window_anchor_exe = %s,
-        window_anchor_knowledge = NULL,
+        window_anchor_knowledge IS NULL,
         window_size_r = 12,
         window_size_l = 12
         WHERE addr = %s;
@@ -510,9 +510,9 @@ def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: 
     conn = _meta['conn']
     conn.execute("""
     UPDATE results r 
-        JOIN slaves s ON s.result_addr = r.addr
     SET r.status = 'paradox',
         r.status_inf = %s
+    FROM slaves s
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))
     raise ParadoxDetected(paradox, items)

@@ -63,7 +63,7 @@ class SearxngSearcher:
         if instance in self.instances:
             self.instances.remove(instance)
 
-    def search(self, querry: str) -> list[dict[str, str]]:
+    def search(self, query: str) -> list[dict[str, str]]:
         """
         Perform a search using a random, healthy instance.
         
@@ -79,7 +79,7 @@ class SearxngSearcher:
         while self.instances:
             instance = random.choice(self.instances)
             search_url = f"{instance}/search"
-            params = {"q": querry}
+            params = {"q": query}
 
             try:
                 resp = httpx.get(search_url, params=params, timeout=self.timeout)
@@ -121,8 +121,8 @@ class SearxngSearcher:
 
         return results
     
-    def search_website_content(self, querry: str, amount_websites: int) -> str:
-        list_results = self.search(querry)
+    def search_website_content(self, query: str, amount_websites: int, max_len_char: int = 10000) -> str:
+        list_results = self.search(query)
 
         results_pre: list[str] = []
 
@@ -146,7 +146,13 @@ class SearxngSearcher:
         
         result_str: str = "\n\n".join(result_str_pre)
 
-        return result_str
+        removed_items = 0
+        for _ in len(result_str_pre):
+            if len(result_str) > max_len_char:
+                removed_items += 1
+                result_str = "\n\n".join(result_str_pre[len(result_str_pre) -1:])
+
+        return result_str + f"NOTE: removed {removed_items} amount of items due to overreach of result size limit."
 
 
 

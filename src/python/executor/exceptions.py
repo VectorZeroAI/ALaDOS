@@ -12,7 +12,7 @@ class ParadoxDetected(Exception):
         self.paradox: str = paradox_description
         self.items: Sequence[str|int] = items
 
-class ContextLimitExceeded(Exception):
+class ContextLimitExceededError(Exception):
     def __init__(self, payload: str):
         self.payload = payload
         self.len_payload = len(payload)

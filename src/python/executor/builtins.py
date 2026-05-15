@@ -131,7 +131,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
 
 
 @register_tool("tool.execute", ['general'])
-def execute_tool(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def execute_tool_builtin_func(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -540,3 +540,6 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
         "run_after_or_every_s": time_between_runs
     })
     return f"Added a cronjob doing {cronjob_action}"
+
+
+def

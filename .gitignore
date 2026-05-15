@@ -9,6 +9,9 @@ src/alados.egg-info/SOURCES.txt
 src/alados.egg-info/dependency_links.txt
 src/alados.egg-info/requires.txt
 dump*.sql
+.git/
+.pytest_cache/
+.venv/
 
 # Python bytecode
 __pycache__/
@@ -16,3 +19,6 @@ __pycache__/
 *.pyo
 src/alados.egg-info/entry_points.txt
 src/alados.egg-info/top_level.txt
+.customgitignore
+dirdump.py
+dump.txt

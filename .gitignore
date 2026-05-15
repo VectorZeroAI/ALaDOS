@@ -22,3 +22,4 @@ src/alados.egg-info/top_level.txt
 .customgitignore
 dirdump.py
 dump.txt
+dump8.sql.txt

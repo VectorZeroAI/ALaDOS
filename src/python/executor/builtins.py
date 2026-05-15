@@ -576,6 +576,6 @@ def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: 
     """
     Websearch function that returns fulltext of top websites_amount webpages texts. 
     """
-    searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] / 2)
+    return f"Websearch for query '{qeury}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] // 2)}'"
 
 

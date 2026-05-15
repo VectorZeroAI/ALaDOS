@@ -202,6 +202,7 @@ async def core(
                     'master_id': instr['master_addr'],
                     '_embedder_queue': Uqueue[ReferenceTo](),
                     'slave_id': slave_addr
+                    'context_limit': config['']
                     }
 
             for call in tool_calls:

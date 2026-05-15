@@ -147,7 +147,7 @@ class SearxngSearcher:
         result_str: str = "\n\n".join(result_str_pre)
 
         removed_items = 0
-        for _ in len(result_str_pre):
+        for _ in range(len(result_str_pre)):
             if len(result_str) > max_len_char:
                 removed_items += 1
                 result_str = "\n\n".join(result_str_pre[len(result_str_pre) -1:])

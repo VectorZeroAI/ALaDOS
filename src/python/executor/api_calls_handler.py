@@ -6,6 +6,7 @@ import httpx
 import asyncio
 import time
 
+from ..executor.exceptions import ContextLimitExceededError
 from ..executor.types import Api
 from ..utils.logger import log_json
 from ..utils.config_dir_resolver import config_dir_resolver
@@ -13,21 +14,9 @@ from ..queue import global_interrupt_queue
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
+if not config_file.exists():
+    raise ValueError(f"CONFIGUATION FILE {config_file} NOT FOUND !!!!")
 config = tomllib.loads(config_file.read_text())
-
-def insertion_sort_by_key(arr, key):
-    for i in range(1, len(arr)):
-        current = arr[i]
-        val = current[key]          # the numeric value to compare
-        j = i - 1
-        # shift larger items one step to the right
-        while j >= 0 and arr[j][key] > val:
-            arr[j + 1] = arr[j]
-            j -= 1
-        arr[j + 1] = current
-    return arr
-
-
 
 async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str) -> str|None:
     """
@@ -37,6 +26,10 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
     api_specs_sorted = sorted(api_specs, key=lambda x: x['rate_limited_until'])
     await checkpoint()
     print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.monotonic() for r in api_specs_sorted]}")
+
+    if len(prompt) > config.get("context_limit", 10000):
+        raise ContextLimitExceededError(prompt)
+
 
     for api_spec in api_specs_sorted:
         await checkpoint()
@@ -69,6 +62,8 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
                         api_spec['rate_limited_until'] = time.monotonic() + (5 * api_spec['consecutive_ratelimits'])
                         api_spec['consecutive_ratelimits'] += 1
                     continue
+            elif e.response.status_code == 413:
+                raise ContextLimitExceededError(prompt)
         else:
             with api_spec['lock']:
                 api_spec['consecutive_ratelimits'] = 0

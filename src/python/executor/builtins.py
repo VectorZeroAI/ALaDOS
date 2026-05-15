@@ -14,12 +14,14 @@ from .embedder import embedder
 from .types import _ExecToolMetaData, SlaveScope
 from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
+from .comms.searxng import SearxngSearcher
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
 
 ALL = get_args(SlaveScope)
 
+searcher_obj = SearxngSearcher
 
 def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
     """
@@ -564,3 +566,10 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
 
     return f"Unloaded item {addr}."
 
+
+@register_tool("web.search_fulltext", ['general', 'communication'])
+def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    Websearch function that returns fulltext of top websites_amount webpages texts. 
+    """
+    searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] / 2)

@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
             ON DELETE CASCADE,
     content TEXT NOT NULL,
     description TEXT NOT NULL,
-    position UNIQUE NUMERIC NOT NULL,
+    position NUMERIC UNIQUE NOT NULL,
     emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS executables (
     description TEXT NOT NULL, -- used for semantic similarity search
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
-    position UNIQUE NUMERIC NOT NULL,
+    position NUMERIC UNIQUE NOT NULL,
     emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
 );
 
@@ -128,9 +128,7 @@ CREATE TABLE IF NOT EXISTS results (
         (ready IS TRUE AND content_str IS NOT NULL)
     ),
     CONSTRAINT status_inf_not_without_status CHECK (
-        (status_inf IS NULL)
-        OR
-        (status_inf IS NOT NULL and status IS NOT NULL)
+        NOT(status_inf IS NOT NULL AND status IS NULL)
     )
 );
 

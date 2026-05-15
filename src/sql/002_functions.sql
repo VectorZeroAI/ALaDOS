@@ -127,18 +127,18 @@ BEGIN
     
     IF tttt = 'knowledge' THEN
         UPDATE master_context SET
-        window_anchor_knowledge = result_addr,
-        window_anchor_exe IS NULL,
-        window_size_l = 12,
-        window_size_r = 12
+            window_anchor_knowledge = result_addr,
+            window_anchor_exe = NULL,
+            window_size_l = 12,
+            window_size_r = 12
         WHERE addr = master_addr_p;
     END IF;
     IF tttt = 'executables' THEN
         UPDATE master_context SET
-        window_anchor_exe = result_addr,
-        window_anchor_knowledge IS NULL,
-        window_size_l = 12,
-        window_size_r = 12
+            window_anchor_exe = result_addr,
+            window_anchor_knowledge = NULL,
+            window_size_l = 12,
+            window_size_r = 12
         WHERE addr = master_addr_p;
     END IF;
     RETURN;

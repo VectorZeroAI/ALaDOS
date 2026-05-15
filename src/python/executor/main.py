@@ -87,7 +87,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
     
     loaded_items_addr = conn.execute("""SELECT ml.item_addr, vw.description
                                      FROM master_loads ml 
-                                        LEFT JOIN ON ml.item_addr = vw.addr viewing_window vw
+                                        LEFT JOIN viewing_window vw ON ml.item_addr = vw.addr 
                                      WHERE master_addr = %s""", (instr['master_addr'],)).fetchall()
 
     loaded_items_list_str = []

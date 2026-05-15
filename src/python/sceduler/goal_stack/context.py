@@ -68,7 +68,8 @@ def resolve_context(slave_obj: SlaveObj):
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",
                           f"Previous steps results are: [{results_context}]",
-                          f"Tool headers are: {TOOL_HEADERS}"])
+                          f"Tool headers are: {TOOL_HEADERS}",
+                          f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."])
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """

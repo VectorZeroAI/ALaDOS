@@ -305,7 +305,7 @@ def add_slave(instruction: str,
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
     slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
-    NOTE: "planner" is not a slave type, and must be added via its dedicated "goal.add_planner_slave" tool!
+    DO NOT USE PLANNER AS A SLAVE TYPE! USE THE DEDICATED goal.add_planner_slave TOOL TO ADD A PLANNER SLAVE!
     Currently allowed slave_types are: 
     """
     conn = _meta['conn']
@@ -318,6 +318,9 @@ def add_slave(instruction: str,
             SELECT resolve_name(%s);
                   """, (i,)).fetchone()[0])
 
+    if slave_type == "planner":
+        return add_replanner_slave()
+
     conn.execute("""
     SELECT new_slave(%s, %s, %s, %s, %s, %s, %s);
         """, 
@@ -328,7 +331,7 @@ add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(Slave
 
 @register_tool("goal.add_planner_slave", ['task'])
 def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
-    """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. """
+    """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. TO ADD PLANNER, USE THIS FUNCTION. """
     conn = _meta['conn']
     special_context = []
     fetch = conn.execute("""

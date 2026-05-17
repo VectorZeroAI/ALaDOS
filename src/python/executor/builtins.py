@@ -608,16 +608,17 @@ SELECT new_result(%s,
     return "Sent a message to the human."
 
 
-
+@register_tool("web.search", ['communication'])
 def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Returns the normal websearch result like structure.
     """
     results_raw = searcher_obj.search(query)
     results: list[str] = []
-    for i in results_raw:
+    for i in results_raw[:amount_results]:
          results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
     return "\n".join(results)
+
 
 
 

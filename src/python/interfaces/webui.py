@@ -18,7 +18,7 @@ ai_msg: TypeAlias = str
 h_msg: TypeAlias = str
 
 
-AI_SESSION_HANDLER_PROMPT = 'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. To answer the user, use the tool result.write, DO NOT JUST ANSWER PLAINTEXT.'
+AI_SESSION_HANDLER_PROMPT = 'Your task is to be a helffull assistant, to truthfully answer users questions, and to execute users instructions via tools. You must also answer the user. DO NOT JUST ANSWER PLAINTEXT.'
 
 
 webserver = Flask(__name__)
@@ -145,13 +145,4 @@ The graph structure of messages in a session is the following:
 """
 My lazy ass doesnt want to refactor these notes now, but just know that they may not be valid any longer,
 because I added a metadata JSONB field to the results table, where a lot of the stuff that I used a ton of logic to infer just lives plaintext now.
-"""
-
-
-"""
-So, the sessions are as following: they are masters with name session_{session_name}.
-They have 1 result, that is not ready, auto created, as a placeholeder for human message,
-    that is set to ready and human message: contents into content_str
-They have a slave with instruction of "answer the human AND execute appropriate tools,
-    Write your answer as text into result.write"
 """

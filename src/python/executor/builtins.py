@@ -305,7 +305,7 @@ def add_slave(instruction: str,
     required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
     slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
-    DO NOT USE PLANNER AS A SLAVE TYPE! USE THE DEDICATED goal.add_planner_slave TOOL TO ADD A PLANNER SLAVE!
+    required_results_names can include "self", wich would mean the currently executed slave, e.g. your current result will be forwarded to it.
     Currently allowed slave_types are: 
     """
     conn = _meta['conn']
@@ -314,12 +314,16 @@ def add_slave(instruction: str,
 
     if required_results_names is not None:
         for i in required_results_names:
+            if i == "self":
+                required_results_addrs.append(_meta['slave_id'])
+                continue
+
             required_results_addrs.append(conn.execute("""
             SELECT resolve_name(%s);
                   """, (i,)).fetchone()[0])
 
     if slave_type == "planner":
-        return add_replanner_slave()
+        return add_replanner_slave() # NOTE: Dont remove this, the AI will continue to fuck this up forever
 
     conn.execute("""
     SELECT new_slave(%s, %s, %s, %s, %s, %s, %s);
@@ -574,7 +578,7 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
 @register_tool("web.search_fulltext", ['general', 'communication'])
 def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
-    Websearch function that returns fulltext of top websites_amount webpages texts. 
+    Websearch function that returns fulltext of top websites_amount webpages texts. Needs analysis through a second slave for actual anaswer. 
     """
     return f"Websearch for query '{query}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] // 2)}'"
 

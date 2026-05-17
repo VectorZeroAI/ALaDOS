@@ -26,13 +26,20 @@ BEGIN
             'session_name', v_session_name
     )) RETURNING addr INTO v_usr_msg_addr;
 
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_addr], NULL, NULL, 
-        jsonb_build_object(
-            'type', 'ai_message',
-            'turn', 1,
-            'session_name', v_session_name
-        )
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_addr], NULL, NULL-- , 
+--         jsonb_build_object(
+--             'type', 'ai_message',
+--             'turn', 1,
+--             'session_name', v_session_name
+--         )
     );
+
+    INSERT INTO results(metadata)
+    VALUES (jsonb_build_object('type', 'ai_message',
+                    'turn', 1,
+                    'session_name', v_session_name
+    ));
+
 
     PERFORM new_result('User message: "'||p_first_msg||' "', v_usr_msg_addr);
     
@@ -45,13 +52,19 @@ BEGIN
     ) RETURNING addr INTO v_usr_msg_placeholder_addr;
     
     
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_placeholder_addr], NULL, NULL,
-        jsonb_build_object(
-            'type', 'ai_message',
-            'session_name', v_session_name,
-            'turn', 2
-        )
+    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_placeholder_addr], NULL, NULL --,
+--         jsonb_build_object(
+--             'type', 'ai_message',
+--             'session_name', v_session_name,
+--             'turn', 2
+--         )
     );
+
+    INSERT INTO results(metadata)
+    VALUES (jsonb_build_object('type', 'ai_message',
+                    'turn', 2,
+                    'session_name', v_session_name
+    ));
     
     RETURN v_session_name;
 END;
@@ -127,12 +140,19 @@ BEGIN
             'turn', next_result_turn))
     RETURNING addr INTO next_result_addr;
 
-    PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY[next_result_addr], NULL, NULL, 
-        jsonb_build_object('type', 'ai_message',
-            'turn', next_result_turn,
-            'session_name', session_name
-        )
+    PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY[next_result_addr], NULL, NULL--, 
+--         jsonb_build_object('type', 'ai_message',
+--             'turn', next_result_turn,
+--             'session_name', session_name
+--         )
     );
+
+    INSERT INTO results(metadata)
+    VALUES (jsonb_build_object('type', 'ai_message',
+                    'turn', next_result_turn,
+                    'session_name', session_name
+    ));
+
     RETURN;
 
 END;

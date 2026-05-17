@@ -90,7 +90,7 @@ BEGIN
     END IF;
 
     -- Mark result ready
-    UPDATE results SET ready = TRUE, content_str = p_content WHERE addr = v_addr;
+    UPDATE results SET ready = TRUE, content_str = p_content, status = NULL, status_inf = NULL WHERE addr = v_addr;
 
     -- Find and notify newly unblocked slaves
     FOR unblocked IN

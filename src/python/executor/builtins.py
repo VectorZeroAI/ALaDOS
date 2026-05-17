@@ -579,3 +579,15 @@ def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: 
     return f"Websearch for query '{query}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] // 2)}'"
 
 
+@register_tool("user.send_message", ['general', 'communication'])
+def send_message_to_human_v_webui(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+    """
+    Sends a message to the human. Must only be used in presense of an user message, otherwise DONT TOUCH
+    """
+    conn = _meta['conn']
+    conn.execute("""
+SELECT new_result(%s, 
+    (SELECT addr FROM results WHERE metadata->>'type'='ai_message' 
+        AND metadata->>'session_name'=(SELECT name FROM names WHERE addr=%s)
+    ORDER BY (metadata->>'turn')::INT ASC LIMIT 1));
+                 """, (text, _meta['master_id']))

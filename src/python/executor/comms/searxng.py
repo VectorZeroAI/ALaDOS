@@ -2,6 +2,7 @@
 
 
 import random
+from time import time
 from typing import TypeAlias, TypedDict
 import httpx
 from bs4 import BeautifulSoup
@@ -84,8 +85,9 @@ class SearxngSearcher:
             try:
                 resp = httpx.get(search_url, params=params, timeout=self.timeout)
                 resp.raise_for_status()
-            except Exception as e:
+            except Exception:
                 self._remove_broken(instance)
+                print(f"Removed a broken intance. {len(self.instances)} left.")
                 continue  # try another one
 
             return self._parse_html(resp.text)
@@ -119,16 +121,19 @@ class SearxngSearcher:
                 "snippet": snippet,
             })
 
+        print(f"Found results {results}")
         return results
     
-    def search_website_content(self, query: str, amount_websites: int, max_len_char: int = 10000) -> str:
+    def search_website_content(self, query: str, amount_websites: int, max_len_char: int = 40000) -> str:
         list_results = self.search(query)
 
         results_pre: list[str] = []
 
-        for i in list_results[:amount_websites]:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.get(i['url'])
+        with httpx.Client(timeout=self.timeout) as client:
+            for i in list_results[:amount_websites]:
+                print(f"Hit {i["url"]}@{time()}")
+                response = client.get(i['url']) # TODO: Refactor into async
+                print(f"Got result at {time()}")
                 try:
                     response.raise_for_status()
                 except Exception:

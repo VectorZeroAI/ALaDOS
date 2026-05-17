@@ -25,20 +25,21 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
     await checkpoint()
     api_specs_sorted = sorted(api_specs, key=lambda x: x['rate_limited_until'])
     await checkpoint()
-    print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.monotonic() for r in api_specs_sorted]}")
+    print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.time() for r in api_specs_sorted]}")
 
-    if len(prompt) > config.get("context_limit", 10000):
+    if len(prompt) > config.get("context_limit", 40000):
         raise ContextLimitExceededError(prompt)
 
 
     for api_spec in api_specs_sorted:
         await checkpoint()
-        await asyncio.sleep(max(api_spec['rate_limited_until'] - time.monotonic(), 0))
+        await asyncio.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
         await checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
             await checkpoint()
         except httpx.HTTPStatusError as e:
+            print(e, e.response, e.response.status_code)
             if e.response.status_code == 429:
                 if e.response.headers.get('Retry-After') is not None:
                     try:
@@ -47,19 +48,19 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
                         sleep_seconds = 5
                     await checkpoint()
                     with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.monotonic() + min(sleep_seconds, 60)
+                        api_spec['rate_limited_until'] = time.time() + min(sleep_seconds, 60)
                         api_spec['consecutive_ratelimits'] += 1
                     continue
                 if api_spec['consecutive_ratelimits'] == 0:
                     await checkpoint()
                     with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.monotonic() + 5
+                        api_spec['rate_limited_until'] = time.time() + 5
                         api_spec['consecutive_ratelimits'] += 1
                     continue
                 else:
                     await checkpoint()
                     with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.monotonic() + (5 * api_spec['consecutive_ratelimits'])
+                        api_spec['rate_limited_until'] = time.time() + (5 * api_spec['consecutive_ratelimits'])
                         api_spec['consecutive_ratelimits'] += 1
                     continue
             elif e.response.status_code == 413:
@@ -122,8 +123,10 @@ def _llm_call_openai(api: Api, prompt: str) -> str:
                     }
                 )
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-
+        try:
+            return response.json()["choices"][0]["message"]["content"]
+        except KeyError:
+            print(response.json())
 
 def llm_call(api: Api, prompt: str) -> str:
     if api.get('claude'):

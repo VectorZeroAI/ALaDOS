@@ -7,6 +7,7 @@ import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
 import psycopg
+from psycopg.types.json import Jsonb
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..sceduler.main import slave_addr_to_instr
@@ -200,7 +201,7 @@ async def core(
                         'master_id': instr['master_addr'],
                         '_embedder_queue': Uqueue[ReferenceTo](),
                         'slave_id': slave_addr,
-                        'context_limit': config.get('context_limit', 10000)
+                        'context_limit': config.get('context_limit', 40000)
                         }
 
                 for call in tool_calls:
@@ -288,14 +289,14 @@ async def core(
                 with conn.transaction():
                     conn.execute("""
                     UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
-                                 """, ({
+                                 """, (Jsonb({
                                      'tool_call': e.call1,
                                      'tool_call_recovery': e.call2,
                                      'tool_calls_block': e.callb1,
                                      'tool_calls_block_recovery': e.callb2,
-                                     'error_original': e.error1,
-                                     'error_from_recovery': e.error2
-                                 }, instr['result_addr']))
+                                     'error_original': str(e.error1),
+                                     'error_from_recovery': str(e.error2)
+                                 }), instr['result_addr']))
             
             except Exception as e:
                 print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")

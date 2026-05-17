@@ -526,6 +526,8 @@ def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: 
     raise ParadoxDetected(paradox, items)
 
 
+
+
 @register_tool("goal.add_cron_job", ['task', 'general'])
 def add_cronjob(cronjob_type: Literal['once', 'loop'],
                 cronjob_action: CronjobActions,
@@ -553,6 +555,7 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
 
 
 
+
 @register_tool("context.unload_item", ["context"])
 def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
@@ -575,12 +578,18 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
     return f"Unloaded item {addr}."
 
 
+
+
+
 @register_tool("web.search_fulltext", ['general', 'communication'])
 def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
     Websearch function that returns fulltext of top websites_amount webpages texts. Needs analysis through a second slave for actual anaswer. 
     """
     return f"Websearch for query '{query}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta['context_limit'] // 2)}'"
+
+
+
 
 
 @register_tool("user.send_message", ['general', 'communication'])

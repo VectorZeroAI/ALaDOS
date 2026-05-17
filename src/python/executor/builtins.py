@@ -604,3 +604,21 @@ SELECT new_result(%s,
         AND metadata->>'session_name'=(SELECT name FROM names WHERE addr=%s)
     ORDER BY (metadata->>'turn')::INT ASC LIMIT 1));
                  """, (text, _meta['master_id']))
+    
+    return "Sent a message to the human."
+
+
+
+def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
+    """
+    Returns the normal websearch result like structure.
+    """
+    results_raw = searcher_obj.search(query)
+    results: list[str] = []
+    for i in results_raw:
+         results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
+    return "\n".join(results)
+
+
+
+

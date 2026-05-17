@@ -64,7 +64,7 @@ class SearxngSearcher:
         if instance in self.instances:
             self.instances.remove(instance)
 
-    def search(self, query: str) -> list[dict[str, str]]:
+    def search(self, query: str) -> RawSearchResultList:
         """
         Perform a search using a random, healthy instance.
         

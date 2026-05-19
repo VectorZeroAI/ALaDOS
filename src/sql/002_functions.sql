@@ -190,3 +190,18 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE plpgsql;
+
+-- CREATE OR REPLACE FUNCTION get_viewing_window(
+--     anchor_addr BIGINT,
+--     size_l INT,
+--     size_r INT
+-- ) RETURNS TABLE(addr BIGINT, pos INT) AS $$
+-- DECLARE 
+--     v_anchor_numeric_pos NUMERIC,
+--     v_anchor_emb vector(786),
+-- BEGIN
+--     RETURN (WITH knowledge_sorted AS ())
+-- 
+-- $$ LANGUAGE plpgsql;
+-- 
+-- 

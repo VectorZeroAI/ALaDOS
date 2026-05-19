@@ -1,11 +1,12 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
 DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
-        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication');
+        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui', '_rmt');
     END IF;
 END
 $$ LANGUAGE plpgsql;
@@ -173,11 +174,15 @@ CREATE TABLE IF NOT EXISTS ownership(
             ON DELETE CASCADE
 );
 
-CREATE OR REPLACE VIEW viewing_window AS
+
+CREATE OR REPLACE MATERIALIZED VIEW viewing_window AS
     SELECT addr, description, emb, position, 'knowledge' AS type FROM knowledge
     UNION ALL
     SELECT addr, description, emb, position, 'executables' AS type FROM executables
     ORDER BY position;
+
+CREATE INDEX ON viewing_window USING hnsw(emb consine_cosine_ops); -- TODO: FINISH
+
 
 CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'knowledge' AS type FROM knowledge

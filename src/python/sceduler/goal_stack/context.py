@@ -235,8 +235,8 @@ def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 def resolve_window(window_data: WindowData) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
     conn = conn_factory()
-    anchor_pos = conn.execute(f"""
-    SELECT position FROM {window_data["window_position"]["ref_table"]} WHERE addr = %s 
+    anchor_pos = conn.execute("""
+    SELECT position FROM vector_ops WHERE addr = %s 
                  """, (window_data["window_position"]["ref_addr"], )).fetchone()
 
     if anchor_pos is None:

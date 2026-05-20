@@ -38,9 +38,15 @@ CREATE TABLE IF NOT EXISTS knowledge (
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
     content TEXT NOT NULL,
-    description TEXT NOT NULL,
-    position NUMERIC UNIQUE NOT NULL,
-    emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
+    description GENERATED ALWAYS AS (
+        SELECT description FROM vector_ops WHERE addr_k = addr
+    ) VIRTUAL,
+    position GENERATED ALWAYS AS (
+        SELECT position FROM vector_ops WHERE addr_k = addr
+    ) VIRTUAL,
+    emb GENERATED ALWAYS AS (
+        SELECT position FROM vector_ops WHERE addr_k = addr
+    ) VIRTUAL -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE INDEX ON knowledge USING hnsw(emb vector_cosine_ops);
@@ -50,14 +56,37 @@ CREATE TABLE IF NOT EXISTS executables (
         REFERENCES addrs(addr)
             ON UPDATE CASCADE
             ON DELETE CASCADE,
-    description TEXT NOT NULL, -- used for semantic similarity search
+    description GENERATED ALWAYS AS (
+        SELECT description FROM vector_ops WHERE addr_exe = addr
+    ) VIRTUAL,
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL,
-    position NUMERIC UNIQUE NOT NULL,
-    emb vector(768) -- NOTE : Names, aka titles, are always stored in names table
+    position GENERATED ALWAYS AS (
+        SELECT position FROM vector_ops WHERE addr_exe = addr
+    ) VIRTUAL,
+    emb GENERATED ALWAYS AS (
+        SELECT position FROM vector_ops WHERE addr_exe = addr
+    ) VIRTUAL -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE INDEX ON executables USING hnsw(emb vector_cosine_ops);
+CREATE TABLE IF NOT EXISTS vector_ops(
+    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    position NUMERIC UNIQUE NOT NULL,
+    description TEXT NOT NULL,
+    type GENERATED ALWAYS AS (CASE
+        WHEN addr_exe IS NOT NULL THEN 'executable'
+        WHEN addr_k IS NOT NULL THEN 'knowledge'
+    ) VIRTUAL,
+    emb vector(786),
+    CONSTRAINT addr_or_exe_ref_not_both_not_none CHECK NOT (
+        (addr_exe IS NOT NULL AND addr_k IS NOT NULL)
+        OR
+        (addr_exe IS NULL AND addr_k IS NULL)
+    ),
+    PRIMARY KEY (addr_exe, addr_k),
+);
+
 
 CREATE TABLE IF NOT EXISTS logs (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
@@ -175,14 +204,12 @@ CREATE TABLE IF NOT EXISTS ownership(
 );
 
 
-CREATE OR REPLACE MATERIALIZED VIEW viewing_window AS
+
+CREATE OR REPLACE VIEW viewing_window AS
     SELECT addr, description, emb, position, 'knowledge' AS type FROM knowledge
     UNION ALL
     SELECT addr, description, emb, position, 'executables' AS type FROM executables
     ORDER BY position;
-
-CREATE INDEX ON viewing_window USING hnsw(emb consine_cosine_ops); -- TODO: FINISH
-
 
 CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'knowledge' AS type FROM knowledge

@@ -20,7 +20,9 @@ CREATE OR REPLACE FUNCTION new_slave(
         new_slave_addr := new_addr();
         v_result_addr := COALESCE(p_result_addr, new_addr());
 
-        INSERT INTO results (addr, metadata) VALUES (v_result_addr, p_result_metadata);
+        IF p_result_addr IS NULL THEN
+            INSERT INTO results (addr, metadata) VALUES (v_result_addr, p_result_metadata);
+        END IF;
 
         IF p_result_name IS NOT NULL THEN
             INSERT INTO names (addr, name) VALUES (v_result_addr, p_result_name);
@@ -198,7 +200,7 @@ $$ LANGUAGE plpgsql;
 -- ) RETURNS TABLE(addr BIGINT, pos INT) AS $$
 -- DECLARE 
 --     v_anchor_numeric_pos NUMERIC,
---     v_anchor_emb vector(786),
+--     v_anchor_emb vector(768),
 -- BEGIN
 --     RETURN (WITH knowledge_sorted AS ())
 -- 

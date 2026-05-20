@@ -7,7 +7,7 @@ import tomllib
 from .queue import embedder_queue
 import httpx
 from .types import Api
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import TypeAdapter
 from sentence_transformers import SentenceTransformer
 from pgvector.psycopg import register_vector
 

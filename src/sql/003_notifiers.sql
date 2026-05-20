@@ -120,7 +120,6 @@ CREATE OR REPLACE TRIGGER pos_calculate
 BEFORE UPDATE OF emb ON vector_ops
 FOR EACH ROW EXECUTE FUNCTION position_calculation(); 
 
-
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$
     DECLARE
@@ -182,7 +181,7 @@ FOR EACH ROW EXECUTE FUNCTION notify_for_ai_msg();
 CREATE OR REPLACE FUNCTION notify_cronjob_changes()
 RETURNS TRIGGER AS $$
     BEGIN
-        PERFORM pg_notify('cronjob_changes', TRUE);
+        PERFORM pg_notify('cronjob_changes', TRUE::TEXT);
         RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;

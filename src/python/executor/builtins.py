@@ -54,8 +54,9 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
     conn.execute("""
-    INSERT INTO knowledge (addr, content, description) VALUES (%s, %s, %s);
-                 """, (addr, content, description))
+    INSERT INTO knowledge (addr, content) VALUES (%s, %s);
+    INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s);
+                 """, (addr, content, addr, description))
     if name is not None:
         conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
 
@@ -102,7 +103,7 @@ def k_edit(addr: int|None = None,
         search, replace = _sr_block_parser(description_change)
         new_d = old_d.replace(search, replace)
         conn.execute("""
-        UPDATE knowledge SET description = %s WHERE addr = %s;
+        UPDATE vector_ops SET description = %s WHERE addr = %s;
                      """, (new_d, addr))
 
         _meta['_embedder_queue'].put(addr)
@@ -182,8 +183,9 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
     SELECT new_addr();
                         """).fetchone()[0]
     conn.execute("""
-    INSERT INTO executables(description, header, body, addr) VALUES(%s, %s, %s, %s);
-                 """, (description, header, body, addr))
+    INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
+    INSERT INTO vector_ops(addr, description) VALUES (%s, %s)
+                 """, (header, body, addr, addr, description))
     if name is not None:
         conn.execute("""
         INSERT INTO names(addr, name) VALUES(%s, %s);
@@ -236,7 +238,7 @@ def edit_tool(name: str|None = None,
 
     if new_description is not None:
         conn.execute("""
-        UPDATE executables SET description = %s WHERE addr = %s;
+        UPDATE vector_ops SET description = %s WHERE addr = %s;
                      """, (new_description, addr))
         _meta['_embedder_queue'].put(addr)
 
@@ -440,20 +442,20 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
     if addr_type == "knowledge":
         conn.execute("""
         UPDATE master_context SET
-        window_anchor_knowledge = %s,
-        window_anchor_exe IS NULL,
-        window_size_r = 12,
-        window_size_l = 12
+            window_anchor_knowledge = %s,
+            window_anchor_exe = NULL,
+            window_size_r = 12,
+            window_size_l = 12
         WHERE addr = %s;
                      """, (addr, _meta['master_id']))
 
     elif addr_type == "executables":
         conn.execute("""
         UPDATE master_context SET
-        window_anchor_exe = %s,
-        window_anchor_knowledge IS NULL,
-        window_size_r = 12,
-        window_size_l = 12
+            window_anchor_exe = %s,
+            window_anchor_knowledge = NULL,
+            window_size_r = 12,
+            window_size_l = 12
         WHERE addr = %s;
                      """, (addr, _meta['master_id']))
     else:
@@ -572,7 +574,7 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
                             """, (name,)).fetchone()[0]
 
     conn.execute("""
-    DELETE master_addr, item_addr FROM master_load WHERE master_addr = %s AND item_addr = %s;
+    DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
                  """, (_meta['master_id'], addr))
 
     return f"Unloaded item {addr}."

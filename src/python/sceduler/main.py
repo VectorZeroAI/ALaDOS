@@ -88,7 +88,7 @@ def setup():
             INNER JOIN results r ON sr.req_addr = r.addr
         WHERE sr.slave_addr = s.addr
             AND r.ready IS FALSE
-            AND r.status NOT LIKE '_error_'
+            AND r.status NOT LIKE '%error%'
     ) AND own.ready = FALSE
                                          """).fetchall()
 

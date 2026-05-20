@@ -56,7 +56,7 @@ def embedder_thread():
         item_addr = embedder_queue.get_blocking()
 
         desc_and_type = conn.execute("""
-    SELECT vp.description, vp.type FROM vector_ops vp
+    SELECT vp.description, vp.type FROM vector_ops vp WHERE vp.addr = %s
                  """, (item_addr,)).fetchone()
         if desc_and_type is None:
             print(f"Object that were supposed to embedd is not found. {item_addr} does not exist as an embeddable item.")
@@ -75,11 +75,9 @@ def embedder_thread():
                     continue
                 break
 
-        conn.execute(f"""
-                     UPDATE {desc_and_type[1]} SET emb = %s::vector(768) WHERE addr = %s;
-                     """, (emb, item_addr)) # pyright: ignore
-        # The table name in there is SQL schema enforced to be only knowledge or executables, so I dont see a python whitelist nesesary.
-        # The ignore is nesesary because it just says that fstring cannot be used as SQK, which works at runtime, so I dont care.
+        conn.execute("""
+             UPDATE vector_ops SET emb = %s::vector(768) WHERE addr = %s;
+                 """, (emb, ))
 
 def _call_jina_embedding(api: Api, text: str):
     with httpx.Client(timeout=15) as client:

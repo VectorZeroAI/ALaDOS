@@ -250,7 +250,7 @@ def resolve_window(window_data: WindowData) -> str:
             addr,
             position,
             type,
-            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM vector_ops 
     ), anchor AS (
         SELECT rn FROM ordered WHERE addr = %s LIMIT 1
     )

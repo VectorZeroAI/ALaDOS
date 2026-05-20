@@ -202,12 +202,6 @@ CREATE TABLE IF NOT EXISTS ownership(
             ON DELETE CASCADE
 );
 
-
-
-CREATE OR REPLACE VIEW viewing_window AS
-    SELECT addr, description, emb, position, type FROM vector_ops
-    ORDER BY position;
-
 CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'knowledge' AS type FROM knowledge
     UNION ALL

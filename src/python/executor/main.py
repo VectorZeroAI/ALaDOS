@@ -69,7 +69,7 @@ WITH ordered AS (
     SELECT addr,
         position,
         type,
-        ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+        ROW_NUMBER() OVER (ORDER BY position) AS rn FROM vector_ops
 ), anchor AS (
     SELECT rn FROM ordered WHERE addr = %s LIMIT 1
 )
@@ -86,9 +86,9 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
     context_chunk_1 = "\n".join(viewing_window_context_list_str)
     
-    loaded_items_addr = conn.execute("""SELECT ml.item_addr, vw.description
+    loaded_items_addr = conn.execute("""SELECT ml.item_addr, vp.description
                                      FROM master_load ml 
-                                        LEFT JOIN viewing_window vw ON ml.item_addr = vw.addr 
+                                        LEFT JOIN vector_ops vp ON ml.item_addr = vp.addr 
                                      WHERE master_addr = %s""", (instr['master_addr'],)).fetchall()
 
     loaded_items_list_str = []

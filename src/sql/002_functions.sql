@@ -165,7 +165,7 @@ BEGIN
             addr,
             position,
             type,
-            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM viewing_window
+            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM vector_ops
     ), anchor AS (
         SELECT rn FROM ordered WHERE addr = v_anchor_addr LIMIT 1
     )

@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION position_placeholder()
     DECLARE
         max_pos NUMERIC;
     BEGIN
-        SELECT MAX(position) INTO max_pos FROM viewing_window;
+        SELECT MAX(position) INTO max_pos FROM vector_ops;
         NEW.position := COALESCE(max_pos, 0) + 100;
     RETURN NEW;
     END;
@@ -102,12 +102,12 @@ CREATE OR REPLACE FUNCTION position_calculation()
         END IF;
 
         IF item_1_distance > 0.4 THEN
-            NEW.position := COALESCE((SELECT MAX(position) FROM viewing_window), 0) + 100;
+            NEW.position := COALESCE((SELECT MAX(position) FROM vector_ops), 0) + 100;
             RETURN NEW;
         END IF;
 
         IF item_2_distance > 0.4 THEN
-            NEW.position := (COALESCE((SELECT position FROM viewing_window WHERE position > item_1_pos ORDER BY position LIMIT 1), item_1_pos) + item_1_pos) / 2;
+            NEW.position := (COALESCE((SELECT position FROM vector_ops WHERE position > item_1_pos ORDER BY position LIMIT 1), item_1_pos) + item_1_pos) / 2;
             RETURN NEW;
         END IF;
         

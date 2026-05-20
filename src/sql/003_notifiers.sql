@@ -17,6 +17,66 @@ CREATE OR REPLACE TRIGGER pos_placeholder_k
 BEFORE INSERT ON knowledge
 FOR EACH ROW EXECUTE FUNCTION position_placeholder();
 
+-- CREATE OR REPLACE FUNCTION position_calculation()
+--     RETURNS TRIGGER AS $$
+--     DECLARE
+--         item_1_pos NUMERIC;
+--         item_2_pos NUMERIC;
+--         item_1_distance DOUBLE PRECISION;
+--         item_2_distance DOUBLE PRECISION;
+--         item_1_pos_e NUMERIC;
+--         item_2_pos_e NUMERIC;
+--         item_1_distance_e DOUBLE PRECISION;
+--         item_2_distance_e DOUBLE PRECISION;
+--     BEGIN 
+--         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos, item_1_distance
+--         FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
+-- 
+--         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos_e, item_1_distance_e
+--         FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
+--         
+--         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
+--         FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
+-- 
+--         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos_e, item_2_distance_e
+--         FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
+-- 
+--         IF item_1_distance_e < item_1_distance THEN
+--             item_1_distance := item_1_distance_e;
+--             item_1_pos := item_1_pos_e;
+--         END IF;
+-- 
+--         IF item_2_distance_e < item_2_distance THEN
+--             item_2_distance := item_2_distance_e;
+--             item_2_pos := item_2_pos_e;
+--         END IF;
+-- 
+--         IF item_1_pos IS NULL THEN
+--             NEW.position := 0;
+--             RETURN NEW;
+--         END IF;
+-- 
+--         IF item_2_pos IS NULL THEN
+--             NEW.position := 1;
+--             RETURN NEW;
+--         END IF;
+-- 
+--         IF item_1_distance > 0.4 THEN
+--             NEW.position := COALESCE((SELECT MAX(position) FROM viewing_window), 0) + 100;
+--             RETURN NEW;
+--         END IF;
+-- 
+--         IF item_2_distance > 0.4 THEN
+--             NEW.position := (COALESCE((SELECT position FROM viewing_window WHERE position > item_1_pos ORDER BY position LIMIT 1), item_1_pos) + item_1_pos) / 2;
+--             RETURN NEW;
+--         END IF;
+--         
+--         NEW.position := (item_1_pos + item_2_pos) / 2;
+--         RETURN NEW;
+--     END;
+-- $$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION position_calculation()
     RETURNS TRIGGER AS $$
     DECLARE
@@ -24,32 +84,12 @@ CREATE OR REPLACE FUNCTION position_calculation()
         item_2_pos NUMERIC;
         item_1_distance DOUBLE PRECISION;
         item_2_distance DOUBLE PRECISION;
-        item_1_pos_e NUMERIC;
-        item_2_pos_e NUMERIC;
-        item_1_distance_e DOUBLE PRECISION;
-        item_2_distance_e DOUBLE PRECISION;
     BEGIN 
         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos, item_1_distance
-        FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
+        FROM vector_ops WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
 
-        SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos_e, item_1_distance_e
-        FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
-        
         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
-        FROM knowledge WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
-
-        SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos_e, item_2_distance_e
-        FROM executables WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
-
-        IF item_1_distance_e < item_1_distance THEN
-            item_1_distance := item_1_distance_e;
-            item_1_pos := item_1_pos_e;
-        END IF;
-
-        IF item_2_distance_e < item_2_distance THEN
-            item_2_distance := item_2_distance_e;
-            item_2_pos := item_2_pos_e;
-        END IF;
+        FROM vector_ops WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
 
         IF item_1_pos IS NULL THEN
             NEW.position := 0;

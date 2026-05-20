@@ -49,8 +49,6 @@ CREATE TABLE IF NOT EXISTS knowledge (
     ) VIRTUAL -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE INDEX ON knowledge USING hnsw(emb vector_cosine_ops);
-
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
         REFERENCES addrs(addr)
@@ -72,6 +70,7 @@ CREATE TABLE IF NOT EXISTS executables (
 CREATE TABLE IF NOT EXISTS vector_ops(
     addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k)) VIRTUAL,
     position NUMERIC UNIQUE NOT NULL,
     description TEXT NOT NULL,
     type GENERATED ALWAYS AS (CASE
@@ -206,9 +205,7 @@ CREATE TABLE IF NOT EXISTS ownership(
 
 
 CREATE OR REPLACE VIEW viewing_window AS
-    SELECT addr, description, emb, position, 'knowledge' AS type FROM knowledge
-    UNION ALL
-    SELECT addr, description, emb, position, 'executables' AS type FROM executables
+    SELECT addr, description, emb, position, type FROM vector_ops
     ORDER BY position;
 
 CREATE OR REPLACE VIEW addrs_tables AS

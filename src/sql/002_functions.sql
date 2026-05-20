@@ -118,7 +118,7 @@ DECLARE
     max_sim FLOAT;
     tttt TEXT;
 BEGIN
-    SELECT addr, 1 - (emb_p <=> emb) as similarity, type INTO result_addr, max_sim, tttt FROM viewing_window ORDER BY similarity DESC LIMIT 1;
+    SELECT addr, 1 - (emb_p <=> emb) as similarity, type INTO result_addr, max_sim, tttt FROM vector_ops ORDER BY similarity DESC LIMIT 1;
     
     IF result_addr IS NULL THEN
         RAISE exception'No item to anchor on found.';

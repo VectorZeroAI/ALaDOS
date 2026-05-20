@@ -35,7 +35,7 @@ def setup():
         threading.Thread(target=embedder_thread, daemon=True, ).start()
     conn = conn_factory()
     addrs = conn.execute("""
-    SELECT addr FROM viewing_window WHERE emb IS NULL;
+    SELECT addr FROM vector_ops WHERE emb IS NULL;
                  """).fetchall()
     for i in addrs:
         embedder_queue.put(i[0])
@@ -56,7 +56,7 @@ def embedder_thread():
         item_addr = embedder_queue.get_blocking()
 
         desc_and_type = conn.execute("""
-    SELECT vw.description, vw.type FROM viewing_window vw INNER JOIN addrs_tables at ON at.addr = vw.addr WHERE vw.addr = %s;
+    SELECT vp.description, vp.type FROM vector_ops vp
                  """, (item_addr,)).fetchone()
         if desc_and_type is None:
             print(f"Object that were supposed to embedd is not found. {item_addr} does not exist as an embeddable item.")

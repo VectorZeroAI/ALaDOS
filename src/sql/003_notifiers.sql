@@ -116,13 +116,10 @@ CREATE OR REPLACE FUNCTION position_calculation()
     END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER pos_calculate_k
-BEFORE UPDATE OF emb ON knowledge
+CREATE OR REPLACE TRIGGER pos_calculate
+BEFORE UPDATE OF emb ON vector_ops
 FOR EACH ROW EXECUTE FUNCTION position_calculation(); 
 
-CREATE OR REPLACE TRIGGER pos_calculate_e
-BEFORE UPDATE OF emb ON executables
-FOR EACH ROW EXECUTE FUNCTION position_calculation();
 
 CREATE OR REPLACE FUNCTION master_decomposition_slave_submission()
 RETURNS TRIGGER AS $$

@@ -1,30 +1,22 @@
 # Executor
 
 The executor is the streamlined execution pipeline.
-On initialisation, it takes in the ExecutorConfig.json from the alados config directory.
+On initialisation, it takes in the executor.toml from the alados config directory.
 config structure
-```json
-{
-    "api_keys": [
-        {
-            "api_key": "georugqwuo3rft9wuefiwzebgf",
-            "endpoint": "http://endpoint.site/path"
-        },
-        {
-            "api_key": "indefinetly repeatable",
-            "endpoint": "indefinetly repeatable"
-        },
-    ],
-    "number_of_cores": 12 // optional, defaults to as many cores as providers
-}
+```toml
+[[apis]]
+url = "http://example.com/v1/chat/completions"
+key = "exampleapikey"
+model = "examplemodel"
+claude = false # Can also be true, but claude api is not implemented.
 ```
-Each core is basically an ThreadPoolExecutor that takes input slave goals from the queue, executes them and writes the result correspondingly.
+Each core is basically an thead that takes input slave goals from the queue, executes them and writes the result correspondingly.
 Each core gets every api endpoint and credentials.
 On api error, fallback to the next api endpoint and retry.
 On tool call error: log the error, and launch anouther api call with a fallback prompt asking the AI to recover from the error.
 On DB error: panic and interrupt everything until human intervention.
 
-Note that even internal stuff goes through this executor system, although internal stuff gets inserted into the beginning of the queue, as to simulate higher priority.
+Note that even internal stuff goes through this executor system, although internal stuff gets processed otherwise, mostly through firing interrupts. 
 
 ## Tool Execution
 
@@ -101,3 +93,6 @@ for i in json["tool_calls"]:
         desc="": str
     )
 28. interrupt.invoke(ID)
+
+> [!NOTE]
+> The list is outdated, please look in the builtins.py yourself. 

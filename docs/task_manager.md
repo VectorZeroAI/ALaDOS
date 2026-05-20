@@ -45,9 +45,3 @@ Each task, e.g. master goal has a task shared context window. It consists of:
 - owned entires
 
 That is managed by tools, which are part of executor, not task manager. Task manager just loads them from the DB. 
-
-### On startup 
-
-The task manager constructs the semantically sorted list. 
-It is constructed via UMAP ing the descriptions embeddings into 2D vectors, and then hilbert curve mapping them to a 1D list. 
-The 1D list is the semantically sorted information base. 

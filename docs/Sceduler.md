@@ -21,7 +21,15 @@ WHERE req_addr NOT IN (SELECT addr FROM results)
 The executor queue is in-memory only and does not persist across restarts. On startup the scheduler performs a full scan of all slaves in the DB and pushes any whose requirements are already fully satisfied into the executor queue. This is a one-time cost on startup and avoids the complexity and failure modes of a persisted queue.
 
 ## Error handling
-Unrecoverable slave goal errors are handled by the interrupt manager, not the scheduler. The scheduler only concerns itself with readiness — it assumes the executor always writes something to results even on failure, ensuring no slave goal is permanently blocked.
+The errors are written to the logs and status collumn of the slave table, and then handeled. The recovery procedures will be added in the future. 
+### Error case: generic
+Retry a couple times, doesnt work, stop and allert the user to fix. Alike kernel panic, its impossible to get out of situation.
+
+### Error case: implausible instruction
+Replan the slave and optionally change the upsteam slaves to make the instructions plausible. 
+
+### Error case: paradoxal information provided
+Resolve the paradox via the dedicated RMT, for now simplified to one LLM call. 
 
 ## Master goal completion
 A master goal is complete when all of its slave goals have results. This is checked after each slave result is registered — if all slaves belonging to a master have entries in results, the master is marked complete.

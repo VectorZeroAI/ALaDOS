@@ -4,7 +4,7 @@ import psycopg
 import time
 from unittest.mock import Mock, patch
 
-# Import your fixed builtins
+# Adjust import path to match your project structure
 from src.python.executor.builtins import (
     k_create, k_edit, k_read, execute_tool_builtin_func, create_tool, edit_tool,
     context_add_by_addr, add_slave, add_replanner_slave, master_result_add,
@@ -21,7 +21,7 @@ from src.python.utils.uqueue import Uqueue
 # ---------- Fixtures ----------
 @pytest.fixture(scope="session")
 def test_conn():
-    """Connection to test database. Autocommit off – tests control commits."""
+    """Connection to test database. Autocommit off – tests control transactions."""
     conn = psycopg.connect(
         host="127.0.0.1",
         port=5432,
@@ -52,10 +52,6 @@ def meta(test_conn):
             )
         """, (master_addr,))
         slave_addr = cur.fetchone()[0]
-        # Ensure the slave's result exists
-        cur.execute("SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,))
-        result_addr = cur.fetchone()[0]
-    # Return metadata, but keep the transaction open
     meta_obj = {
         'conn': test_conn,
         'master_id': master_addr,
@@ -64,8 +60,7 @@ def meta(test_conn):
         'context_limit': 10000
     }
     yield meta_obj
-    # Rollback after each test
-    test_conn.rollback()
+    test_conn.rollback()  # discard all changes after each test
 
 
 # ---------- Mocks ----------
@@ -91,7 +86,7 @@ def mock_subprocess():
         yield mock_run
 
 
-# ---------- Helper to get a fresh name ----------
+# ---------- Unique name generator ----------
 _name_counter = 0
 def unique_name(base: str) -> str:
     global _name_counter
@@ -119,65 +114,52 @@ def test_k_create(meta):
 
 def test_k_edit_by_addr(meta):
     conn = meta['conn']
-    # Create item
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'old content')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description) VALUES (%s, 'old desc')", (addr,))
+    # Create a knowledge item using the builtin (so vector_ops is set correctly)
+    name = unique_name("edit_addr")
+    k_create(content="old content", description="old desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     res = k_edit(addr=addr, content_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
     assert "Edited the knowledge item" in res
     with conn.cursor() as cur:
         cur.execute("SELECT content FROM knowledge WHERE addr=%s", (addr,))
         assert cur.fetchone()[0] == "new content"
+        # description unchanged
         cur.execute("SELECT description FROM vector_ops WHERE addr=%s", (addr,))
         assert cur.fetchone()[0] == "old desc"
 
 
 def test_k_edit_by_name(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'foo')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description) VALUES (%s, 'bar')", (addr,))
-        cur.execute("INSERT INTO names (addr, name) VALUES (%s, 'test_name_edit')", (addr,))
-    res = k_edit(name="test_name_edit", description_change="<SEARCH>bar</SEARCH><REPLACE>baz</REPLACE>", _meta=meta)
+    name = unique_name("edit_name")
+    k_create(content="foo", description="bar", name=name, _meta=meta)
+    res = k_edit(name=name, description_change="<SEARCH>bar</SEARCH><REPLACE>baz</REPLACE>", _meta=meta)
     assert "Edited the knowledge item" in res
-    with conn.cursor() as cur:
-        cur.execute("SELECT description FROM vector_ops WHERE addr=%s", (addr,))
-        assert cur.fetchone()[0] == "baz"
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    desc = conn.execute("SELECT description FROM vector_ops WHERE addr=%s", (addr,)).fetchone()[0]
+    assert desc == "baz"
 
 
 def test_k_read_by_addr(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'secret')", (addr,))
+    name = unique_name("read_addr")
+    k_create(content="secret", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     res = k_read(addr=addr, _meta=meta)
     assert "secret" in res
 
 
 def test_k_read_by_name(meta):
-    conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'secret2')", (addr,))
-        cur.execute("INSERT INTO names (addr, name) VALUES (%s, 'test_read_name')", (addr,))
-    res = k_read(name="test_read_name", _meta=meta)
+    name = unique_name("read_name")
+    k_create(content="secret2", description="desc", name=name, _meta=meta)
+    res = k_read(name=name, _meta=meta)
     assert "secret2" in res
 
 
 def test_execute_tool(meta, mock_subprocess):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO executables (addr, header, body) VALUES (%s, 'test header', 'print(\"hello\")')", (addr,))
-        cur.execute("INSERT INTO names (addr, name) VALUES (%s, 'test_tool')", (addr,))
-    res = execute_tool_builtin_func(name="test_tool", kwargs={"x": 1}, _meta=meta)
+    tool_name = unique_name("test_tool")
+    create_tool(description="desc", header="test header", body="print('hello')", name=tool_name, _meta=meta)
+    res = execute_tool_builtin_func(name=tool_name, kwargs={"x": 1}, _meta=meta)
     assert "ran tools stdout: mocked output" in res
     mock_subprocess.assert_called_once()
 
@@ -197,13 +179,11 @@ def test_create_tool(meta):
 
 def test_edit_tool(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO executables (addr, header, body) VALUES (%s, 'old header', 'old body')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr, description) VALUES (%s, 'old desc')", (addr,))
-        cur.execute("INSERT INTO names (addr, name) VALUES (%s, 'edit_tool')", (addr,))
-    res = edit_tool(name="edit_tool", header_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
+    tool_name = unique_name("edit_tool")
+    create_tool(description="old desc", header="old header", body="old body", name=tool_name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (tool_name,)).fetchone()[0]
+    res = edit_tool(name=tool_name,
+                    header_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
                     body_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
                     new_description="new desc", _meta=meta)
     assert "Applied the edits" in res
@@ -218,10 +198,9 @@ def test_edit_tool(meta):
 
 def test_context_add(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'ctx content')", (addr,))
+    name = unique_name("ctx_item")
+    k_create(content="ctx content", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     res = context_add_by_addr(addr=addr, name=None, _meta=meta)
     assert "Added context" in res
     loaded = conn.execute("SELECT item_addr FROM master_load WHERE master_addr=%s", (meta['master_id'],)).fetchall()
@@ -231,13 +210,14 @@ def test_context_add(meta):
 def test_add_slave(meta):
     conn = meta['conn']
     before = conn.execute("SELECT count(*) FROM slaves WHERE master_addr=%s", (meta['master_id'],)).fetchone()[0]
-    res = add_slave(instruction="do something", slave_type="general", result_name="my_result", _meta=meta)
+    result_name = unique_name("slave_result")
+    res = add_slave(instruction="do something", slave_type="general", result_name=result_name, _meta=meta)
     assert "Added a new slave" in res
     after = conn.execute("SELECT count(*) FROM slaves WHERE master_addr=%s", (meta['master_id'],)).fetchone()[0]
     assert after == before + 1
-    result_addr = conn.execute("SELECT result_addr FROM slaves WHERE result_name='my_result'").fetchone()
+    result_addr = conn.execute("SELECT result_addr FROM slaves WHERE result_name=%s", (result_name,)).fetchone()
     assert result_addr is not None
-    scope = conn.execute("SELECT scope FROM slaves WHERE result_name='my_result'").fetchone()[0]
+    scope = conn.execute("SELECT scope FROM slaves WHERE result_name=%s", (result_name,)).fetchone()[0]
     assert scope == 'general'
 
 
@@ -250,6 +230,7 @@ def test_add_slave_with_requires(meta):
         req_addr = cur.fetchone()[0]
         cur.execute("INSERT INTO results (addr, ready) VALUES (%s, false)", (req_addr,))
         cur.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (req_addr, req_name))
+    # Add a slave that requires it
     res = add_slave(instruction="depends", required_results_names=[req_name], _meta=meta)
     assert "Added a new slave" in res
     slave_addr = conn.execute("SELECT addr FROM slaves WHERE instruction='depends'").fetchone()[0]
@@ -265,7 +246,9 @@ def test_add_replanner_slave(meta):
     assert "added a replanner slave" in res
     after = conn.execute("SELECT count(*) FROM slaves WHERE master_addr=%s", (meta['master_id'],)).fetchone()[0]
     assert after == before + 1
-    slave_instruction = conn.execute("SELECT instruction FROM slaves WHERE addr > (SELECT max(addr)-1 FROM slaves)").fetchone()[0]
+    # Check that the new slave has the expected prompt (last inserted slave)
+    cur = conn.execute("SELECT instruction FROM slaves WHERE master_addr=%s ORDER BY addr DESC LIMIT 1", (meta['master_id'],))
+    slave_instruction = cur.fetchone()[0]
     assert "You task is to decide how to further proceed" in slave_instruction
 
 
@@ -282,25 +265,23 @@ def test_master_result_add(meta):
 
 
 def test_context_window_semantic_land(meta):
-    # Insert dummy vector_ops items so s_land has something to anchor on
+    # Insert a dummy knowledge with a vector so s_land has something
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'dummy')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description, emb) VALUES (%s, 'dummy desc', array_fill(0.0, ARRAY[768])::vector(768))", (addr,))
-    # Now semantic land should find something
+    name = unique_name("semantic_dummy")
+    k_create(content="dummy", description="dummy desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    # Update vector_ops to have a non‑null emb (the trigger will set position)
+    conn.execute("UPDATE vector_ops SET emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s", (addr,))
+    # Now semantic land should find it
     res = context_window_lands(querry="test query", _meta=meta)
     assert "Semantically moved the viewing window anchor" in res
 
 
 def test_context_window_land(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'dummy')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description) VALUES (%s, 'desc')", (addr,))
+    name = unique_name("window_anchor")
+    k_create(content="anchor", description="anchor desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     res = context_window_land(addr=addr, _meta=meta)
     assert "Moved context window center to" in res
     anchor_k = conn.execute("SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta['master_id'],)).fetchone()[0]
@@ -311,17 +292,15 @@ def test_context_window_land(meta):
 
 def test_context_window_size_change(meta):
     conn = meta['conn']
-    # First set an anchor and valid sizes to satisfy constraint
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'anchor')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description) VALUES (%s, 'anchor desc')", (addr,))
-        cur.execute("""
-            UPDATE master_context 
-            SET window_anchor_knowledge = %s, window_size_l = 5, window_size_r = 5 
-            WHERE addr = %s
-        """, (addr, meta['master_id']))
+    # First set an anchor and valid sizes to satisfy the constraint
+    name = unique_name("size_anchor")
+    k_create(content="anchor", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    conn.execute("""
+        UPDATE master_context 
+        SET window_anchor_knowledge = %s, window_size_l = 5, window_size_r = 5 
+        WHERE addr = %s
+    """, (addr, meta['master_id']))
     res = context_window_size_change(left=2, right=3, _meta=meta)
     assert "Changed context window size" in res
     l, r = conn.execute("SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta['master_id'],)).fetchone()
@@ -331,19 +310,19 @@ def test_context_window_size_change(meta):
 
 def test_move_window_anchor(meta):
     conn = meta['conn']
-    # Create a dummy vector_ops row (addr is generated)
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        # Insert into executables or knowledge first to get a valid addr for vector_ops
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'anchor knowledge')", (addr,))
-        cur.execute("INSERT INTO vector_ops (addr_k, description, position) VALUES (%s, 'anchor desc', 100)", (addr,))
-        # Set anchor and window sizes in master_context
-        cur.execute("""
-            UPDATE master_context 
-            SET window_anchor_knowledge = %s, window_size_l = 1, window_size_r = 1 
-            WHERE addr = %s
-        """, (addr, meta['master_id']))
+    # Create a dummy vector_ops row with a known position
+    name = unique_name("move_anchor")
+    k_create(content="anchor knowledge", description="anchor desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    # Update the vector_ops row to have a position (the trigger will set it automatically when emb is set)
+    # But we also need to set emb to trigger position calculation. For simplicity, set position directly.
+    conn.execute("UPDATE vector_ops SET position = 100, emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s", (addr,))
+    # Set anchor and window sizes in master_context
+    conn.execute("""
+        UPDATE master_context 
+        SET window_anchor_knowledge = %s, window_size_l = 1, window_size_r = 1 
+        WHERE addr = %s
+    """, (addr, meta['master_id']))
     res = move_window_anchor(amount=1, _meta=meta)
     assert "moved context window anchor" in res
 
@@ -355,7 +334,7 @@ def test_result_write(meta):
 
 def test_report_paradoxal_information(meta):
     with pytest.raises(ParadoxDetected) as exc:
-        report_paradoxal_information(items=[1,2], paradox="conflict", _meta=meta)
+        report_paradoxal_information(items=[1, 2], paradox="conflict", _meta=meta)
     assert "conflict" in str(exc.value)
     # Check that the slave's result was updated
     status = meta['conn'].execute(
@@ -381,11 +360,11 @@ def test_add_cronjob(mock_parse, meta):
 
 def test_unload_item_by_addr(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'temp')", (addr,))
-        cur.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
+    name = unique_name("unload_addr")
+    k_create(content="temp", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    # Load it into context
+    conn.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
     res = unload_item(addr=addr, _meta=meta)
     assert "Unloaded item" in res
     loaded = conn.execute("SELECT item_addr FROM master_load WHERE master_addr=%s", (meta['master_id'],)).fetchall()
@@ -394,13 +373,10 @@ def test_unload_item_by_addr(meta):
 
 def test_unload_item_by_name(meta):
     conn = meta['conn']
-    with conn.cursor() as cur:
-        cur.execute("SELECT new_addr()")
-        addr = cur.fetchone()[0]
-        cur.execute("INSERT INTO knowledge (addr, content) VALUES (%s, 'temp2')", (addr,))
-        name = unique_name("unload_me")
-        cur.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
-        cur.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
+    name = unique_name("unload_name")
+    k_create(content="temp2", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    conn.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
     res = unload_item(name=name, _meta=meta)
     assert "Unloaded item" in res
 
@@ -408,7 +384,7 @@ def test_unload_item_by_name(meta):
 def test_web_search_fulltext(meta, mock_searcher):
     res = web_searcher_function_fulltext(query="test query", websites_amount=2, _meta=meta)
     assert "Websearch for query 'test query'" in res
-    mock_searcher.search_website_content.assert_called_once_with("test query", 2, meta['context_limit']//2)
+    mock_searcher.search_website_content.assert_called_once_with("test query", 2, meta['context_limit'] // 2)
 
 
 def test_send_message_to_human(meta):
@@ -418,19 +394,19 @@ def test_send_message_to_human(meta):
         cur.execute("INSERT INTO masters (instruction) VALUES ('session master') RETURNING addr")
         session_master = cur.fetchone()[0]
         cur.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (session_master, session_name))
-        # Create a placeholder ai_message result with metadata
+        # Create a placeholder ai_message result with metadata; cast the parameter
         cur.execute("SELECT new_addr()")
         ai_msg_addr = cur.fetchone()[0]
         cur.execute("""
             INSERT INTO results (addr, metadata)
-            VALUES (%s, jsonb_build_object('type', 'ai_message', 'session_name', %s, 'turn', 1))
+            VALUES (%s, jsonb_build_object('type', 'ai_message', 'session_name', %s::text, 'turn', 1))
         """, (ai_msg_addr, session_name))
     # Now call send_message with master_id = session_master
     meta2 = meta.copy()
     meta2['master_id'] = session_master
     res = send_message_to_human_v_webui(text="Hello human", _meta=meta2)
     assert "Sent a message to the human" in res
-    # Check that new_result was called, i.e., the ai_message result now has content
+    # Check that the ai_message result now has content
     content = conn.execute("SELECT content_str FROM results WHERE addr=%s", (ai_msg_addr,)).fetchone()[0]
     assert content == "Hello human"
 

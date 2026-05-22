@@ -8,7 +8,7 @@ class ResponseObj(TypedDict):
     url: str
     text: str
     status_code: int
-    content: str
+    content_raw: str
 
 def get(url: str, headers: Sequence, timeout: int = 5) -> ResponseObj:
     """
@@ -23,11 +23,23 @@ def get(url: str, headers: Sequence, timeout: int = 5) -> ResponseObj:
     result: ResponseObj = {
         'url': url,
         'status_code': response.status_code,
-        'text': str(extract(str(response.content))),
-        'content': str(response.content)
+        'text': str(extract(response.text)),
+        'content_raw': response.text
     }
     return result
 
 def post(url: str, headers: Sequence, payload: str, timeout: int = 5) -> ResponseObj:
     """ POST http operation """
-    with httpx.Client()
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            url=url,
+            headers=headers,
+            content=payload
+        )
+    result: ResponseObj = {
+        'url': url,
+        'status_code': response.status_code,
+        'text': str(extract(response.text)),
+        'content_raw': response.text
+    }
+    return result

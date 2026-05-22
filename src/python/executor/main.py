@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import traceback
 import json
 import re
 import threading
@@ -185,14 +186,23 @@ async def core(
                     tool_calls: ToolCallsBlock = llm_to_json(llm_response)
                 except ValueError:
                     llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
-                    tool_calls = json.loads('[{"tool": "result.write", "args": {"text": ' + f'"{llm_without_think}"' + '}}]')
                     log_json({
                         'type': 'llm_response',
                         'status': 'abnormal',
                         'reason': 'did not find any tool calls.',
-                        'new_tool_calls_block': tool_calls,
                         'llm_without_think': llm_without_think
-                })
+                    })
+                    tool_calls = [{
+                            "tool": "result.write", 
+                            "args": {"text": llm_without_think}
+                        }]
+                    log_json({
+                        'type': 'llm_response',
+                        'status': 'recovered',
+                        'reason': 'created the new set of toolcalls from the LLM response',
+                        'llm_without_think': llm_without_think,
+                        'new_tool_calls': tool_calls
+                    })
 
                 results = []
 
@@ -299,7 +309,7 @@ async def core(
                                  }), instr['result_addr']))
             
             except Exception as e:
-                print(f"CORE THREAD ERROR CAUGHT: {e}, REVERTING TRANSACTION")
+                print(f"CORE THREAD ERROR CAUGHT: {e}, with args {e.args}, and traceback {traceback.print_tb(e.__traceback__)} REVERTING TRANSACTION")
                 print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
 def core_thread(coroutine, queue: Uqueue, apis: Sequence[Api]) -> None:

@@ -6,6 +6,7 @@ from ..executor.types import ToolCallsBlock
 from pydantic import TypeAdapter, ValidationError
 import json
 import re
+from pathlib import Path
 
 def extract_json_block(text: str) -> str:
     """
@@ -57,12 +58,16 @@ def extract_json_block(text: str) -> str:
                 except json.JSONDecodeError:
                     # Invalid JSON, continue searching earlier
                     continue
+                except Exception as e:
+                    print(f"Exception {e} faced by json decoder")
+                    raise e from e
 
     raise ValueError("No valid JSON block found")
 
 def _sanitize(text: str) -> str:
-    # Remove all control characters except tab, newline, carriage return
-    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    # Remove all control characters except tab, newline.
+    pattern = r'\\(?!\t|\n)[\x00-\x1F\x7F]'
+    return re.sub(pattern, '', text)
 
 def llm_to_json(input_str: str) -> ToolCallsBlock:
     json_str = extract_json_block(input_str)

@@ -334,7 +334,7 @@ def add_slave(instruction: str,
         p_name := %s,
         p_requires := %s,
         p_result_name := %s,
-        p_slave_scope := %s,
+        p_slave_scope := %s
     );
         """, 
     (_meta['master_id'], instruction, slave_name, required_results_addrs, result_name, slave_type))
@@ -526,9 +526,9 @@ def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: 
 
     conn = _meta['conn']
     conn.execute("""
-    UPDATE results r 
-    SET r.status = 'paradox',
-        r.status_inf = %s
+    UPDATE results
+    SET status = 'paradox',
+        status_inf = %s
     FROM slaves s
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta['slave_id']))

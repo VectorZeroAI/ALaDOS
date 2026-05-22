@@ -167,7 +167,7 @@ async def core(
             except Exception as e:
                 print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
                 conn.execute("""
-        UPDATE results r SET status = 'error' FROM slaves s WHERE s.addr = %s AND r.addr = s.result_addr;
+        UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
                              """, (slave_addr,))
                 continue
             try:

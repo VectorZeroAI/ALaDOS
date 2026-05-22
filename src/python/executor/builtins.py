@@ -53,10 +53,14 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
     conn = _meta['conn']
 
     addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
+
     conn.execute("""
     INSERT INTO knowledge (addr, content) VALUES (%s, %s);
+                 """, (addr, content))
+    conn.execute("""
     INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s);
-                 """, (addr, content, addr, description))
+                 """, (addr, description))
+
     if name is not None:
         conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
 
@@ -184,8 +188,10 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
                         """).fetchone()[0]
     conn.execute("""
     INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
+                 """, (header, body, addr,))
+    conn.execute("""
     INSERT INTO vector_ops(addr, description) VALUES (%s, %s)
-                 """, (header, body, addr, addr, description))
+                 """, (addr, description))
     if name is not None:
         conn.execute("""
         INSERT INTO names(addr, name) VALUES(%s, %s);

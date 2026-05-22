@@ -101,7 +101,7 @@ def k_edit(addr: int|None = None,
 
     if description_change is not None:
         old_d = conn.execute("""
-        SELECT description FROM knowledge WHERE addr = %s;
+        SELECT description FROM vector_ops WHERE addr = %s;
                              """, (addr,)).fetchone()[0]
         assert isinstance(old_d, str)
         search, replace = _sr_block_parser(description_change)
@@ -138,7 +138,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
 
 
 @register_tool("tool.execute", ['general'])
-def execute_tool_builtin_func(addr: int|None, name: str|None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def execute_tool_builtin_func(addr: int|None = None, name: str|None = None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -190,7 +190,7 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
     INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
                  """, (header, body, addr,))
     conn.execute("""
-    INSERT INTO vector_ops(addr, description) VALUES (%s, %s)
+    INSERT INTO vector_ops(addr_exe, description) VALUES (%s, %s)
                  """, (addr, description))
     if name is not None:
         conn.execute("""
@@ -325,6 +325,8 @@ def add_slave(instruction: str,
             if i == "self":
                 required_results_addrs.append(_meta['slave_id'])
                 continue
+            else:
+                required_results_addrs.append(int(i))
 
             required_results_addrs.append(conn.execute("""
             SELECT resolve_name(%s);

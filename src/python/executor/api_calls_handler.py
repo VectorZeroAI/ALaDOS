@@ -30,13 +30,13 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
     if len(prompt) > config.get("context_limit", 40000):
         raise ContextLimitExceededError(prompt)
 
-
     for api_spec in api_specs_sorted:
         await checkpoint()
         await asyncio.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
         await checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
+            print("got llm result!!!")
             await checkpoint()
         except httpx.HTTPStatusError as e:
             print(e, e.response, e.response.status_code)
@@ -84,6 +84,7 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
 
         return None
 
+    print("returned llm result")
     return llm_result
 
 def _llm_call_claude(api: Api, prompt: str) -> str:

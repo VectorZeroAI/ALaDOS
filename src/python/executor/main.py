@@ -204,6 +204,8 @@ async def core(
                         'new_tool_calls': tool_calls
                     })
 
+                print("got valid llm response and parsed it. ")
+
                 results = []
 
                 metadata_c: _ExecToolMetaData = {
@@ -218,6 +220,7 @@ async def core(
                     await checkpoint()
                     try:
                         with conn.transaction():
+                            print(f"executing tool call {call}")
                             tool_result = execute_tool(call, metadata_c)
 
                     except ParadoxDetected as e:

@@ -325,12 +325,19 @@ def add_slave(instruction: str,
                   """, (i,)).fetchone()[0])
 
     if slave_type == "planner":
-        return add_replanner_slave() # NOTE: Dont remove this, the AI will continue to fuck this up forever
+        return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever
 
     conn.execute("""
-    SELECT new_slave(%s, %s, %s, %s, %s, %s, %s);
+    SELECT new_slave(
+        p_master_addr := %s,
+        p_instruction := %s,
+        p_name := %s,
+        p_requires := %s,
+        p_result_name := %s,
+        p_slave_scope := %s,
+    );
         """, 
-    (_meta['master_id'], instruction, slave_name, required_results_addrs, None, result_name, slave_type))
+    (_meta['master_id'], instruction, slave_name, required_results_addrs, result_name, slave_type))
     return "Added a new slave"
 
 add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(SlaveScope)) , " ]" , "."])

@@ -9,12 +9,8 @@ CREATE OR REPLACE FUNCTION position_placeholder()
     END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER pos_placeholder_e
-BEFORE INSERT ON executables
-FOR EACH ROW EXECUTE FUNCTION position_placeholder();
-
-CREATE OR REPLACE TRIGGER pos_placeholder_k
-BEFORE INSERT ON knowledge
+CREATE OR REPLACE TRIGGER pos_placeholder
+BEFORE INSERT ON vector_ops
 FOR EACH ROW EXECUTE FUNCTION position_placeholder();
 
 -- CREATE OR REPLACE FUNCTION position_calculation()

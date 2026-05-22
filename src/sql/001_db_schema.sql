@@ -1,5 +1,4 @@
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
@@ -37,7 +36,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
         REFERENCES addrs(addr)
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    content TEXT NOT NULL, -- NOTE : Names, aka titles, are always stored in names table
+    content TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS executables (
@@ -46,24 +45,24 @@ CREATE TABLE IF NOT EXISTS executables (
             ON UPDATE CASCADE
             ON DELETE CASCADE,
     header TEXT NOT NULL, -- the usage manual (imperative)
-    body TEXT NOT NULL, -- NOTE : Names, aka titles, are always stored in names table
+    body TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS vector_ops(
     addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k)) STORED,
+    addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k)) STORED,
     position NUMERIC UNIQUE NOT NULL,
     description TEXT NOT NULL,
-    type GENERATED ALWAYS AS (CASE
+    type TEXT GENERATED ALWAYS AS (CASE
         WHEN addr_exe IS NOT NULL THEN 'executable'
         WHEN addr_k IS NOT NULL THEN 'knowledge'
-    ) VIRTUAL,
+    END) VIRTUAL,
     emb vector(768),
-    CONSTRAINT addr_or_exe_ref_not_both_not_none CHECK NOT (
-        (addr_exe IS NOT NULL AND addr_k IS NOT NULL)
+    CONSTRAINT addr_or_exe_ref_not_both_not_none CHECK (NOT
+        ((addr_exe IS NOT NULL AND addr_k IS NOT NULL)
         OR
-        (addr_exe IS NULL AND addr_k IS NULL)
+        (addr_exe IS NULL AND addr_k IS NULL))
     ),
     PRIMARY KEY (addr)
 );

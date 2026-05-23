@@ -2,6 +2,7 @@
 
 import time
 from typing import Literal, TypedDict, Any
+from psycopg.types.json import Jsonb
 
 from ...utils.conn_factory import conn_factory
 
@@ -14,17 +15,17 @@ class CronjobExpression(TypedDict):
     cronjob_type: Literal["loop","once"]
     run_after_or_every_s: int
 
-def parse(input: CronjobExpression):
+def parse(input_cronjob: CronjobExpression):
     conn = conn_factory()
 
-    if input['cronjob_type'] == "once":
+    if input_cronjob['cronjob_type'] == "once":
         conn.execute("""
-    INSERT INTO cronjob_once(body, start_after) VALUES(%s, %s);
-                     """, (input['action'], time.time() + input['run_after_or_every_s']))
-    elif input['cronjob_type'] == "loop":
+    INSERT INTO cronjob_once(body, start_after) VALUES(%s, %s, %s);
+                     """, (input_cronjob['action'], time.time() + input_cronjob['run_after_or_every_s'], Jsonb(input_cronjob['params']) ))
+    elif input_cronjob['cronjob_type'] == "loop":
         conn.execute("""
-    INSERT INTO cronjob_loop(body, execute_every) VALUES(%s, %s);
-                     """, (input['action'], input['run_after_or_every_s']))
+    INSERT INTO cronjob_loop(body, execute_every, args) VALUES(%s, %s, %s);
+                     """, (input_cronjob['action'], input_cronjob['run_after_or_every_s'], Jsonb(input_cronjob['params'])))
 
 
 

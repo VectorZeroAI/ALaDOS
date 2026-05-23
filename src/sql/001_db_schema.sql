@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
+    args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE,
     error BOOLEAN NOT NULL DEFAULT FALSE,
@@ -221,6 +222,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
             ON DELETE CASCADE
             ON UPDATE CASCADE,
     body TEXT NOT NULL,
+    args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
     last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch
     error BOOLEAN NOT NULL DEFAULT FALSE,

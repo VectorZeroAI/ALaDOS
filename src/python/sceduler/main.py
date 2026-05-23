@@ -23,7 +23,14 @@ def slave_addr_to_instr(slave_addr: int, conn: psycopg.Connection) -> InstrJson:
     """ resolves a slave addr to an instruction object, including context resolution. """
 
     context_prefetch = conn.execute("""
-    SELECT instruction, master_addr, result_name, result_addr, scope FROM slaves WHERE addr = %s;
+    SELECT s.instruction,
+        s.master_addr,
+        n.name,
+        s.result_addr,
+        s.scope
+    FROM slaves s
+        LEFT JOIN names n ON n.addr = s.result_addr
+    WHERE addr = %s;
                                     """, (slave_addr,)).fetchone()
 
     assert context_prefetch is not None

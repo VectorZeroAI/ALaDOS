@@ -156,8 +156,7 @@ CREATE TABLE IF NOT EXISTS slaves (
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
-    scope slave_scope NOT NULL DEFAULT 'general',
-    result_name TEXT
+    scope slave_scope NOT NULL DEFAULT 'general'
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (
@@ -238,7 +237,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 
-    SELECT addr, body, start_after AS run_at, 'cronjob_once' AS type FROM cronjob_once WHERE finished = FALSE AND error = FALSE
+    SELECT addr, body, start_after AS run_at, 'cronjob_once' AS type, args AS params FROM cronjob_once WHERE finished = FALSE AND error = FALSE
     UNION ALL
-    SELECT addr, body, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type FROM cronjob_loop WHERE error = FALSE
+    SELECT addr, body, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type, args AS params FROM cronjob_loop WHERE error = FALSE
     ORDER BY run_at ASC;

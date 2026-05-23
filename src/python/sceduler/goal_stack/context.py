@@ -156,10 +156,12 @@ def resolve_loads(loads_data: LoadsData) -> str:
 
 def _result_item_resolve(addr: int, conn: psycopg.Connection):
     item = conn.execute("""
-    SELECT s.result_name, 
+    SELECT n.result_name, 
         r.content_str,
         r.ready 
-        FROM results r JOIN slaves s ON s.result_addr = %s WHERE r.addr = %s;
+    FROM results r
+        LEFT JOIN names n ON n.addr = r.addr
+    WHERE r.addr = %s;
                         """, (addr, addr)).fetchone()
     if item is None:
         return f"DOES NOT EXIST@{addr}"
@@ -174,8 +176,11 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
             slaves.master_addr,
             slaves.instruction,
             slaves.result_addr,
-            slaves.result_name
-            FROM slaves LEFT JOIN names ON names.addr = %s WHERE slaves.addr = %s;
+            names2.name
+        FROM slaves
+            LEFT JOIN names ON names.addr = %s
+            LEFT JOIN names names2 ON names2.addr = slaves.result_addr
+        WHERE slaves.addr = %s;
                         """, (addr, addr)).fetchone()
 
     if fetch is None:
@@ -192,7 +197,12 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
 
 def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     slaves_fetch = conn.execute("""
-        SELECT instruction, result_addr, result_name FROM slaves WHERE master_addr = %s;
+        SELECT s.instruction,
+            s.result_addr,
+            n.name
+        FROM slaves s
+            LEFT JOIN names n ON n.addr = s.result_addr
+        WHERE master_addr = %s;
                         """, (addr,)).fetchall()
     name = conn.execute("""
         SELECT name FROM names WHERE addr = %s;

@@ -28,8 +28,8 @@ CREATE OR REPLACE FUNCTION new_slave(
             INSERT INTO names (addr, name) VALUES (v_result_addr, p_result_name);
         END IF;
 
-        INSERT INTO slaves (master_addr, instruction, result_addr, result_name, addr, scope)
-        VALUES (p_master_addr, p_instruction, v_result_addr, p_result_name, new_slave_addr, p_slave_scope);
+        INSERT INTO slaves (master_addr, instruction, result_addr, addr, scope)
+        VALUES (p_master_addr, p_instruction, v_result_addr, new_slave_addr, p_slave_scope);
         
         IF p_name IS NOT NULL THEN
             INSERT INTO names (addr, name) VALUES (new_slave_addr, p_name);
@@ -86,7 +86,7 @@ BEGIN
     IF p_addr IS NOT NULL THEN
         v_addr := p_addr;
     ELSIF p_name IS NOT NULL THEN
-        SELECT result_addr INTO v_addr FROM slaves WHERE result_name = p_name;
+        SELECT resolve_name(p_name) INTO v_addr;
     ELSE
         RAISE EXCEPTION 'one of p_addr or p_name is required. None were given.';
     END IF;
@@ -135,7 +135,7 @@ BEGIN
             window_size_r = 12
         WHERE addr = master_addr_p;
     END IF;
-    IF tttt = 'executables' THEN
+    IF tttt = 'executable' THEN
         UPDATE master_context SET
             window_anchor_exe = result_addr,
             window_anchor_knowledge = NULL,

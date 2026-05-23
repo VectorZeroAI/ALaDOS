@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ...executor.cronjobs.main import SysState
@@ -13,5 +13,5 @@ def register_cronjob(name: str) -> Callable:
         return func
     return decorator
 
-def execute_cronjob(name: str, sys_state: SysState) -> Any:
-    return CRONJOB_REGISTRY[name](sys_state)
+def execute_cronjob(name: str, sys_state: SysState, args: dict[str, Any]) -> Any:
+    return CRONJOB_REGISTRY[name](args['sys_state'] = sys_state)

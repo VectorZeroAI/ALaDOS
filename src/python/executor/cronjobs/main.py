@@ -38,7 +38,7 @@ def cronjob_executor():
     while True:
 
         cronjob_fetch = conn.execute("""
-    SELECT addr, body, run_at, type FROM cronjobs_to_run LIMIT 1
+    SELECT addr, body, run_at, type, params FROM cronjobs_to_run LIMIT 1
                      """).fetchone() # cronjobs_to_run is a view, wich includes order ba ASC.
 
         if cronjob_fetch is None:
@@ -54,7 +54,7 @@ def cronjob_executor():
 
         try:
             
-            execute_cronjob(cronjob_fetch[1], sys_state)
+            execute_cronjob(cronjob_fetch[1], sys_state=sys_state, args=cronjob_fetch[4])
 
         except Exception as e:
             match cronjob_fetch[3]:

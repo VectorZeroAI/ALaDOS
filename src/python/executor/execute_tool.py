@@ -59,6 +59,9 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
         for i in scope:
             HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
         HEADERS_REGISTRY['all'] = "\n\n".join([HEADERS_REGISTRY['all'], header])
+
+        # Special internal thingis here.
+        HEADERS_REGISTRY['_webui'] = HEADERS_REGISTRY['general']
         return func
     return decorator
 

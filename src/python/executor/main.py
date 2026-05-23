@@ -7,6 +7,7 @@ import re
 import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
+from numpy import ma
 import psycopg
 from psycopg.types.json import Jsonb
 
@@ -50,6 +51,7 @@ class ExecutionFailed(Exception):
 
     def __str__(self) -> str:
         return f"call1: {self.call1}, call2: {self.call2}, callblock 1: {self.callb1}, callblock2: {self.callb2}, error1: {self.error1}, error2: {self.error2}"
+
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
                                       conn: psycopg.Connection,
@@ -114,6 +116,37 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
 
 
+
+def fix_llm(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
+    llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
+    log_json({
+        'type': 'llm_response',
+        'status': 'abnormal',
+        'reason': 'did not find any tool calls.',
+        'llm_without_think': llm_without_think
+    })
+    match slave['scope']:
+        case '_webui':
+            tool_calls: ToolCallsBlock = [{
+                    "tool": "user.send_message", 
+                    "args": {"text": llm_without_think}
+                }]
+
+        case _:
+            tool_calls: ToolCallsBlock = [{
+                    "tool": "result.write", 
+                    "args": {"text": llm_without_think}
+                }]
+
+    log_json({
+        'type': 'llm_response',
+        'status': 'recovered',
+        'reason': 'created the new set of toolcalls from the LLM response',
+        'llm_without_think': llm_without_think,
+        'new_tool_calls': tool_calls
+    })
+
+    return tool_calls
 
 
 
@@ -185,26 +218,9 @@ async def core(
                 try:
                     tool_calls: ToolCallsBlock = llm_to_json(llm_response)
                 except ValueError:
-                    llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
-                    log_json({
-                        'type': 'llm_response',
-                        'status': 'abnormal',
-                        'reason': 'did not find any tool calls.',
-                        'llm_without_think': llm_without_think
-                    })
-                    tool_calls = [{
-                            "tool": "result.write", 
-                            "args": {"text": llm_without_think}
-                        }]
-                    log_json({
-                        'type': 'llm_response',
-                        'status': 'recovered',
-                        'reason': 'created the new set of toolcalls from the LLM response',
-                        'llm_without_think': llm_without_think,
-                        'new_tool_calls': tool_calls
-                    })
 
-                print("got valid llm response and parsed it. ")
+                    tool_calls = fix_llm()
+
 
                 results = []
 

@@ -32,6 +32,7 @@ class InstrJson(TypedDict):
     master_addr: int
     context: str
     slave_addr: int
+    scope: SlaveScope_
 
 class ToolCall(TypedDict, total=False):
     """ A single tool call, directly executable """

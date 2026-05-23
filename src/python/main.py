@@ -11,13 +11,18 @@ from .executor.main import startup as e_startup
 from .sceduler.main import setup as s_setup
 from .interfaces.alados_console import start_console
 from .utils.logger import startup as l_startup, log_json
+import sys
 
 def main():
     """
     The main function that starts everything 
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 
     """
-    conn = conn_factory()
+    try:
+        conn = conn_factory()
+    except psycopg.OperationalError as e:
+        print(f"Are you sure you started postgres? \n\n I couldnt connect with this error {e}. \n\n Make sure you actually started postgres.")
+        sys.exit(1)
 
     main_file = Path(__file__)
     sql_dir = main_file.parent.parent / "sql"

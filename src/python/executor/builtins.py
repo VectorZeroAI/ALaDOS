@@ -631,7 +631,10 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
     results: list[str] = []
     for i in results_raw[:amount_results]:
          results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
-    return "\n".join(results)
+    if len(results) > 1: 
+        return "\n".join(results)
+    else: 
+        return results
 
 
 

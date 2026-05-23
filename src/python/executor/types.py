@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import Literal, Sequence, TypeAlias, TypedDict, Optional
+from typing import Literal, Sequence, TypeAlias, TypedDict, Optional, get_args
 import psycopg
 from pydantic import JsonValue
 from ..utils.uqueue import Uqueue
@@ -11,7 +11,7 @@ JsonSerializable: TypeAlias = JsonValue
 Addr: TypeAlias = int
 
 SlaveScope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
-SlaveScope_: TypeAlias = SlaveScope|Literal['_webui']
+SlaveScope_: TypeAlias = Literal[*get_args(SlaveScope), '_webui'] # pyright: ignore
 
 SlaveScopesList: TypeAlias = Sequence[SlaveScope]
 

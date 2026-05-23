@@ -314,10 +314,15 @@ def test_move_window_anchor(meta):
     name = unique_name("move_anchor")
     k_create(content="anchor knowledge", description="anchor desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-    # Update the vector_ops row to have a position (the trigger will set it automatically when emb is set)
-    # But we also need to set emb to trigger position calculation. For simplicity, set position directly.
+
     conn.execute("UPDATE vector_ops SET position = 100, emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s", (addr,))
-    # Set anchor and window sizes in master_context
+
+    name2 = unique_name("move_anchor")
+    k_create(content="anchor knowledge", description="anchor desc", name=name2, _meta=meta)
+    addr2 = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+
+    conn.execute("UPDATE vector_ops SET position = 124, emb = array_fill(0.2, ARRAY[768])::vector(768) WHERE addr = %s", (addr2,))
+
     conn.execute("""
         UPDATE master_context 
         SET window_anchor_knowledge = %s, window_size_l = 1, window_size_r = 1 

@@ -180,7 +180,7 @@ BEGIN
             window_anchor_knowledge = v_new_addr,
             window_anchor_exe = NULL
         WHERE addr = p_master_id;
-    ELSIF v_new_type = 'executables' THEN
+    ELSIF v_new_type = 'executable' THEN
         UPDATE master_context SET
             window_anchor_exe = v_new_addr,
             window_anchor_knowledge = NULL

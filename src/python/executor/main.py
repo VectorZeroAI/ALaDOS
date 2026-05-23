@@ -117,7 +117,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
 
 
-def fix_llm(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
+def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
     llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
     log_json({
         'type': 'llm_response',
@@ -218,9 +218,7 @@ async def core(
                 try:
                     tool_calls: ToolCallsBlock = llm_to_json(llm_response)
                 except ValueError:
-
-                    tool_calls = fix_llm()
-
+                    tool_calls = fix_llm_response(instr, llm_response)
 
                 results = []
 

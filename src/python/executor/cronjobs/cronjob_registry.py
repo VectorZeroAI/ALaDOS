@@ -14,4 +14,5 @@ def register_cronjob(name: str) -> Callable:
     return decorator
 
 def execute_cronjob(name: str, sys_state: SysState, args: dict[str, Any]) -> Any:
-    return CRONJOB_REGISTRY[name](args['sys_state'] = sys_state)
+    args['sys_state'] = sys_state
+    return CRONJOB_REGISTRY[name](**args)

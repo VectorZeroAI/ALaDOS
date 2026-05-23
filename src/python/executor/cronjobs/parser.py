@@ -20,17 +20,10 @@ def parse(input_cronjob: CronjobExpression):
 
     if input_cronjob['cronjob_type'] == "once":
         conn.execute("""
-    INSERT INTO cronjob_once(body, start_after) VALUES(%s, %s, %s);
+    INSERT INTO cronjob_once(body, start_after, args) VALUES(%s, %s, %s);
                      """, (input_cronjob['action'], time.time() + input_cronjob['run_after_or_every_s'], Jsonb(input_cronjob['params']) ))
     elif input_cronjob['cronjob_type'] == "loop":
         conn.execute("""
     INSERT INTO cronjob_loop(body, execute_every, args) VALUES(%s, %s, %s);
                      """, (input_cronjob['action'], input_cronjob['run_after_or_every_s'], Jsonb(input_cronjob['params'])))
-
-
-
-
-
-
-
 

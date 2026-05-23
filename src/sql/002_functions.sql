@@ -161,7 +161,7 @@ BEGIN
         (SELECT window_anchor_knowledge FROM master_context WHERE addr = p_master_id), 
         (SELECT window_anchor_exe FROM master_context WHERE addr = p_master_id)
     ) INTO v_anchor_addr;
-
+    
     WITH ordered AS (
         SELECT description,
             addr,
@@ -185,6 +185,8 @@ BEGIN
             window_anchor_exe = v_new_addr,
             window_anchor_knowledge = NULL
         WHERE addr = p_master_id;
+    ELSIF v_new_type IS NULL THEN
+        RAISE EXCEPTION'no rows to move to.'
     ELSE 
         RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;
     END IF;

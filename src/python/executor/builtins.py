@@ -325,9 +325,6 @@ def add_slave(instruction: str,
             if i == "self":
                 required_results_addrs.append(_meta['slave_id'])
                 continue
-            else:
-                required_results_addrs.append(int(i))
-
             required_results_addrs.append(conn.execute("""
             SELECT resolve_name(%s);
                   """, (i,)).fetchone()[0])

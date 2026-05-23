@@ -11,6 +11,7 @@ JsonSerializable: TypeAlias = JsonValue
 Addr: TypeAlias = int
 
 SlaveScope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
+SlaveScope_: TypeAlias = SlaveScope|Literal['_webui']
 
 SlaveScopesList: TypeAlias = Sequence[SlaveScope]
 

@@ -26,12 +26,11 @@ BEGIN
             'session_name', v_session_name
     )) RETURNING addr INTO v_usr_msg_addr;
 
-    PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_addr], NULL, NULL-- , 
---         jsonb_build_object(
---             'type', 'ai_message',
---             'turn', 1,
---             'session_name', v_session_name
---         )
+    PERFORM new_slave(
+        p_master_addr := v_session_addr,
+        p_instruction := p_ai_prompt,
+        p_requires := ARRAY[v_usr_msg_addr],
+        p_slave_scope := '_webui',
     );
 
     INSERT INTO results(metadata)
@@ -53,11 +52,10 @@ BEGIN
     
     
     PERFORM new_slave(v_session_addr, p_ai_prompt, NULL, ARRAY[v_usr_msg_placeholder_addr], NULL, NULL --,
---         jsonb_build_object(
---             'type', 'ai_message',
---             'session_name', v_session_name,
---             'turn', 2
---         )
+        p_master_addr := v_session_addr,
+        p_instruction := p_ai_prompt,
+        p_requires := ARRAY[v_usr_msg_placeholder_addr],
+        p_slave_scope := '_webui',
     );
 
     INSERT INTO results(metadata)
@@ -141,10 +139,10 @@ BEGIN
     RETURNING addr INTO next_result_addr;
 
     PERFORM new_slave(session_addr, ai_instruction, NULL, ARRAY[next_result_addr], NULL, NULL--, 
---         jsonb_build_object('type', 'ai_message',
---             'turn', next_result_turn,
---             'session_name', session_name
---         )
+        p_master_addr := session_addr,
+        p_instruction := ai_instruction
+        p_requires := ARRAY[next_result_addr],
+        p_slave_scope := '_webui',
     );
 
     INSERT INTO results(metadata)

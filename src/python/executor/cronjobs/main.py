@@ -2,11 +2,12 @@
 import inspect
 
 import asyncio
-from typing import TypedDict
+from typing import Callable, TypedDict
 import time
 import psycopg
 from ...utils.conn_factory import conn_factory
 import threading
+from .cronjob_registry import execute_cronjob
 
 class SysState(TypedDict):
     conn: psycopg.Connection
@@ -30,12 +31,11 @@ def cronjob_executor():
 
     threading.Thread(target=cronjob_changes_listener, args=(notifies_conn,), daemon=True).start()
 
-    loop = asyncio.new_event_loop()
+    sys_state: SysState = {
+        "conn": cronjob_conn
+    }
 
     while True:
-        sys_state: SysState = {
-            "conn": cronjob_conn
-        }
 
         cronjob_fetch = conn.execute("""
     SELECT addr, body, run_at, type FROM cronjobs_to_run LIMIT 1
@@ -53,18 +53,9 @@ def cronjob_executor():
             continue
 
         try:
-            exec(cronjob_fetch[1]) # THis is fine, because the AI wont have a way to modify what the code is
-            # The code will be generated at the database side, from the JSON DSL that the AI generates. 
-            # Basically action: {One of the list}, type: "loop"|"once", time: arbitrary_int
+            
+            execute_cronjob(cronjob_fetch[1], sys_state)
 
-            if "cronjob_function" not in locals():
-                raise NameError("Cronjob function not in locals")
-
-            if inspect.iscoroutinefunction(cronjob_function):
-                loop.run_until_complete(cronjob_function(sys_state))
-            else:
-                cronjob_function(sys_state)
-            # NOTE: IGNORE BECAUSE THIS FUNCTION WILL APPEAR AFTER EXEC, and also any error will be just logged, the cronjob no more executed, and we move on.
         except Exception as e:
             match cronjob_fetch[3]:
                 case "cronjob_once":

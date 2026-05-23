@@ -514,7 +514,8 @@ def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmat
 @register_tool("result.write", ALL)
 def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
-    Writes plaintext passed in as the result to your current instruction, NOT to the master instruction.
+    Writes plaintext passed in as the result to your current instruction, NOT to the master instruction, NOT to the user. 
+    TO MESSAGE USER, USE user.send_message tool!
     """
     return f"Result: {text}"
 

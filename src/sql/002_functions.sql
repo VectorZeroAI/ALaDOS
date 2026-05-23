@@ -186,7 +186,7 @@ BEGIN
             window_anchor_knowledge = NULL
         WHERE addr = p_master_id;
     ELSIF v_new_type IS NULL THEN
-        RAISE EXCEPTION'no rows to move to.'
+        RAISE EXCEPTION'no rows to move to.';
     ELSE 
         RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;
     END IF;

@@ -15,6 +15,7 @@ from .types import _ExecToolMetaData, SlaveScope
 from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
+from .comms.httpsystem import get, post
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
@@ -632,12 +633,18 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
     results: list[str] = []
     for i in results_raw[:amount_results]:
          results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
-    if len(results) > 1: 
-        return "\n".join(results)
-    else: 
-        return results
 
+    if len(results) > 0:
+        return f"websearch results: [{"\n".join(results)}]"
+    else:
+        return f"No results for the websearch of {query}"
 
-
+@register_tool("web.get")
+def web_request(url: str, timeout: int = 10, return_type: Literal['extracted', 'raw'] = 'extracted', _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    The GET http request onto the url.
+    return_type specifies what you wish to get from that url.
+    Extracted means only meaningfull content, and raw means raw response content as string. 
+    """
 
 

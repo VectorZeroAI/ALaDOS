@@ -85,7 +85,7 @@ WHERE o.rn BETWEEN a.rn + %s AND a.rn - %s;
                        )).fetchall()
     viewing_window_context_list_str = []
     for i in viewing_window_shortened:
-        viewing_window_context_list_str.append(f"Item at address: {i[0]}, at coordinate {i[0]}.")
+        viewing_window_context_list_str.append(f"Item at address: {i[0]}, at coordinate {i[1]}.")
 
     context_chunk_1 = "\n".join(viewing_window_context_list_str)
     

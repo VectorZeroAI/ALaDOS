@@ -136,7 +136,7 @@ RETURNS TRIGGER AS $$
             SELECT 1
             FROM slaves s
                 INNER JOIN results r ON r.addr = s.result_addr
-            WHERE s.master_addr = (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr;)
+            WHERE s.master_addr = (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr)
                 AND r.ready = FALSE
         ) THEN
             SELECT new_result(
@@ -148,7 +148,8 @@ RETURNS TRIGGER AS $$
                     FROM results r
                         JOIN slaves s ON s.result_addr = r.addr
                         JOIN masters m ON m.addr = s.master_addr)
-            )
+            );
+        END IF;
         RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
@@ -181,7 +182,4 @@ FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
 CREATE OR REPLACE TRIGGER notify_cronjob_loop_added
 AFTER INSERT ON cronjob_loop
 FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
-
-CREATE OR REPLACE FUNCTION make_master_result_result();
-
 

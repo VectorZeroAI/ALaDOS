@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS masters (
             ON DELETE CASCADE 
             ON UPDATE CASCADE,
     instruction TEXT NOT NULL,
-    result_addr BINGINT NOT NULL
+    result_addr BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
@@ -254,7 +254,7 @@ CREATE TABLE IF NOT EXISTS reusable_master_templates(
 CREATE TABLE IF NOT EXISTS rmt_slaves(LIKE slaves INCLUDING ALL);
 
 ALTER TABLE rmt_slaves
-    ADD COLUMN template BIGINT
+    ADD COLUMN IF NOT EXISTS template BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
             ON UPDATE CASCADE;
@@ -262,7 +262,7 @@ ALTER TABLE rmt_slaves
 CREATE TABLE IF NOT EXISTS rmt_slave_req (LIKE slave_req INCLUDING ALL);
 
 ALTER TABLE rmt_slave_req
-    ADD COLUMN template BIGINT
+    ADD COLUMN IF NOT EXISTS template BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
             ON UPDATE CASCADE;

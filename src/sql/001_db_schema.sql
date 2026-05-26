@@ -242,3 +242,27 @@ CREATE OR REPLACE VIEW cronjobs_to_run AS
     UNION ALL
     SELECT addr, body, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type, args AS params FROM cronjob_loop WHERE error = FALSE
     ORDER BY run_at ASC;
+
+
+
+CREATE TABLE IF NOT EXISTS reusable_master_templates(
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS rmt_slaves(LIKE slaves INCLUDING ALL);
+
+ALTER TABLE rmt_slaves
+    ADD COLUMN template BIGINT
+        REFERENCES reusable_master_templates
+            ON DELETE CASCADE
+            ON UPDATE CASCADE;
+
+CREATE TABLE IF NOT EXISTS rmt_slave_req (LIKE slave_req INCLUDING ALL);
+
+ALTER TABLE rmt_slave_req
+    ADD COLUMN template BIGINT
+        REFERENCES reusable_master_templates
+            ON DELETE CASCADE
+            ON UPDATE CASCADE;

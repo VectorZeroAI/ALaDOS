@@ -78,7 +78,7 @@ WITH ordered AS (
 )
 SELECT addr, o.rn
 FROM ordered o, anchor a
-WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
+WHERE o.rn BETWEEN a.rn + %s AND a.rn - %s;
                  """, ((window_data[0] if window_data[0] is not None else window_data[1]),
                         window_data[2],
                        window_data[3]

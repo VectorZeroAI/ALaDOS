@@ -682,3 +682,19 @@ def web_post(url: str,
         case _:
             raise ValueError("Invalid input on return type. Input: {return_type}.")
 
+@register_tool("goal.add_master", ['task'])
+def create_master(instuction: str,
+                  required_names: Sequence[str]|None = None,
+                  required_addrs: Sequence[int]|None = None,
+                  result_name: str|None = None,
+                  _meta: _ExecToolMetaData = None
+                  ) -> ActionConfirmation:
+    """
+    Creates a master goal, with the given instruction, depending on given results, outputting a given results name.
+    """
+
+    conn = _meta['conn']
+
+    conn.execute("""
+    
+                 """, (,))

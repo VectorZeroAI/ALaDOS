@@ -140,7 +140,7 @@ RETURNS TRIGGER AS $$
                 AND r.ready = FALSE
         ) THEN
             SELECT new_result(
-                p_content := (SELECT mc.master_results
+                p_content := (SELECT mc.master_result
                     FROM results r
                         JOIN slaves s ON s.result_addr = r.addr
                         JOIN master_context mc ON mc.addr = s.addr),

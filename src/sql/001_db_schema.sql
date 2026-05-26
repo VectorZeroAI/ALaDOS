@@ -172,6 +172,18 @@ CREATE TABLE IF NOT EXISTS slave_req (
     PRIMARY KEY (slave_addr, req_addr)
 );
 
+CREATE TABLE IF NOT EXISTS master_req (
+    master_addr BIGINT
+        REFERENCES masters(addr) 
+            ON UPDATE CASCADE 
+            ON DELETE CASCADE,
+    req_addr BIGINT
+        REFERENCES results(addr) 
+            ON UPDATE CASCADE 
+            ON DELETE CASCADE,
+    PRIMARY KEY (slave_addr, req_addr)
+)
+
 CREATE TABLE IF NOT EXISTS ownership(
     addr BIGINT PRIMARY KEY 
         REFERENCES addrs(addr) 

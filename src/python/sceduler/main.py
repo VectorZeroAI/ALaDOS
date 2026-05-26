@@ -90,6 +90,9 @@ def setup():
     unblocked_slave_addrs = conn.execute("""
     SELECT s.addr FROM slaves s
         INNER JOIN results own ON s.result_addr = own.addr
+        INNER JOIN masters m ON m.addr = s.master_addr
+        LEFT JOIN master_req mr ON mr.master_addr = m.addr
+        LEFT JOIN results m_r ON m_r.addr = mr.req_addr
     WHERE NOT EXISTS (
         SELECT 1
         FROM slave_req sr
@@ -97,7 +100,10 @@ def setup():
         WHERE sr.slave_addr = s.addr
             AND r.ready IS FALSE
             AND r.status NOT LIKE '%error%'
-    ) AND own.ready = FALSE
+        )
+        AND own.ready = FALSE
+        AND m_r.ready = TRUE
+
                                          """).fetchall()
 
     for addr in unblocked_slave_addrs:

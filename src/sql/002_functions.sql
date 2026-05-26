@@ -97,13 +97,19 @@ BEGIN
     -- Find and notify newly unblocked slaves
     FOR unblocked IN
         SELECT s.addr FROM slaves s
-        JOIN slave_req sr ON sr.slave_addr = s.addr
+            LEFT JOIN slave_req sr ON sr.slave_addr = s.addr
+            JOIN masters m ON m.addr = s.master_addr
+            LEFT JOIN master_req mr ON mr.master_addr = s.master_addr
+            LEFT JOIN results r_m ON r_m.addr = mr.req_addr
         WHERE sr.req_addr = v_addr
-        AND NOT EXISTS (
-            SELECT 1 FROM slave_req sr2
-            JOIN results r ON r.addr = sr2.req_addr
-            WHERE sr2.slave_addr = s.addr AND r.ready = FALSE
-        )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM slave_req sr2
+                    JOIN results r ON r.addr = sr2.req_addr
+                WHERE sr2.slave_addr = s.addr
+                    AND r.ready = FALSE
+                )
+            AND r_m.ready = TRUE
     LOOP
         PERFORM pg_notify('slaves_ready', unblocked::TEXT);
     END LOOP;
@@ -195,17 +201,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- CREATE OR REPLACE FUNCTION get_viewing_window(
---     anchor_addr BIGINT,
---     size_l INT,
---     size_r INT
--- ) RETURNS TABLE(addr BIGINT, pos INT) AS $$
--- DECLARE 
---     v_anchor_numeric_pos NUMERIC,
---     v_anchor_emb vector(768),
--- BEGIN
---     RETURN (WITH knowledge_sorted AS ())
--- 
--- $$ LANGUAGE plpgsql;
--- 
--- 
+CREATE OR REPLACE FUNCTION activate_rmt(
+    target_addrs BIGINT[],
+    req_addrs BIGINT[],
+    rmt_name TEXT DEFAULT NULL,
+    rmt_addr TEXT DEFAULT NULL
+)

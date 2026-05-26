@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-from typing import Any, Literal, Sequence, TypeAlias, get_args
+from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
 
 from numpy import ndarray
 import psycopg
@@ -15,7 +15,7 @@ from .types import _ExecToolMetaData, SlaveScope
 from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
-from .comms.httpsystem import get, post
+from .comms import httpsystem
 
 ActionConfirmation: TypeAlias = str
 search_and_replace_block: TypeAlias = str
@@ -639,12 +639,46 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
     else:
         return f"No results for the websearch of {query}"
 
-@register_tool("web.get")
-def web_request(url: str, timeout: int = 10, return_type: Literal['extracted', 'raw'] = 'extracted', _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+
+
+
+@register_tool("web.get", ['general', 'communication'])
+def web_request(url: str, timeout: int = 10, return_type: Literal['extracted', 'raw'] = 'extracted', headers: Sequence[Mapping[str, str]] = [], _meta: _ExecToolMetaData = None) -> ActionConfirmation:
     """
     The GET http request onto the url.
     return_type specifies what you wish to get from that url.
     Extracted means only meaningfull content, and raw means raw response content as string. 
     """
+    
+    result = httpsystem.get(url, headers, timeout) 
 
+    return f"<website> content = [{result['text'] if return_type == "extracted" else result['content_raw']}], url = [{result["url"]}], status_code = [{result['status_code']}] </website>"
+
+
+
+
+@register_tool('web.post', ['communication'])
+def web_post(url: str,
+             timeout: int = 10,
+             return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
+             headers: Sequence[Mapping[str, str]] = [],
+             payload: str = "",
+             _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    The POST http request onto a url.
+    return type specifies what you wish to get from that url. 
+    Extracted means only meaningfull content, raw means raw response content as string, status_means means no content, only status code.
+    """
+
+    result = httpsystem.post(url, headers, payload, timeout)
+
+    match return_type:
+        case 'status_code':
+            return f"<website> url = [{url}], status_code = [{result['status_code']}]</website>"
+        case 'extracted':
+            return f"<website> url = [{url}], status_code = [{result['status_code']}, content = [{result['text']}]] </website>"
+        case 'raw':
+            return f"<website> url = [{url}], status_code = [{result['status_code']}, content = [{result['content_raw']}]] </website>"
+        case _:
+            raise ValueError("Invalid input on return type. Input: {return_type}.")
 

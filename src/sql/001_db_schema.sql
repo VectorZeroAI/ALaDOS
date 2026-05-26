@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS masters (
         REFERENCES addrs(addr)
             ON DELETE CASCADE 
             ON UPDATE CASCADE,
-    instruction TEXT NOT NULL
+    instruction TEXT NOT NULL,
+    result_addr BINGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS master_context (

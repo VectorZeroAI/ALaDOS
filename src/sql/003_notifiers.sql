@@ -97,6 +97,21 @@ AFTER INSERT ON masters
 FOR EACH ROW EXECUTE FUNCTION init_master_context();
 
 
+CREATE OR REPLACE FUNCTION init_master_result()
+RETURNS TRIGGER AS $$
+    BEGIN
+        INSERT INTO results(metadata) VALUES(jsonb_build_object(
+            'type', 'master'
+        )) RETURNING addr INTO NEW.result_addr;
+        RETURN NEW;
+    END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER init_master_result_trg
+BEFORE INSERT ON masters
+FOR EACH ROW EXECUTE FUNCTION init_master_result();
+
+
 CREATE OR REPLACE FUNCTION notify_for_ai_msg()
 RETURNS TRIGGER AS $$
     BEGIN
@@ -112,6 +127,35 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER notify_for_ai_msg
 AFTER UPDATE ON results
 FOR EACH ROW EXECUTE FUNCTION notify_for_ai_msg();
+
+
+CREATE OR REPLACE FUNCTION check_for_master_completion()
+RETURNS TRIGGER AS $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM slaves s
+                INNER JOIN results r ON r.addr = s.result_addr
+            WHERE s.master_addr = (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr;)
+                AND r.ready = FALSE
+        ) THEN
+            SELECT new_result(
+                p_content := (SELECT mc.master_results
+                    FROM results r
+                        JOIN slaves s ON s.result_addr = r.addr
+                        JOIN master_context mc ON mc.addr = s.addr),
+                p_addr := (SELECT m.result_addr
+                    FROM results r
+                        JOIN slaves s ON s.result_addr = r.addr
+                        JOIN masters m ON m.addr = s.master_addr)
+            )
+        RETURN NEW;
+    END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER check_master_completion_trg
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION check_for_master_completion();
 
 
 CREATE OR REPLACE FUNCTION notify_cronjob_changes()
@@ -137,3 +181,7 @@ FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
 CREATE OR REPLACE TRIGGER notify_cronjob_loop_added
 AFTER INSERT ON cronjob_loop
 FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
+
+CREATE OR REPLACE FUNCTION make_master_result_result();
+
+

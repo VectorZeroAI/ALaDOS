@@ -102,8 +102,7 @@ def setup():
             AND r.status NOT LIKE '%error%'
         )
         AND own.ready = FALSE
-        AND m_r.ready = TRUE
-
+        AND (m_r.ready IS NULL OR m_r.ready = TRUE)
                                          """).fetchall()
 
     for addr in unblocked_slave_addrs:

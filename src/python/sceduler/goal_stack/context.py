@@ -156,7 +156,7 @@ def resolve_loads(loads_data: LoadsData) -> str:
 
 def _result_item_resolve(addr: int, conn: psycopg.Connection):
     item = conn.execute("""
-    SELECT n.result_name, 
+    SELECT n.name, 
         r.content_str,
         r.ready 
     FROM results r

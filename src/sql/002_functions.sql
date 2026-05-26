@@ -109,7 +109,7 @@ BEGIN
                 WHERE sr2.slave_addr = s.addr
                     AND r.ready = FALSE
                 )
-            AND r_m.ready = TRUE
+            AND (r_m.ready IS NULL OR r_m.ready = TRUE)
     LOOP
         PERFORM pg_notify('slaves_ready', unblocked::TEXT);
     END LOOP;

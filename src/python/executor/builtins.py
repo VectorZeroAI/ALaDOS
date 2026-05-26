@@ -375,8 +375,8 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
         tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
-    masters_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta['master_id'],)).fetchone()
-    masters_result_so_far_str = f"Masters result so far: {masters_result_so_far_str[0] if masters_result_so_far_str is not None else "No master result so far."}"
+    master_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta['master_id'],)).fetchone()
+    master_result_so_far_str = f"Masters result so far: {master_result_so_far_str[0] if master_result_so_far_str is not None else "No master result so far."}"
 
     fetch = conn.execute("""
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
@@ -393,7 +393,7 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     The task is complete if the master instruction is fully answered via the current master result. 
     """
 
-    prompt = prompt + special_context_str + masters_result_so_far_str
+    prompt = prompt + special_context_str + master_result_so_far_str
 
     conn.execute("SELECT new_slave(%s, %s, NULL, %s, NULL, NULL, NULL, 'task');", (_meta['master_id'], prompt, [r[0] for r in fetch]))
     return "added a replanner slave"

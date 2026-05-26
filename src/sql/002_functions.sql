@@ -206,4 +206,6 @@ CREATE OR REPLACE FUNCTION activate_rmt(
     req_addrs BIGINT[],
     rmt_name TEXT DEFAULT NULL,
     rmt_addr TEXT DEFAULT NULL
-)
+) RETURNS VOID AS $$
+
+$$ LANGUAGE plpgsql;

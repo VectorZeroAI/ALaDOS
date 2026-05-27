@@ -72,7 +72,7 @@ def resolve_context(slave_obj: SlaveObj):
                           f"Previous steps results are: [{results_context}]",
                           f"Tool headers are: {TOOL_HEADERS}",
                           f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."
-                          f"Currently claimed items are: [{}]"
+                          f"Currently claimed items are: [{claimed_items}]"
                           ])
 
 

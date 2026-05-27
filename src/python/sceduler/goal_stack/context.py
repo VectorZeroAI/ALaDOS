@@ -63,13 +63,26 @@ def resolve_context(slave_obj: SlaveObj):
 
     results_context = resolve_req_results(slave_obj, conn)
 
+    claimed_items = resolve_claimed_items(slave_obj, conn)
+
     TOOL_HEADERS = HEADERS_REGISTRY[slave_obj['scope']]
 
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",
                           f"Previous steps results are: [{results_context}]",
                           f"Tool headers are: {TOOL_HEADERS}",
-                          f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."])
+                          f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."
+                          f"Currently claimed items are: [{}]"
+                          ])
+
+
+def resolve_claimed_items(slave_obj: SlaveObj, conn: psycopg.Connection):
+    """
+    Resolved the claimed items to remind the AI of them, so it doesnt forget it has them claimed.
+    """
+    print("\n\n\n FINISH THE CLAIMED ITEMS DEVELOPER! \n\n\n")
+
+
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """

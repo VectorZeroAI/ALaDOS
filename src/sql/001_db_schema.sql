@@ -187,13 +187,13 @@ CREATE TABLE IF NOT EXISTS master_req (
 );
 
 CREATE TABLE IF NOT EXISTS ownership(
-    addr BIGINT PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
+    addr BIGINT PRIMARY KEY
+        REFERENCES addrs(addr)
+            ON UPDATE CASCADE
             ON DELETE CASCADE,
-    owner BIGINT NOT NULL 
-        REFERENCES masters(addr) 
-            ON UPDATE CASCADE 
+    owner BIGINT NOT NULL
+        REFERENCES masters(addr)
+            ON UPDATE CASCADE
             ON DELETE CASCADE
 );
 

@@ -89,6 +89,13 @@ def k_edit(addr: int|None = None,
         SELECT resolve_name(%s);
                      """, (name,)).fetchone()[0]
 
+    flag_ownership = conn.execute("""
+    SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
+                                  """, (addr, _meta['master_id'])).fetchone()[0]
+
+    if not flag_ownership:
+        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
+
     if content_change is not None:
         old_k = conn.execute("""
         SELECT content FROM knowledge WHERE addr = %s;
@@ -239,9 +246,18 @@ def edit_tool(name: str|None = None,
         try:
             addr = conn.execute("""
             SELECT resolve_name(%s);
-                                """, (name,)).fetchone()[0]
+                                """, (name,)).fetchone()[0] # pyright: ignore
         except Exception as e:
             raise Exception("Name most likely does not exist.") from e
+
+
+    flag_ownership = conn.execute("""
+    SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
+                                  """, (addr, _meta['master_id'])).fetchone()[0] # pyright: ignore
+
+    if not flag_ownership:
+        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
+
 
     if new_description is not None:
         conn.execute("""
@@ -252,7 +268,7 @@ def edit_tool(name: str|None = None,
     if body_change is not None:
         old_body = conn.execute("""
         SELECT body FROM executables WHERE addr = %s;
-                                """, (addr,)).fetchone()[0]
+                                """, (addr,)).fetchone()[0] # pyright: ignore
         assert isinstance(old_body, str)
 
         search, replacement = _sr_block_parser(body_change)
@@ -265,7 +281,7 @@ def edit_tool(name: str|None = None,
     if header_change is not None:
         old_header = conn.execute("""
         SELECT header FROM executables WHERE addr = %s;
-                                  """, (addr,)).fetchone()[0]
+                                  """, (addr,)).fetchone()[0] # pyright: ignore
         assert isinstance(old_header, str)
 
         search, replacement = _sr_block_parser(header_change)
@@ -705,3 +721,49 @@ def create_master(instruction: str,
                  """, (instruction, required_names, required_addrs, result_name))
 
     return f"Created master with instruction '{instruction}'."
+
+@register_tool("claim_item", ['general', 'context'])
+def claim_item(item_addr: int|None = None, item_name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    Before editing an item, you must claim it with this function.
+    You can only suply item_name OR item_addr, not both, not none.
+    This function claims you to be the owner of the item, so only you can edit the file.
+    """
+    conn = _meta['conn']
+
+    if (item_addr is None) and (item_name is None):
+        raise TypeError("No item identification provided to the function.")
+    if (item_addr is not None) and (item_name is not None):
+        raise TypeError("Both mutually exclusive identifiers supplied.")
+
+    if item_addr is None:
+        item_addr = conn.execute("SELECT resolve_name(%s);", (item_name,)).fetchone()[0] # pyright: ignore
+
+    conn.execute("""
+    INSERT INTO ownership(addr, owner) VALUES(%s, %s)
+                 """, (item_addr, _meta['master_id']))
+
+    return f"Claimed the item at addr {item_addr}"
+
+
+@register_tool("release_item", ['general', 'context'])
+def release_item(item_addr: int|None = None, item_name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+    """
+    Function to release the file, allowing others to edit the file, after you no longer need the item. Make sure to release the items you claimed when you no longer need them.
+    """
+    conn = _meta['conn']
+
+    if (item_addr is None) and (item_name is None):
+        raise TypeError("No item identification provided to the function.")
+    if (item_addr is not None) and (item_name is not None):
+        raise TypeError("Both mutually exclusive identifiers supplied.")
+
+    
+    if item_addr is None:
+        item_addr = conn.execute("SELECT resolve_name(%s);", (item_name,)).fetchone()[0] # pyright: ignore
+
+    conn.execute("""
+    DELETE FROM ownership WHERE addr = %s AND owner = %s;
+                 """, (item_addr,_meta['master_id']))
+
+    return f"Released the item at addr {item_addr}"

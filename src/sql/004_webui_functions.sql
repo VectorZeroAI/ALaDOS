@@ -9,10 +9,7 @@ DECLARE
     v_usr_msg_addr BIGINT;
     v_usr_msg_placeholder_addr BIGINT;
 BEGIN
-    INSERT INTO masters(instruction)
-    VALUES('YOU WILL BE ANSWERING HUMAN MESSAGES.
-        THERE IS NO NEED TO PLAN ANYTHING. JUST OUTPUT OKAY AND THATS IT.')
-    RETURNING addr INTO v_session_addr;
+    v_session_addr := new_master(instruction:= "You will be answering human messages. There is no need to plan anything.");
 
     INSERT INTO names(addr, name) VALUES(
         v_session_addr, 'session_'||(SELECT COALESCE(MAX(

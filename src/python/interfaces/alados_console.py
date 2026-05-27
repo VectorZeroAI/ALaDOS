@@ -6,7 +6,9 @@ import threading
 
 def add_master(instruction: list[str], conn: psycopg.Connection):
     conn.execute("""
-    INSERT INTO masters(instruction) VALUES (%s);
+                 SELECT new_master(
+                     instruction := %s
+                                  )
                  """, (" ".join(instruction),))
 
 def _webui_thread(port: int):

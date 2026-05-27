@@ -227,16 +227,20 @@ DECLARE
 BEGIN
 
     INSERT INTO masters(instruction) VALUES (p_instruction)
-    RETURNING addr result_addr
-    INTO new_master_addr new_master_result_addr;
+    RETURNING addr, result_addr
+    INTO new_master_addr, new_master_result_addr;
     
-    FOREACH name IN ARRAY req_names LOOP
-        ( req_addrs||(SELECT resolve_name(name)) )
-    END LOOP;
-
-    FOREACH addr IN ARRAY req_addrs LOOP
-        INSERT INTO master_req(master_addr, req_addr) VALUES(new_master_addr, addr);
-    END LOOP;
+    IF req_names IS NOT NULL THEN
+        FOREACH name IN ARRAY req_names LOOP
+            req_addrs := req_addrs || resolve_name(name);
+        END LOOP;
+    END IF;
+    
+    IF req_addrs IS NOT NULL THEN
+        FOREACH addr IN ARRAY req_addrs LOOP
+            INSERT INTO master_req(master_addr, req_addr) VALUES(new_master_addr, addr);
+        END LOOP;
+    END IF;
 
     IF result_name IS NOT NULL THEN
         INSERT INTO names(addr, name) VALUES(new_master_result_addr, result_name);

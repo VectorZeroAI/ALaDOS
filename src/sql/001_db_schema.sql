@@ -2,6 +2,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
+CREATE SEQUENCE IF NOT EXISTS global_planner_serial;
+
 DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
@@ -266,7 +268,7 @@ CREATE TABLE IF NOT EXISTS reusable_master_templates(
 CREATE TABLE IF NOT EXISTS rmt_slaves(LIKE slaves INCLUDING ALL);
 
 ALTER TABLE rmt_slaves
-    ADD COLUMN IF NOT EXISTS template BIGINT
+    ADD COLUMN IF NOT EXISTS template_addr BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
             ON UPDATE CASCADE;
@@ -274,7 +276,7 @@ ALTER TABLE rmt_slaves
 CREATE TABLE IF NOT EXISTS rmt_slave_req (LIKE slave_req INCLUDING ALL);
 
 ALTER TABLE rmt_slave_req
-    ADD COLUMN IF NOT EXISTS template BIGINT
+    ADD COLUMN IF NOT EXISTS template_addr BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
             ON UPDATE CASCADE;

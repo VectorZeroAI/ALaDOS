@@ -67,12 +67,14 @@ RETURNS TRIGGER AS $$
             RETURN NEW;
         END IF;
 
-        PERFORM new_slave(NEW.addr, 
-            ' Your task is to create a plan for the following instruction OR IF the task is simple, directly write a result via result.add_master_result tool. Master instruction: "
+        PERFORM new_slave(
+            p_master_addr := NEW.addr, 
+            p_instruction := ' Your task is to create a plan for the following instruction OR IF the task is simple, directly write a result via result.add_master_result tool. Master instruction: "
             ' || NEW.instruction || '" 
             You can add slaves via "goal.add_slave" tool. Slaves are steps in the plan, which is called master. A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all. (plan MUST end with a planner slave UNLESS its done).
             YOU MUST OUTPUT A JSON ARRAY OF TOOL CALLS!!! DO NOT TRY TO MAKE THE ENTIRE PLAN AT ONCE, leave it to be incrementally produced via further planner slaves.',
-            NULL, NULL, NULL, NULL, NULL, 'task'
+            p_name := "planner_"||nextval('global_planner_serial')::TEXT,
+            p_scope := 'task'
         );
     RETURN NEW;
 END;

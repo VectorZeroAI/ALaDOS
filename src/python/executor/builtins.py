@@ -683,7 +683,7 @@ def web_post(url: str,
             raise ValueError("Invalid input on return type. Input: {return_type}.")
 
 @register_tool("goal.add_master", ['task'])
-def create_master(instuction: str,
+def create_master(instruction: str,
                   required_names: Sequence[str]|None = None,
                   required_addrs: Sequence[int]|None = None,
                   result_name: str|None = None,
@@ -696,5 +696,12 @@ def create_master(instuction: str,
     conn = _meta['conn']
 
     conn.execute("""
-    
-                 """, (,))
+    SELECT new_master(
+        p_instruction := %s,
+        req_names := %s,
+        req_addrs := %s,
+        result_name := %s
+        );
+                 """, (instruction, required_names, required_addrs, result_name))
+
+    return f"Created master with instruction '{instruction}'."

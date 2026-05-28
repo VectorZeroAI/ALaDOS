@@ -89,9 +89,12 @@ def k_edit(addr: int|None = None,
         SELECT resolve_name(%s);
                      """, (name,)).fetchone()[0]
 
-    flag_ownership = conn.execute("""
-    SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                  """, (addr, _meta['master_id'])).fetchone()[0]
+    try:
+        flag_ownership = conn.execute("""
+        SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
+                                      """, (addr, _meta['master_id'])).fetchone()[0]
+    except TypeError:
+        flag_ownership = False
 
     if not flag_ownership:
         raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
@@ -250,10 +253,12 @@ def edit_tool(name: str|None = None,
         except Exception as e:
             raise Exception("Name most likely does not exist.") from e
 
-
-    flag_ownership = conn.execute("""
-    SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
+    try:
+        flag_ownership = conn.execute("""
+        SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
                                   """, (addr, _meta['master_id'])).fetchone()[0] # pyright: ignore
+    except TypeError:
+        flag_ownership = False
 
     if not flag_ownership:
         raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")

@@ -273,10 +273,17 @@ ALTER TABLE rmt_slaves
             ON DELETE CASCADE
             ON UPDATE CASCADE;
 
-CREATE TABLE IF NOT EXISTS rmt_slave_req (LIKE slave_req INCLUDING ALL);
-
-ALTER TABLE rmt_slave_req
-    ADD COLUMN IF NOT EXISTS template_addr BIGINT
+CREATE TABLE rmt_dag(
+    template_addr BIGINT NOT NULL
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
-            ON UPDATE CASCADE;
+            ON UPDATE CASCADE,
+    slave_addr BIGINT NOT NULL
+        REFERENCES reusable_master_templates
+            ON DELETE CASCADE
+            ON UPDATE CASCADE,
+    req_slave_addr BIGINT NOT NULL
+        REFERENCES reusable_master_templates
+            ON DELETE CASCADE
+            ON UPDATE CASCADE
+);

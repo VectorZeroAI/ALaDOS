@@ -33,6 +33,8 @@ def parse(expression: str) -> ParsedRmtExpression:
 
     token_counter = 0
 
+    tokens_valid: list[str] = []
+
     errors: list[str] = []
 
     result: ParsedRmtExpression = []
@@ -40,13 +42,23 @@ def parse(expression: str) -> ParsedRmtExpression:
     intermidiate_result: dict[int, RmtNodeIncomplete] = {}
 
     lines = expression.splitlines()
+
+    lines_valid: list[str] = []
+    
     for line in lines:
+        if not (len(line) > 0):
+            continue
+        lines_valid.append(line)
+
+
+    for line in lines_valid:
         line = line.strip()
         tokens_raw = line.split(r'->')
         
-        tokens_valid: list[str] = []
         for token in tokens_raw:
             token = token.strip()
+            if not len(token) > 0:
+                continue
 
             if token == "START" or token == "END":
                 continue
@@ -55,67 +67,67 @@ def parse(expression: str) -> ParsedRmtExpression:
                 tokens_valid.append(token)
 
             else:
-                errors.append(f"Invalid token {token}, tokens must be encapsulated in parenthesis.")
+                errors.append(f"Invalid token '{token}', tokens must be encapsulated in parenthesis.")
 
         
 
-        for token in tokens_valid:
-            token_counter = token_counter + 1
-            item: RmtNodeIncomplete = {} # pyright: ignore
+    for token in tokens_valid:
+        token_counter = token_counter + 1
+        item: RmtNodeIncomplete = {} # pyright: ignore
 
-            item['index'] = token_counter
+        item['index'] = token_counter
 
-            token = token.strip("(").strip(")")
+        token = token.strip("(").strip(")")
 
-            for key_val in token.split(','):
+        for key_val in token.split(','): # TODO : Figure out how to validate if inside the string instructions, there are any commas.
 
-                print(f"Working on this key_val: {key_val}")
-                key, val = key_val.split('=')
+            print(f"Working on this key_val: {key_val}")
+            key, val = key_val.split('=')
 
-                if not validate_value(val):
-                    errors.append(f"Invalid value: {val}.")
-                    continue
-
-                key = key.strip()
-                val = val.strip()
-
-                match key:
-                    case 'instruction':
-                        item['instruction'] = val.strip().strip("'")
-                    case 'id':
-                        item['id'] = val.strip().strip("'")
-                    case _:
-                        errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
-                        continue
-
-            item['id'] = item.get('id', str(uuid.uuid4()))
-            if item.get('instruction') is None:
-                ref_item_index: int = 0
-                for i in intermidiate_result.values():
-                    if i['id'] = item['id']:
-                        ref_item_index = i['index']
-                        break
-                else:
-                    errors.append(f"invalid object parsed. Object {item}")
-                    raise SyntaxError(str(errors))
-                
-                # At this point, its a referense, as confirmed by the for loop check thingy.
-
-                intermidiate_result[item['index']] = intermidiate_result[ref_item_index]
+            if not validate_value(val):
+                errors.append(f"Invalid value: {val}.")
                 continue
 
+            key = key.strip()
+            val = val.strip()
 
-            item['deps'] = item.get('deps', [])
+            match key:
+                case 'instruction':
+                    item['instruction'] = val.strip().strip("'")
+                case 'id':
+                    item['id'] = val.strip().strip("'")
+                case _:
+                    errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
+                    continue
 
-            intermidiate_result[item['index']] = item
+        item['id'] = item.get('id', str(uuid.uuid4()))
+        if item.get('instruction') is None:
+            ref_item_index: int = 0
+            for i in intermidiate_result.values():
+                if i['id'] == item['id']:
+                    ref_item_index = i['index']
+                    break
+            else:
+                errors.append(f"invalid object parsed. Object {item}")
+                raise SyntaxError(str(errors))
+            
+            # At this point, its a referense, as confirmed by the for loop check thingy.
+
+            intermidiate_result[item['index']] = intermidiate_result[ref_item_index]
             continue
 
-        for index in range(len(tokens_valid) - 1):
-            index = index + 1 # Corrected index from 0 based to 1 based, to match the counter
-            token_1 = intermidiate_result[index]
-            token_2 = intermidiate_result[index + 1]
 
-            token_2['deps'].append(token_1['id'])
+        item['deps'] = item.get('deps', [])
+
+        intermidiate_result[item['index']] = item
+        continue
+
+    for index in range(len(tokens_valid) - 1):
+        index = index + 1 # Corrected index from 0 based to 1 based, to match the counter
+        token_1 = intermidiate_result[index]
+        token_2 = intermidiate_result[index + 1]
+
+        token_2['deps'].append(token_1['id'])
 
     if errors:
         raise SyntaxError(str(errors))

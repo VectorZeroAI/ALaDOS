@@ -8,8 +8,8 @@ DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'rmt_node') THEN
         CREATE TYPE rmt_node AS (
-            instruction TEXT NOT NULL,
-            id TEXT NOT NULL,
+            instruction TEXT,
+            id TEXT,
             deps TEXT[]
         );
     END IF;
@@ -283,19 +283,5 @@ ALTER TABLE rmt_slaves
     ADD COLUMN IF NOT EXISTS template_addr BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
-            ON UPDATE CASCADE;
-
-CREATE TABLE rmt_dag(
-    template_addr BIGINT NOT NULL
-        REFERENCES reusable_master_templates
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
-    slave_addr BIGINT NOT NULL
-        REFERENCES reusable_master_templates
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
-    req_slave_addr BIGINT NOT NULL
-        REFERENCES reusable_master_templates
-            ON DELETE CASCADE
             ON UPDATE CASCADE
-);
+    ADD COLUMN IF NOT EXISTS deps BIGINT[];

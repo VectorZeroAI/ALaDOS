@@ -24,10 +24,16 @@ class RmtNode(TypedDict):
 class RmtNodeIncomplete(RmtNode, total=False):
     pass
 
+class RmtNodeReturn(TypedDict):
+    instruction: str
+    id: str|int
+    deps: list[str|int]
+
 ParsedRmtExpression: TypeAlias = list[RmtNode]
+ReturnParsedRmtExpression: TypeAlias = list[RmtNodeReturn]
 
 
-def parse(expression: str) -> ParsedRmtExpression:
+def parse(expression: str) -> ReturnParsedRmtExpression:
     """
     The parser function for the RMT expression.
     """
@@ -136,13 +142,15 @@ def parse(expression: str) -> ParsedRmtExpression:
 
     # Validation of the final results block.
 
-    if has_cycle(intermidiate_result.values()):
+    result = intermidiate_result.values() # pyright: ignore
+
+    if has_cycle(result):
         errors.append("Cycle detected! Dunno where.")
 
     if errors:
         raise SyntaxError(str(errors))
 
-    dedup: dict[int, RmtNode] = {}
+    dedup: dict[int|str, RmtNode] = {}
 
     for i in intermidiate_result.values():
         dedup[i['id']] = i
@@ -150,7 +158,12 @@ def parse(expression: str) -> ParsedRmtExpression:
     for i in dedup.values():
         result.append(i)
 
-    return result
+    return_result: ReturnParsedRmtExpression = []
+
+    for i in result:
+        return_result.append({'id': i['id'], 'deps': i['deps'], 'instruction': i['instruction']})
+
+    return return_result
 
 
 def has_cycle(nodes: list[RmtNode]) -> bool:

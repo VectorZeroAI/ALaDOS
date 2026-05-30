@@ -3,6 +3,7 @@
 from typing import Sequence
 from ..utils.conn_factory import conn_factory
 from ..types import ReferenceTo
+from .dsl import parse
 
 def serialize(addr: ReferenceTo) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
@@ -10,7 +11,10 @@ def serialize(addr: ReferenceTo) -> str:
 
 def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
-    pass
+    parsed = parse(expression)
+    conn = conn_factory()
+    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s)").fetchone()[0]
+
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a master goal, semi automatically. (a few LLM calls + automatic extraction) """

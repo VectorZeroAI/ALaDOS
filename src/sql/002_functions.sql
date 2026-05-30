@@ -213,6 +213,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION save_rmt(
+    p_parsed_rmt 
+)
+
+
+
 CREATE OR REPLACE FUNCTION new_master(
     p_instruction TEXT,
     req_names TEXT[] DEFAULT NULL,

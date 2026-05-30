@@ -214,8 +214,14 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION save_rmt(
-    p_parsed_rmt 
-)
+    p_parsed_rmt rmt_node[]
+) RETURNS BIGINT AS $$
+DECLARE
+    result rmt_slaves%ROWTYPE[];
+BEGIN
+    RAISE EXCEPTION'not yet implemented!';
+END
+$$ LANGUAGE plpgsql;
 
 
 

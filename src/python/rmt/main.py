@@ -13,7 +13,7 @@ def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
     parsed = parse(expression)
     conn = conn_factory()
-    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s)").fetchone()[0]
+    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s)", (parsed,)).fetchone()[0]
 
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:

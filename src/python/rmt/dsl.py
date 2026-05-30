@@ -134,6 +134,11 @@ def parse(expression: str) -> ParsedRmtExpression:
 
             token_2['deps'].append(token_1['id'])
 
+    # Validation of the final results block.
+
+    if has_cycle(intermidiate_result.values()):
+        errors.append("Cycle detected! Dunno where.")
+
     if errors:
         raise SyntaxError(str(errors))
 

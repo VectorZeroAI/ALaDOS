@@ -10,7 +10,8 @@ For DSL specification, see the documentation.
 
 """
 DSL EXAMPLE: 
-START -> (task='task_text', id='lol1212123') -> (task='task_text', id='anything really') -> (task='task_text') -> (task='task_text') -> (task='task_text') -> (task='task_text', id='stuff') -> END
+START -> (task='task_text', id='lol1') -> (task='task_text', id='anything really') -> (task='task_text') -> (task='task_text') -> (task='task_text') -> (task='task_text', id='stuff') -> END
+START -> (task="task_text_3") -> (id='lol1')
 """
 
 class RmtNode(TypedDict):
@@ -89,12 +90,25 @@ def parse(expression: str) -> ParsedRmtExpression:
 
             item['id'] = item.get('id', str(uuid.uuid4()))
             if item.get('instruction') is None:
-                errors.append(f"invalid object parsed. Object {item}")
-                raise SyntaxError(str(errors))
+                ref_item_index: int = 0
+                for i in intermidiate_result.values():
+                    if i['id'] = item['id']:
+                        ref_item_index = i['index']
+                        break
+                else:
+                    errors.append(f"invalid object parsed. Object {item}")
+                    raise SyntaxError(str(errors))
+                
+                # At this point, its a referense, as confirmed by the for loop check thingy.
+
+                intermidiate_result[item['index']] = intermidiate_result[ref_item_index]
+                continue
+
 
             item['deps'] = item.get('deps', [])
 
             intermidiate_result[item['index']] = item
+            continue
 
         for index in range(len(tokens_valid) - 1):
             index = index + 1 # Corrected index from 0 based to 1 based, to match the counter

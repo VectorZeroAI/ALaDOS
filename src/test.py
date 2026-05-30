@@ -1,0 +1,4 @@
+from python.rmt.dsl import parse
+
+result = parse("START -> (instruction='test1', id='lol1') -> (instruction='test2') -> (id='lol2', instruction='test3') -> END")
+print(str(result))

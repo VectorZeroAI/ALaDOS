@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import TypeAlias, TypedDict
-import shlex
+import ast
 import uuid
 
 """
@@ -82,26 +82,34 @@ def parse(expression: str) -> ParsedRmtExpression:
 
             token = token.strip("(").strip(")")
 
-            for key_val in shlex.split(token, posix=False):
+            vals_parsed_out = ast.literal_eval('{' + token + '}')
 
-                print(f"Working on this key_val: {key_val}")
-                key, val = key_val.split('=')
-
-                if not validate_value(val):
-                    errors.append(f"Invalid value: {val}.")
+            for k, v in vals_parsed_out.pairs():
+                if k not in ('insturction', 'id'):
+                    errors.append(f"Unexpected key found. key: {k}, val: {v} in token: {token}")
                     continue
+                token[k] = v
 
-                key = key.strip()
-                val = val.strip()
-
-                match key:
-                    case 'instruction':
-                        item['instruction'] = val.strip().strip("'")
-                    case 'id':
-                        item['id'] = val.strip().strip("'")
-                    case _:
-                        errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
-                        continue
+#             for key_val in shlex.split(token, posix=False):
+# 
+#                 print(f"Working on this key_val: {key_val}")
+#                 key, val = key_val.split('=')
+# 
+#                 if not validate_value(val):
+#                     errors.append(f"Invalid value: {val}.")
+#                     continue
+# 
+#                 key = key.strip()
+#                 val = val.strip()
+# 
+#                 match key:
+#                     case 'instruction':
+#                         item['instruction'] = val.strip().strip("'")
+#                     case 'id':
+#                         item['id'] = val.strip().strip("'")
+#                     case _:
+#                         errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
+#                         continue
 
             item['id'] = item.get('id', str(uuid.uuid4()))
             if item.get('instruction') is None:

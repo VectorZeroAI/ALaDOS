@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import TypeAlias, TypedDict
-import ast
+from collections import deque, defaultdict
 import uuid
 
 """
@@ -137,10 +137,48 @@ def parse(expression: str) -> ParsedRmtExpression:
     if errors:
         raise SyntaxError(str(errors))
 
+    dedup: dict[int, RmtNode] = {}
+
     for i in intermidiate_result.values():
+        dedup[i['id']] = i
+
+    for i in dedup.values():
         result.append(i)
 
     return result
+
+
+def has_cycle(nodes: list[RmtNode]) -> bool:
+    # First, deduplicate nodes by id (your parser has duplicates)
+    unique = {}
+    for node in nodes:
+        unique[node['id']] = node
+    
+    # Build graph: node_id -> list of nodes it depends on (its deps)
+    graph = {nid: node['deps'] for nid, node in unique.items()}
+    
+    # Compute in-degree (number of nodes that depend on this node)
+    in_degree = defaultdict(int)
+    for node_id, deps in graph.items():
+        for dep in deps:
+            in_degree[dep] += 1
+    
+    # Start with nodes that have no incoming edges (no one depends on them)
+    queue = deque([nid for nid in graph if in_degree[nid] == 0])
+    processed = 0
+    
+    while queue:
+        nid = queue.popleft()
+        processed += 1
+        # For each node that depends on nid, reduce its in-degree
+        for other_id, deps in graph.items():
+            if nid in deps:
+                in_degree[other_id] -= 1
+                if in_degree[other_id] == 0:
+                    queue.append(other_id)
+    
+    return processed != len(graph)
+
 
 def validate_value(value: str) -> bool:
     """ Validates the value. """

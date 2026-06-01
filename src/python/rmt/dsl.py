@@ -15,23 +15,7 @@ START -> (task='task_text', id='lol1') -> (task='task_text', id='anything really
 START -> (task="task_text_3") -> (id='lol1')
 """
 
-class RmtNode(TypedDict):
-    instruction: str
-    id: str|int
-    deps: list[str|int]
-    index: int
-
-class RmtNodeIncomplete(RmtNode, total=False):
-    pass
-
-class RmtNodeReturn(TypedDict):
-    instruction: str
-    id: str|int
-    deps: list[str|int]
-
-ParsedRmtExpression: TypeAlias = list[RmtNode]
-ReturnParsedRmtExpression: TypeAlias = list[RmtNodeReturn]
-
+from .types import ReturnParsedRmtExpression, ParsedRmtExpression, RmtNodeIncomplete, RmtNode
 
 def parse(expression: str) -> ReturnParsedRmtExpression:
     """

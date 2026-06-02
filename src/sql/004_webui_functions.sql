@@ -9,7 +9,7 @@ DECLARE
     v_usr_msg_addr BIGINT;
     v_usr_msg_placeholder_addr BIGINT;
 BEGIN
-    v_session_addr := new_master("You will be answering human messages. There is no need to plan anything.");
+    v_session_addr := new_master('You will be answering human messages. There is no need to plan anything.');
 
     INSERT INTO names(addr, name) VALUES(
         v_session_addr, 'session_'||(SELECT COALESCE(MAX(

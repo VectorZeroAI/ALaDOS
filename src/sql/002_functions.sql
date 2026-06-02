@@ -217,10 +217,28 @@ CREATE OR REPLACE FUNCTION save_rmt(
     p_parsed_rmt rmt_node[]
 ) RETURNS BIGINT AS $$
 DECLARE
-    result rmt_slaves%ROWTYPE[];
+    slaves_table rmt_slaves%ROWTYPE[];
+    single_slave rmt_slaves%ROWTYPE;
+    v_template_addr BIGINT;
+    step rmt_node;
 BEGIN
-    RAISE EXCEPTION'not yet implemented!';
-END
+
+    INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr INTO v_template_addr;
+
+    FOREACH step IN ARRAY p_parsed_rmt LOOP
+        single_slave.addr := new_addr();
+        single_slave.template_addr := v_template_addr;
+        single_slave.instruction := step.instruction;
+        -- single_slave.scope := 
+        -- NOTE: Not done in the python parser side yet, but I will add soon enough
+
+        slaves_table := array_append(slaves_table, single_slave);
+            
+    END LOOP;
+
+    INSERT INTO rmt_slaves SELECT unnest(slaves_table);
+    
+END;
 $$ LANGUAGE plpgsql;
 
 

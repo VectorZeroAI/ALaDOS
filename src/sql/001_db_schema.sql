@@ -283,5 +283,5 @@ ALTER TABLE rmt_slaves
     ADD COLUMN IF NOT EXISTS template_addr BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
-            ON UPDATE CASCADE
+            ON UPDATE CASCADE,
     ADD COLUMN IF NOT EXISTS deps BIGINT[];

@@ -219,6 +219,7 @@ CREATE OR REPLACE FUNCTION save_rmt(
 DECLARE
     slaves_table rmt_slaves%ROWTYPE[];
     single_slave rmt_slaves%ROWTYPE;
+    temporary_table inter_repr[];
     v_template_addr BIGINT;
     step rmt_node;
 BEGIN
@@ -229,6 +230,11 @@ BEGIN
         single_slave.addr := new_addr();
         single_slave.template_addr := v_template_addr;
         single_slave.instruction := step.instruction;
+        
+        -- I need IR and then to the slaves table for the sole reason of id -> addr and deps (id) -> deps (addr) translation.
+
+
+        
         -- single_slave.scope := 
         -- NOTE: Not done in the python parser side yet, but I will add soon enough
 

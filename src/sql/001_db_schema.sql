@@ -24,6 +24,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DO $$
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'inter_repr') THEN
+        CREATE TYPE inter_repr AS (
+            instruction TEXT,
+            id TEXT,
+            addr BIGINT,
+            deps_txt TEXT[],
+            deps_addr BIGINT[]
+        )
+    END IF;
+
+$$ LANGUAGE plpgsql;
+
+
+
+
+
 CREATE OR REPLACE FUNCTION new_addr() RETURNS BIGINT AS $$
     DECLARE
         new_id BIGINT;

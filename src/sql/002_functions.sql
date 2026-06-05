@@ -220,26 +220,35 @@ DECLARE
     slaves_table rmt_slaves%ROWTYPE[];
     single_slave rmt_slaves%ROWTYPE;
     temporary_table inter_repr[];
+    tmp_el inter_repr;
     v_template_addr BIGINT;
     step rmt_node;
+    deps_addrs BIGINT[];
 BEGIN
 
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr INTO v_template_addr;
 
     FOREACH step IN ARRAY p_parsed_rmt LOOP
-        single_slave.addr := new_addr();
-        single_slave.template_addr := v_template_addr;
-        single_slave.instruction := step.instruction;
         
-        -- I need IR and then to the slaves table for the sole reason of id -> addr and deps (id) -> deps (addr) translation.
+        tmp_el := step;
+        tmp_el.addr = new_addr();
 
+        temporary_table := array_append(temporary_table, tmp_el);
 
-        
-        -- single_slave.scope := 
-        -- NOTE: Not done in the python parser side yet, but I will add soon enough
+    END LOOP;
 
-        slaves_table := array_append(slaves_table, single_slave);
-            
+    FOR i IN 1..array_length(temporary_table, 1) LOOP
+
+        SELECT addr FROM unnest(temporary_table) WHERE id = ANY(temporary_table[i].deps_txt) AND addr != temporary_table[i].addr INTO deps_addrs;
+
+        temporary_table[i].deps_addr := deps_addrs;
+
+    END LOOP;
+
+    FOREACH tmp_el IN ARRAY temporary_table LOOP
+
+        slaves_table = array_append() -- TODO: FINISH
+
     END LOOP;
 
     INSERT INTO rmt_slaves SELECT unnest(slaves_table);

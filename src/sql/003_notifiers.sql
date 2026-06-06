@@ -133,23 +133,28 @@ FOR EACH ROW EXECUTE FUNCTION notify_for_ai_msg();
 
 CREATE OR REPLACE FUNCTION check_for_master_completion()
 RETURNS TRIGGER AS $$
+    DECLARE
+        v_master_addr BIGINT;
     BEGIN
+        v_master_addr := (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr);
         IF NOT EXISTS (
             SELECT 1
             FROM slaves s
                 INNER JOIN results r ON r.addr = s.result_addr
-            WHERE s.master_addr = (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr)
+            WHERE s.master_addr = v_master_addr
                 AND r.ready = FALSE
         ) THEN
             SELECT new_result(
                 p_content := (SELECT mc.master_result
                     FROM results r
                         JOIN slaves s ON s.result_addr = r.addr
-                        JOIN master_context mc ON mc.addr = s.addr),
+                        JOIN master_context mc ON mc.addr = s.addr
+                    WHERE mc.addr = v_master_addr),
                 p_addr := (SELECT m.result_addr
                     FROM results r
                         JOIN slaves s ON s.result_addr = r.addr
-                        JOIN masters m ON m.addr = s.master_addr)
+                        JOIN masters m ON m.addr = s.master_addr
+                    WHERE m.addr = v_master_addr)
             );
         END IF;
         RETURN NEW;

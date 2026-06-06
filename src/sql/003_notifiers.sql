@@ -136,7 +136,20 @@ RETURNS TRIGGER AS $$
     DECLARE
         v_master_addr BIGINT;
     BEGIN
-        v_master_addr := (SELECT s2.master_addr FROM results r2 INNER JOIN slaves s2 ON s2.result_addr = NEW.addr);
+        IF OLD.ready = NEW.ready OR NEW.ready = FALSE THEN
+            RETURN NEW;
+        END IF;
+
+        IF EXISTS (SELECT 1 FROM masters WHERE result_addr = NEW.addr) THEN
+            RETURN NEW;
+        END IF;
+
+        v_master_addr := (SELECT master_addr FROM slaves WHERE result_addr = NEW.addr);
+
+        IF v_master_addr IS NULL THEN
+            RETURN NEW; -- its not an result of a slave, disregard.
+        END IF;
+
         IF NOT EXISTS (
             SELECT 1
             FROM slaves s

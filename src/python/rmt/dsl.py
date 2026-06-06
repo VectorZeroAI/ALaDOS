@@ -152,34 +152,59 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
     return return_result
 
 
+# def has_cycle(nodes: list[RmtNode]) -> bool:
+#     # First, deduplicate nodes by id (your parser has duplicates)
+#     unique = {}
+#     for node in nodes:
+#         unique[node['id']] = node
+#     
+#     # Build graph: node_id -> list of nodes it depends on (its deps)
+#     graph = {nid: node['deps'] for nid, node in unique.items()}
+#     
+#     # Compute in-degree (number of nodes that depend on this node)
+#     in_degree = defaultdict(int)
+#     for node_id, deps in graph.items():
+#         for dep in deps:
+#             in_degree[dep] += 1
+#     
+#     # Start with nodes that have no incoming edges (no one depends on them)
+#     queue = deque([nid for nid in graph if in_degree[nid] == 0])
+#     processed = 0
+#     
+#     while queue:
+#         nid = queue.popleft()
+#         processed += 1
+#         # For each node that depends on nid, reduce its in-degree
+#         for other_id, deps in graph.items():
+#             if nid in deps:
+#                 in_degree[other_id] -= 1
+#                 if in_degree[other_id] == 0:
+#                     queue.append(other_id)
+#     
+#     return processed != len(graph)
+
 def has_cycle(nodes: list[RmtNode]) -> bool:
-    # First, deduplicate nodes by id (your parser has duplicates)
-    unique = {}
-    for node in nodes:
-        unique[node['id']] = node
-    
-    # Build graph: node_id -> list of nodes it depends on (its deps)
+    unique = {node['id']: node for node in nodes}
     graph = {nid: node['deps'] for nid, node in unique.items()}
     
-    # Compute in-degree (number of nodes that depend on this node)
-    in_degree = defaultdict(int)
-    for node_id, deps in graph.items():
+    # Build reverse adjacency: which nodes depend on a given node
+    dependents = defaultdict(list)
+    for nid, deps in graph.items():
         for dep in deps:
-            in_degree[dep] += 1
+            dependents[dep].append(nid)
     
-    # Start with nodes that have no incoming edges (no one depends on them)
-    queue = deque([nid for nid in graph if in_degree[nid] == 0])
+    # in_degree = number of prerequisites (len(deps))
+    in_degree = {nid: len(deps) for nid, deps in graph.items()}
+    queue = deque([nid for nid, deg in in_degree.items() if deg == 0])
     processed = 0
     
     while queue:
         nid = queue.popleft()
         processed += 1
-        # For each node that depends on nid, reduce its in-degree
-        for other_id, deps in graph.items():
-            if nid in deps:
-                in_degree[other_id] -= 1
-                if in_degree[other_id] == 0:
-                    queue.append(other_id)
+        for dependent in dependents[nid]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
     
     return processed != len(graph)
 

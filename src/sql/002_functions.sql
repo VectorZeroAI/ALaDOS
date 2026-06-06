@@ -214,7 +214,8 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION save_rmt(
-    p_parsed_rmt rmt_node[]
+    p_parsed_rmt rmt_node[],
+    p_name TEXT DEFAULT NULL,
 ) RETURNS BIGINT AS $$
 DECLARE
     slaves_table rmt_slaves%ROWTYPE[];
@@ -227,6 +228,10 @@ DECLARE
 BEGIN
 
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr INTO v_template_addr;
+
+    IF p_name IS NOT NULL THEN
+        INSERT INTO names(addr, name) VALUES (v_template_addr, p_name);
+    ENF IF;
 
     FOREACH step IN ARRAY p_parsed_rmt LOOP
         

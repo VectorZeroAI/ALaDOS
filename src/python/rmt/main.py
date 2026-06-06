@@ -12,8 +12,9 @@ def serialize(addr: ReferenceTo) -> str:
 def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
     parsed = parse(expression)
+    parsed_as_tuples = [(a['instruction'], a['id'], a['deps']) for a in parsed]
     conn = conn_factory()
-    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s)", (parsed,)).fetchone()[0]
+    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (parsed, name)).fetchone()[0]
 
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
@@ -33,10 +34,10 @@ def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, 
     """ Inserts a node into the rmt DAG. """
     pass
 
-def activate_inline(depends_on: Sequence[int|str] = [], required_by: Sequence[int|str] = [], rmt_addr: ReferenceTo) -> None:
+def activate_inline( rmt_addr: ReferenceTo, depends_on: Sequence[int|str] = [], required_by: Sequence[int|str] = []) -> None:
     """ Inline inserts the workflow into the DAG. """
     pass
 
-def activate_as_master(depends_on: Sequence[int|str] = [], required_by: Sequence[int|str] = [], rmt_addr: ReferenceTo) -> None:
+def activate_as_master(rmt_addr: ReferenceTo, depends_on: Sequence[int|str] = [], required_by: Sequence[int|str] = []) -> None:
     """ Activates the workflow as a dedicated master. Encapsulated insdead of inlined. """
     pass

@@ -230,7 +230,7 @@ BEGIN
 
     FOREACH step IN ARRAY p_parsed_rmt LOOP
         
-        tmp_el := step;
+        tmp_el := step::inter_repr;
         tmp_el.addr = new_addr();
 
         temporary_table := array_append(temporary_table, tmp_el);
@@ -239,28 +239,28 @@ BEGIN
 
     FOR i IN 1..array_length(temporary_table, 1) LOOP
 
-        SELECT addr FROM unnest(temporary_table) WHERE id = ANY(temporary_table[i].deps_txt) AND addr != temporary_table[i].addr INTO deps_addrs;
+        SELECT array_agg(addr) FROM unnest(temporary_table) WHERE id = ANY(temporary_table[i].deps_txt) AND addr != temporary_table[i].addr INTO deps_addrs;
 
         temporary_table[i].deps_addr := deps_addrs;
 
     END LOOP;
 
+    single_slave.master_addr := NULL;
+
     FOREACH tmp_el IN ARRAY temporary_table LOOP
 
-        single_slave := ()::slaves%ROWTYPE;
         single_slave.addr := tmp_el.addr;
-        single_slave.master_addr := NULL;
         single_slave.instruction := tmp_el.instruction;
         single_slave.result_addr := new_addr();
         -- single_slave.scope := tmp_el.scope; TODO: ADD SCOPE
         single_slave.deps := tmp_el.deps_addr;
         single_slave.template_addr := v_template_addr;
 
-        slaves_table := array_append(slaves_table, single_slave)
+        slaves_table := array_append(slaves_table, single_slave);
 
     END LOOP;
 
-    INSERT INTO rmt_slaves SELECT unnest(slaves_table);
+    INSERT INTO rmt_slaves SELECT (unnest(slaves_table)).*;
     
 END;
 $$ LANGUAGE plpgsql;
@@ -299,5 +299,7 @@ BEGIN
     IF result_name IS NOT NULL THEN
         INSERT INTO names(addr, name) VALUES(new_master_result_addr, result_name);
     END IF;
+
+    RETURN new_master_addr;
 END;
 $$ LANGUAGE plpgsql;

@@ -126,7 +126,7 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
     # Validation of the final results block.
 
-    result = intermidiate_result.values() # pyright: ignore
+    result = [i for i in intermidiate_result.values()]
 
     if has_cycle(result):
         errors.append("Cycle detected! Dunno where.")
@@ -138,6 +138,8 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
     for i in intermidiate_result.values():
         dedup[i['id']] = i
+
+    result = []
 
     for i in dedup.values():
         result.append(i)

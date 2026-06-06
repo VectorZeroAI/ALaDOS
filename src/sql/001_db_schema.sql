@@ -25,7 +25,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DO $$
-
+BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'inter_repr') THEN
         CREATE TYPE inter_repr AS (
             instruction TEXT,
@@ -33,9 +33,9 @@ DO $$
             addr BIGINT,
             deps_txt TEXT[],
             deps_addr BIGINT[]
-        )
+        );
     END IF;
-
+END;
 $$ LANGUAGE plpgsql;
 
 

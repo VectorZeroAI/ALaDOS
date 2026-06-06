@@ -4,8 +4,8 @@ from typing import TypedDict, TypeAlias
 
 class RmtNode(TypedDict):
     instruction: str
-    id: str|int
-    deps: list[str|int]
+    id: str
+    deps: list[str]
     index: int
 
 class RmtNodeIncomplete(RmtNode, total=False):
@@ -13,8 +13,8 @@ class RmtNodeIncomplete(RmtNode, total=False):
 
 class RmtNodeReturn(TypedDict):
     instruction: str
-    id: str|int
-    deps: list[str|int]
+    id: str
+    deps: list[str]
 
 ParsedRmtExpression: TypeAlias = list[RmtNode]
 ReturnParsedRmtExpression: TypeAlias = list[RmtNodeReturn]

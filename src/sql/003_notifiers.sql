@@ -73,7 +73,7 @@ RETURNS TRIGGER AS $$
             ' || NEW.instruction || '" 
             You can add slaves via "goal.add_slave" tool. Slaves are steps in the plan, which is called master. A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all. (plan MUST end with a planner slave UNLESS its done).
             YOU MUST OUTPUT A JSON ARRAY OF TOOL CALLS!!! DO NOT TRY TO MAKE THE ENTIRE PLAN AT ONCE, leave it to be incrementally produced via further planner slaves.',
-            p_name := "planner_"||nextval('global_planner_serial')::TEXT,
+            p_name := 'planner_'||nextval('global_planner_serial')::TEXT,
             p_scope := 'task'
         );
     RETURN NEW;
@@ -90,7 +90,7 @@ RETURNS TRIGGER AS $$
     BEGIN
         INSERT INTO master_context(addr, master_result, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
         VALUES(NEW.addr, '', NULL, NULL, NULL, NULL);
-    RETURN NULL;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -242,6 +242,7 @@ BEGIN
         tmp_el := NULL::inter_repr;
         tmp_el.instruction := step.instruction;
         tmp_el.id := step.id;
+        tmp_el.scope := step.scope;
         tmp_el.deps_txt := step.deps;
         tmp_el.addr = new_addr();
 
@@ -264,7 +265,7 @@ BEGIN
         single_slave.addr := tmp_el.addr;
         single_slave.instruction := tmp_el.instruction;
         single_slave.result_addr := new_addr();
-        -- single_slave.scope := tmp_el.scope; TODO: ADD SCOPE
+        single_slave.scope := tmp_el.scope;
         single_slave.deps := tmp_el.deps_addr;
         single_slave.template_addr := v_template_addr;
 

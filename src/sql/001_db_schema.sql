@@ -6,6 +6,14 @@ CREATE SEQUENCE IF NOT EXISTS global_planner_serial;
 
 DO $$
 BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
+        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui', '_rmt');
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'rmt_node') THEN
         CREATE TYPE rmt_node AS (
             instruction TEXT,
@@ -13,14 +21,6 @@ BEGIN
             deps TEXT[],
             scope slave_scope
         );
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-DO $$
-BEGIN
-    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
-        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui', '_rmt');
     END IF;
 END;
 $$ LANGUAGE plpgsql;

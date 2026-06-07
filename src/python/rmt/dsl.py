@@ -11,8 +11,8 @@ For DSL specification, see the documentation.
 
 """
 DSL EXAMPLE: 
-START -> (task='task_text', id='lol1') -> (task='task_text', id='anything really') -> (task='task_text') -> (task='task_text') -> (task='task_text') -> (task='task_text', id='stuff') -> END
-START -> (task="task_text_3") -> (id='lol1')
+START -> (task='task_text', id='lol1', scope='general') -> (task='task_text', scope='task', id='anything really') -> (task='task_text') -> (task='task_text') -> (task='task_text') -> (task='task_text', id='stuff') -> END
+START -> (task='task_text_3') -> (id='lol1')
 """
 
 from .types import ReturnParsedRmtExpression, ParsedRmtExpression, RmtNodeIncomplete, RmtNode
@@ -89,6 +89,8 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
                         item['instruction'] = val.strip().strip("'")
                     case 'id':
                         item['id'] = val.strip().strip("'")
+                    case 'scope':
+                        item['scope'] = val.strip().strip("'")
                     case _:
                         errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
                         continue
@@ -111,6 +113,9 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
 
             item['deps'] = item.get('deps', [])
+
+            if item.get('scope') is None:
+                item['scope'] = "general"
 
             intermidiate_result[item['index']] = item
             continue
@@ -147,41 +152,10 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
     return_result: ReturnParsedRmtExpression = []
 
     for i in result:
-        return_result.append({'id': i['id'], 'deps': i['deps'], 'instruction': i['instruction']})
+        return_result.append({'id': i['id'], 'deps': i['deps'], 'instruction': i['instruction'], 'scope': i['scope']})
 
     return return_result
 
-
-# def has_cycle(nodes: list[RmtNode]) -> bool:
-#     # First, deduplicate nodes by id (your parser has duplicates)
-#     unique = {}
-#     for node in nodes:
-#         unique[node['id']] = node
-#     
-#     # Build graph: node_id -> list of nodes it depends on (its deps)
-#     graph = {nid: node['deps'] for nid, node in unique.items()}
-#     
-#     # Compute in-degree (number of nodes that depend on this node)
-#     in_degree = defaultdict(int)
-#     for node_id, deps in graph.items():
-#         for dep in deps:
-#             in_degree[dep] += 1
-#     
-#     # Start with nodes that have no incoming edges (no one depends on them)
-#     queue = deque([nid for nid in graph if in_degree[nid] == 0])
-#     processed = 0
-#     
-#     while queue:
-#         nid = queue.popleft()
-#         processed += 1
-#         # For each node that depends on nid, reduce its in-degree
-#         for other_id, deps in graph.items():
-#             if nid in deps:
-#                 in_degree[other_id] -= 1
-#                 if in_degree[other_id] == 0:
-#                     queue.append(other_id)
-#     
-#     return processed != len(graph)
 
 def has_cycle(nodes: list[RmtNode]) -> bool:
     unique = {node['id']: node for node in nodes}

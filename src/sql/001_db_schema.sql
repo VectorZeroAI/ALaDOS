@@ -10,7 +10,8 @@ BEGIN
         CREATE TYPE rmt_node AS (
             instruction TEXT,
             id TEXT,
-            deps TEXT[]
+            deps TEXT[],
+            scope slave_scope
         );
     END IF;
 END;
@@ -32,7 +33,8 @@ BEGIN
             id TEXT,
             addr BIGINT,
             deps_txt TEXT[],
-            deps_addr BIGINT[]
+            deps_addr BIGINT[],
+            scope slave_scope
         );
     END IF;
 END;

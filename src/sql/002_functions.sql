@@ -214,8 +214,8 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION save_rmt(
-    p_parsed_rmt rmt_node[],
-    p_name TEXT DEFAULT NULL,
+    p_parsed_rmt JSONB,
+    p_name TEXT DEFAULT NULL
 ) RETURNS BIGINT AS $$
 DECLARE
     slaves_table rmt_slaves%ROWTYPE[];
@@ -225,17 +225,24 @@ DECLARE
     v_template_addr BIGINT;
     step rmt_node;
     deps_addrs BIGINT[];
+    v_parsed_rmt rmt_node[];
 BEGIN
 
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr INTO v_template_addr;
 
     IF p_name IS NOT NULL THEN
         INSERT INTO names(addr, name) VALUES (v_template_addr, p_name);
-    ENF IF;
+    END IF;
 
-    FOREACH step IN ARRAY p_parsed_rmt LOOP
+    SELECT array_agg(j) INTO v_parsed_rmt
+    FROM jsonb_populate_recordset(NULL::rmt_node, p_parsed_rmt) AS j;
+
+    FOREACH step IN ARRAY v_parsed_rmt LOOP
         
-        tmp_el := step::inter_repr;
+        tmp_el := NULL::inter_repr;
+        tmp_el.instruction := step.instruction;
+        tmp_el.id := step.id;
+        tmp_el.deps_txt := step.deps;
         tmp_el.addr = new_addr();
 
         temporary_table := array_append(temporary_table, tmp_el);
@@ -266,6 +273,8 @@ BEGIN
     END LOOP;
 
     INSERT INTO rmt_slaves SELECT (unnest(slaves_table)).*;
+
+    RETURN v_template_addr;
     
 END;
 $$ LANGUAGE plpgsql;

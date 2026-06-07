@@ -4,6 +4,7 @@ from typing import Sequence
 from ..utils.conn_factory import conn_factory
 from ..types import ReferenceTo
 from .dsl import parse
+from psycopg.types.json import Jsonb
 
 def serialize(addr: ReferenceTo) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
@@ -11,10 +12,14 @@ def serialize(addr: ReferenceTo) -> str:
 
 def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
+
     parsed = parse(expression)
-    parsed_as_tuples = [(a['instruction'], a['id'], a['deps']) for a in parsed]
+
+    jsonb_parsed = Jsonb(parsed)
+
     conn = conn_factory()
-    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (parsed, name)).fetchone()[0]
+
+    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (jsonb_parsed, name)).fetchone()[0]
 
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:

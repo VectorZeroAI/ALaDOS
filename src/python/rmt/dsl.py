@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
+from types import prepare_class
 from typing import TypeAlias, TypedDict
 from collections import deque, defaultdict
 import uuid
+
+from python.utils.conn_factory import conn_factory
 
 """
 This is the DSL for the rmt.
@@ -195,4 +198,88 @@ def validate_value(value: str) -> bool:
         if i in value:
             return False
     return True
+
+
+
+def serialise(addr: int) -> str:
+    """
+    Serialises an reusable master template into its DSL form.
+    """
+    conn = conn_factory()
+
+    name = conn.execute("""
+    SELECT name FROM names WHERE addr = %s
+                 """, (addr, )).fetchone()
+    
+    if not name:
+        name = "No Name"
+    else:
+        name = name[0]
+
+    steps_fetch = conn.execute("""
+    SELECT addr, instruction, scope, deps FROM rmt_slaves WHERE template_addr = %s
+                               """, (addr,)).fetchall()
+
+    steps_strings = [f"(id='{i[0]}', instruction='{i[1]}', scope='{i[2]}')" for i in steps_fetch]
+
+    steps = [{"str": st_str} for st_str in steps_strings] 
+
+    for i in range(len(steps)):
+        steps[i]["deps"] = steps_fetch[i][3]
+        steps[i]["addr"] = steps_fetch[i][0]
+
+
+
+    result: list[list[dict]] = []
+    previous: list[dict] = []
+    next: list[dict] = []
+
+    flag_done = False
+
+    # First pass, e.g. those with no deps.
+
+    for st in steps:
+        if st['deps'] is None:
+            result.append([st])
+            previous.append(st)
+
+
+    # Loop recursive resolution
+    while not flag_done:
+        next = []
+
+        for i, pr_st in enumerate(previous):
+
+            for st in steps:
+
+                if pr_st['addr'] in st['deps']:
+                    next.append(st)
+                    result[i].append(st) # FIXME : If multiple depend on the same node, this method will cram them all in one line, insdead of correctly modeling fan out behaviour.
+
+        for line in result:
+            for step in line:
+                steps.remove(step)
+
+
+        previous = next
+
+        if len(steps) < 1:
+            flag_done = True
+
+    # TODO: Finish it. At this point, we have got a DAG structure, except well the known error above.
+    # TODO: So we must just finish the serialisation to a text blob.
+
+
+
+
+
+
+
+
+
+
+
+
+
+    return result
 

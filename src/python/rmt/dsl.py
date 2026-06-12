@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from types import prepare_class
-from typing import TypeAlias, TypedDict
+from typing import Any, TypeAlias, TypedDict
 from collections import deque, defaultdict
 import uuid
 
@@ -222,11 +222,13 @@ def serialise(addr: int) -> str:
 
     steps_strings = [f"(id='{i[0]}', instruction='{i[1]}', scope='{i[2]}')" for i in steps_fetch]
 
-    steps = [{"str": st_str} for st_str in steps_strings] 
+    steps: list[dict[str, Any]] = [{"str": st_str} for st_str in steps_strings] 
 
     for i in range(len(steps)):
         steps[i]["deps"] = steps_fetch[i][3]
         steps[i]["addr"] = steps_fetch[i][0]
+        steps[i]["seen"] = False
+        steps[i]["dupl"] = False
 
 
 
@@ -242,6 +244,7 @@ def serialise(addr: int) -> str:
         if st['deps'] is None:
             result.append([st])
             previous.append(st)
+            st["seen"] = True
 
 
     # Loop recursive resolution
@@ -253,8 +256,13 @@ def serialise(addr: int) -> str:
             for st in steps:
 
                 if pr_st['addr'] in st['deps']:
-                    next.append(st)
-                    result[i].append(st) # FIXME : If multiple depend on the same node, this method will cram them all in one line, insdead of correctly modeling fan out behaviour.
+                    if not pr_st['seen']:
+                        next.append(st)
+                        result[i].append(st) # Into line i, where pr_st is, of the result append st.
+                        st['seen'] = True
+                    else:
+                        result.append([pr_st, st])
+                        pr_st['dupl'] = True
 
         for line in result:
             for step in line:

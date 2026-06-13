@@ -250,8 +250,14 @@ def serialise(addr: int) -> str:
     # Loop recursive resolution
     while not flag_done:
         next = []
+        visited = []
 
         for i, pr_st in enumerate(previous):
+
+            if pr_st in visited:
+                continue
+            else:
+                visited.append(pr_st)
 
             for st in steps:
 
@@ -263,6 +269,7 @@ def serialise(addr: int) -> str:
                     else:
                         result.append([pr_st, st])
                         pr_st['dupl'] = True
+                    # NOTE: I think this is done.
 
         for line in result:
             for step in line:
@@ -273,12 +280,34 @@ def serialise(addr: int) -> str:
 
         if len(steps) < 1:
             flag_done = True
+    
+    
+    """
+    At this point, the data structure is as following: 
+    results list, wich holds per line lists of the nodes. 
 
-    # TODO: Finish it. At this point, we have got a DAG structure, except well the known error above.
-    # TODO: So we must just finish the serialisation to a text blob.
+    So, we just have to take the per line stuff, and then just ' -> '.join(line),
+    but we have to figure out referenses. 
 
+    To figure out referenses, we use a list called "visited" and just check if the node is in visited before continuing. 
+    If it is, we replace it with a referense, e.g. (id="the_id")
+    """
 
+    visited = []
 
+    result_str: list[str] = []
+
+    for i in range(len(result)):
+        result_str[i] = ""
+
+    for i, line in enumerate(result):
+        for node in line:
+            if node in visited:
+                result_str[i] = result_str[i] + f" -> (id='{node['id']}')"
+            else:
+                result_str[i] = result_str[i] + f" -> (id='{node['id']}', instruction='{node['instruction']}', scope='{node['scope']}')"
+    
+    return "\n".join(result_str)
 
 
 

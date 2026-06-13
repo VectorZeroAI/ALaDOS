@@ -8,7 +8,8 @@ from psycopg.types.json import Jsonb
 
 def serialize(addr: ReferenceTo) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
-    pass
+    
+
 
 def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """

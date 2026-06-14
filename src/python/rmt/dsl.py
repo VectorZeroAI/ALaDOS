@@ -220,10 +220,7 @@ def serialise(addr: int) -> str:
     SELECT addr, instruction, scope, deps FROM rmt_slaves WHERE template_addr = %s
                                """, (addr,)).fetchall()
 
-    print(f"steps fetch = {steps_fetch}")
-
     steps_strings = [f"(id='{i[0]}', instruction='{i[1]}', scope='{i[2]}')" for i in steps_fetch]
-    print(f"steps_strings = {steps_strings}")
 
     steps: list[dict[str, Any]] = [{"str": st_str} for st_str in steps_strings] 
 
@@ -232,10 +229,6 @@ def serialise(addr: int) -> str:
         steps[i]["addr"] = steps_fetch[i][0]
         steps[i]["seen"] = False
         steps[i]["dupl"] = False
-
-    print(f"steps = {steps}")
-
-
 
     result: list[list[dict]] = []
     previous: list[dict] = []
@@ -250,18 +243,13 @@ def serialise(addr: int) -> str:
             result.append([st])
             previous.append(st)
             st["seen"] = True
-            print(f"added this starting dep: {st}")
 
-    print(f"PREVIOUS = '{previous}' \n\n STEPS = '{steps}'")
     for st in previous:
         steps.remove(st)
-        print("Removed a starting step from steps.")
 
 
     # Loop recursive resolution
     while not flag_done:
-        print("iteration 1 of the looped serialisation")
-        print(f"state of the matters: result = {result}, previous = {previous}, next = {next}, flag_done = {flag_done}, steps = {steps}")
         next = []
         visited = []
 
@@ -271,7 +259,6 @@ def serialise(addr: int) -> str:
                 continue
             else:
                 visited.append(pr_st)
-                print(f"added {pr_st} to visited. New visited state = {visited}")
 
             for st in steps:
 
@@ -280,17 +267,17 @@ def serialise(addr: int) -> str:
                         next.append(st)
                         result[i].append(st) # Into line i, where pr_st is, of the result append st.
                         st['seen'] = True
-                        print(f"added an item normally. New result state = {result}")
                     else:
                         result.append([pr_st, st])
                         pr_st['dupl'] = True
-                        print(f"added item as fan in/out. New state of the result = {result}")
                     # NOTE: I think this is done.
 
         for line in result:
             for step in line:
-                steps.remove(step)
-                print(f"removed this step '{step}', steps state = {steps}")
+                try:
+                    steps.remove(step)
+                except ValueError:
+                    pass
 
 
         previous = next
@@ -314,30 +301,21 @@ def serialise(addr: int) -> str:
 
     result_str: list[str] = []
 
-    print("got to the final transformation into strings!!!")
-    print("got to the final transformation into strings!!!")
-    print("got to the final transformation into strings!!!")
-
-    for i in range(len(result)):
-        result_str[i] = ""
+    for _ in range(len(result)):
+        result_str.append("")
 
     for i, line in enumerate(result):
         for node in line:
+            
             if node in visited:
-                result_str[i] = result_str[i] + f" -> (id='{node['id']}')"
+                result_str[i] = result_str[i] + f" -> (id='{node['addr']}')"
             else:
-                result_str[i] = result_str[i] + f" -> (id='{node['id']}', instruction='{node['instruction']}', scope='{node['scope']}')"
-    
+                result_str[i] = result_str[i] + f" -> {node['str']}"
+                visited.append(node)
+
+    for line in result_str:
+        if line.count('(') < 2:
+            line = "START -> " + line
+
     return "\n".join(result_str)
-
-
-
-
-
-
-
-
-
-
-    return result
 

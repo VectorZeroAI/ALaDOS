@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from types import prepare_class
-from typing import Any, TypeAlias, TypedDict
+from typing import Any, Generator, TypeAlias, TypedDict
 from collections import deque, defaultdict
 import uuid
 
@@ -289,20 +289,13 @@ def serialise(addr: int) -> str:
             result.append(path)
             return
 
+    def steps_where_no_deps() -> Generator:
+        for i in steps.values():
+            if len(i['deps']) == 0:
+                yield i
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+    for i in steps_where_no_deps():
+        recursive_worker([], i)
 
 #     result: list[list[dict]] = []
 #     previous: list[dict] = []
@@ -344,7 +337,6 @@ def serialise(addr: int) -> str:
 #                     else:
 #                         result.append([pr_st, st])
 #                         pr_st['dupl'] = True
-#                     # NOTE: I think this is done.
 # 
 #         for line in result:
 #             for step in line:

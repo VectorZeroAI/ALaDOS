@@ -230,61 +230,138 @@ def serialise(addr: int) -> str:
         steps[i]["seen"] = False
         steps[i]["dupl"] = False
 
+
     result: list[list[dict]] = []
-    previous: list[dict] = []
-    next: list[dict] = []
 
-    flag_done = False
-
-    # First pass, e.g. those with no deps.
-
-    for st in steps:
-        if st['deps'] is None:
-            result.append([st])
-            previous.append(st)
-            st["seen"] = True
-
-    for st in previous:
-        steps.remove(st)
+    graph: dict[int, list[int]] = {}
 
 
-    # Loop recursive resolution
-    while not flag_done:
-        next = []
-        visited = []
+    for step in steps:
+        graph.setdefault(step['addr'], [])
+        graph[step['addr']] = step.get('deps', [])
 
-        for i, pr_st in enumerate(previous):
+    flags: dict[int, bool] = {}
 
-            if pr_st in visited:
-                continue
-            else:
-                visited.append(pr_st)
+    def recursive_worker(path: list[dict], next_node: dict) -> None:
+        """
+        Walks the graph recursivly and populates the result with results. 
+        """
 
-            for st in steps:
+        current_node = next_node
+        out_deg = len(graph[next_node['addr']])
+        in_deg = len(next_node['deps'])
 
-                if pr_st['addr'] in st['deps']:
-                    if not pr_st['seen']:
-                        next.append(st)
-                        result[i].append(st) # Into line i, where pr_st is, of the result append st.
-                        st['seen'] = True
-                    else:
-                        result.append([pr_st, st])
-                        pr_st['dupl'] = True
-                    # NOTE: I think this is done.
+        flag_moved_on = False
 
-        for line in result:
-            for step in line:
-                try:
-                    steps.remove(step)
-                except ValueError:
-                    pass
+        next_node_addr = graph[current_node['addr']][-1]
+        next_node = steps[next_node_addr]
+        
+        if in_deg > 1:
+            match flags[current_node['addr']]:
+                case True:
+                    if not flag_moved_on:
+
+                        flag_moved_on = True
+                        recursive_worker(path, next_node)
+                case False:
+
+                    flags[current_node['addr']] = True
+                    result.append(path)
+                    return
 
 
-        previous = next
+        if out_deg > 1:
+            for next_node_addr in graph[next_node['addr']][:-1]:
 
-        if len(steps) < 1:
-            flag_done = True
-    
+                next_node = steps[next_node_addr]
+                recursive_worker([current_node], next_node)
+
+            if not flag_moved_on:
+
+                flag_moved_on = True
+                recursive_worker(path, next_node)
+        
+        if in_deg == 1 and out_deg == 1:
+
+            recursive_worker(path, next_node)
+        
+        if out_deg == 0:
+            result.append(path)
+            return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#     result: list[list[dict]] = []
+#     previous: list[dict] = []
+#     next: list[dict] = []
+#
+#     flag_done = False
+# 
+#     # First pass, e.g. those with no deps.
+# 
+#     for st in steps:
+#         if st['deps'] is None:
+#             result.append([st])
+#             previous.append(st)
+#             st["seen"] = True
+# 
+#     for st in previous:
+#         steps.remove(st)
+# 
+# 
+#     # Loop recursive resolution
+#     while not flag_done:
+#         next = []
+#         visited = []
+# 
+#         for i, pr_st in enumerate(previous):
+# 
+#             if pr_st in visited:
+#                 continue
+#             else:
+#                 visited.append(pr_st)
+# 
+#             for st in steps:
+# 
+#                 if pr_st['addr'] in st['deps']:
+#                     if not pr_st['seen']:
+#                         next.append(st)
+#                         result[i].append(st) # Into line i, where pr_st is, of the result append st.
+#                         st['seen'] = True
+#                     else:
+#                         result.append([pr_st, st])
+#                         pr_st['dupl'] = True
+#                     # NOTE: I think this is done.
+# 
+#         for line in result:
+#             for step in line:
+#                 try:
+#                     steps.remove(step)
+#                 except ValueError:
+#                     pass
+# 
+# 
+#         previous = next
+# 
+#         if len(steps) < 1:
+#             flag_done = True
+
+        
+        
+
     
     """
     At this point, the data structure is as following: 

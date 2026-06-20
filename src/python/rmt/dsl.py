@@ -235,6 +235,10 @@ def serialise(addr: int) -> str:
 
     graph: dict[int, list[int]] = {}
 
+    steps_by_addr: dict[int, dict] = {}
+
+    for step in steps:
+        steps_by_addr[step['addr']] = step
 
     for step in steps:
         graph.setdefault(step['addr'], [])
@@ -254,7 +258,7 @@ def serialise(addr: int) -> str:
         flag_moved_on = False
 
         next_node_addr = graph[current_node['addr']][-1]
-        next_node = steps[next_node_addr]
+        next_node = steps_by_addr[next_node_addr]
         
         if in_deg > 1:
             match flags[current_node['addr']]:
@@ -273,7 +277,6 @@ def serialise(addr: int) -> str:
         if out_deg > 1:
             for next_node_addr in graph[next_node['addr']][:-1]:
 
-                next_node = steps[next_node_addr]
                 recursive_worker([current_node], next_node)
 
             if not flag_moved_on:
@@ -290,8 +293,11 @@ def serialise(addr: int) -> str:
             return
 
     def steps_where_no_deps() -> Generator:
-        for i in steps.values():
-            if len(i['deps']) == 0:
+        for i in steps:
+            deps = i.get('deps')
+            if deps is None:
+                deps = []
+            if len(deps) == 0:
                 yield i
 
     for i in steps_where_no_deps():

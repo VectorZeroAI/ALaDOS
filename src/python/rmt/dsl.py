@@ -225,7 +225,7 @@ def serialise(addr: int) -> str:
     steps: list[dict[str, Any]] = [{"str": st_str} for st_str in steps_strings] 
 
     for i in range(len(steps)):
-        steps[i]["deps"] = steps_fetch[i][3]
+        steps[i]["deps"] = steps_fetch[i][3] if steps_fetch[i][3] is not None else []
         steps[i]["addr"] = steps_fetch[i][0]
         steps[i]["seen"] = False
         steps[i]["dupl"] = False
@@ -241,8 +241,10 @@ def serialise(addr: int) -> str:
         steps_by_addr[step['addr']] = step
 
     for step in steps:
-        graph.setdefault(step['addr'], [])
-        graph[step['addr']] = step.get('deps', [])
+        for dep in step['deps']:
+            graph.setdefault(dep, [])
+            graph[dep].append(step['addr'])
+
 
     flags: dict[int, bool] = {}
 
@@ -252,16 +254,23 @@ def serialise(addr: int) -> str:
         """
 
         current_node = next_node
-        out_deg = len(graph[next_node['addr']])
+        out_deg = len(graph.get(next_node['addr'], []))
         in_deg = len(next_node['deps'])
 
         flag_moved_on = False
 
+
+        if out_deg == 0:
+            result.append(path)
+            return
+
         next_node_addr = graph[current_node['addr']][-1]
         next_node = steps_by_addr[next_node_addr]
+
+        path.append(current_node)
         
         if in_deg > 1:
-            match flags[current_node['addr']]:
+            match flags.get(current_node['addr'], False):
                 case True:
                     if not flag_moved_on:
 
@@ -275,22 +284,19 @@ def serialise(addr: int) -> str:
 
 
         if out_deg > 1:
-            for next_node_addr in graph[next_node['addr']][:-1]:
-
-                recursive_worker([current_node], next_node)
+            for next_node_addr in graph[current_node['addr']][:-1]:
+                new_path_node = steps_by_addr[next_node_addr]
+                recursive_worker([current_node], new_path_node)
 
             if not flag_moved_on:
 
                 flag_moved_on = True
                 recursive_worker(path, next_node)
         
-        if in_deg == 1 and out_deg == 1:
+        if (in_deg == 1 or in_deg == 0) and out_deg == 1:
 
             recursive_worker(path, next_node)
         
-        if out_deg == 0:
-            result.append(path)
-            return
 
     def steps_where_no_deps() -> Generator:
         for i in steps:

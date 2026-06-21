@@ -3,6 +3,8 @@
 from typing import TypedDict, TypeAlias
 from ..executor.types import SlaveScope_
 
+Name: TypeAlias = str
+
 class RmtNode(TypedDict):
     instruction: str
     id: str

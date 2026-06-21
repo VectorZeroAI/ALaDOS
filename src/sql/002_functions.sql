@@ -201,18 +201,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION activate_rmt(
-    target_addrs BIGINT[],
-    req_addrs BIGINT[],
-    rmt_name TEXT DEFAULT NULL,
-    rmt_addr TEXT DEFAULT NULL
-) RETURNS VOID AS $$
-BEGIN 
-    RAISE EXCEPTION'NOT IMPLEMENTED YET';
-END;
-$$ LANGUAGE plpgsql;
-
-
 CREATE OR REPLACE FUNCTION save_rmt(
     p_parsed_rmt JSONB,
     p_name TEXT DEFAULT NULL
@@ -318,3 +306,73 @@ BEGIN
     RETURN new_master_addr;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION activate_rmt_as_master(
+    p_rmt_addr BIGINT,
+    p_depends_on BIGINT[],
+    p_required_by BIGINT[],
+    p_inputs JSONB
+) RETURNS VOID AS $$
+
+master_addr = plpy.execute("""SELECT new_master(
+    instruction := 'NONE',
+    req_addrs := $1
+)""", [p_depends_on,])[0][0]
+
+master_result_addr = plpy.execute("""
+    SELECT result_addr FROM masters WHERE addr = v_master_addr;
+""")[0][0]
+
+for i in p_required_by:
+    plpy.execute("""
+        INSERT INTO slaves(slave_addr, req_addr) VALUES ($1, $2)
+        """, [i, master_result_addr])
+
+rmt_template = plpy.execute("""
+    SELECT addr,
+        master_addr,
+        instruction,
+        result_addr,
+        scope, deps
+    FROM rmt_slaves
+    WHERE template_addr = $1
+    """, [p_rmt_addr,])
+
+"""
+And now its time to translate the deps. So, I need to update the entire thing.
+I will do it naively, cause the thing is,
+    if performance of this thing will be bad enough to care,
+    I will rewrite into plpgsql, and get some speed there.
+As long as this is not the case, I will just continue with the O(n * n) approach.
+"""
+
+for i in rmt_template:
+    old_addr = i.result_addr
+
+    i.addr = plpy.execute("SELECT new_addr();")
+    i.result_addr = plpy.execute("SELECT new_addr();")
+
+    for j in rmt_template:
+        for k in j.deps:
+            if k == old_addr:
+                k = i.result_addr
+
+for i in rmt_template:
+    plpy.execute("""SELECT new_slave(
+        p_master_addr := $1
+        p_instruction := $2
+        p_requires := $3
+        p_result_addr := $4
+        p_slave_scope := $5
+    )""",
+    [
+        master_result_addr,
+        i.instruction,
+        i.deps,
+        i.result_addr,
+        i.scope
+    ]
+)
+
+
+$$ LANGUAGE plpythonu3;

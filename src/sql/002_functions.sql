@@ -317,15 +317,22 @@ CREATE OR REPLACE FUNCTION activate_rmt_as_master(
 master_addr_querry = plpy.prepare(""" SELECT new_master(
     p_instruction := 'NONE',
     req_addrs := $1
-) """, ["BIGINT[]"])
+) AS addr;
+""", ["BIGINT[]"])
 
-master_addr = plpy.execute(master_addr_querry, [p_depends_on,])[0][0]
+master_addr = plpy.execute(master_addr_querry, [p_depends_on,])[0]['addr']
 
 master_result_addr_querry = plpy.prepare("""
 SELECT result_addr FROM masters WHERE addr = $1;
 """, ["BIGINT"])
 
-master_result_addr = plpy.execute(master_result_addr_querry, [master_addr,])[0][0]
+master_result_addr = plpy.execute(master_result_addr_querry, [master_addr,])[0]['result_addr']
+
+master_renaming_querry = plpy.prepare("""
+    INSERT INTO names(name, addr) VALUES ($1::TEXT||nextval('global_rmt_activation_serial')::TEXT, $2)
+""", ['TEXT', 'BIGINT'])
+
+master_renaming_querry.execute(["_rmt_activation", master_addr])
 
 insert_into_slave_req_querry = plpy.prepare("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES ($1, $2)
@@ -354,33 +361,40 @@ I will do it naively, cause the thing is,
 As long as this is not the case, I will just continue with the O(n * n) approach.
 """
 
-for i in rmt_template:
-    old_addr = i.result_addr
+new_addr_querry = plpy.prepare("SELECT new_addr() AS a")
+result_creation_querry = plpy.prepare("INSERT INTO results(addr) VALUES($1)", ['BIGINT'])
 
-    i.addr = plpy.execute("SELECT new_addr()")
-    i.result_addr = plpy.execute("SELECT new_addr()")
+for i in rmt_template:
+    old_addr = i['result_addr']
+
+    i['addr']= plpy.execute(new_addr_querry)[0]['a']
+    i['result_addr']= plpy.execute(new_addr_querry)[0]['a']
+
+    plpy.execute(result_creation_querry, [i['result_addr']])
 
     for j in rmt_template:
-        for indx, k in enumerate(j.deps):
+        if j['deps'] is None:
+            continue
+        for indx, k in enumerate(j['deps']):
             if k == old_addr:
-                j.deps[indx] = i.result_addr
+                j['deps'][indx] = i['result_addr']
 
 new_slave_querry = plpy.prepare("""SELECT new_slave(
-        p_master_addr := %s
-        p_instruction := %s
-        p_requires := %s
-        p_result_addr := %s
-        p_slave_scope := %s
+        p_master_addr := $1,
+        p_instruction := $2,
+        p_requires := $3,
+        p_result_addr := $4,
+        p_slave_scope := $5
     )""", ["BIGINT", "TEXT", "BIGINT[]", "BIGINT", "slave_scope"])
 
 
 for i in rmt_template:
     new_slave_querry.execute([
-        master_result_addr,
-        i.instruction,
-        i.deps,
-        i.result_addr,
-        i.scope
+        master_addr,
+        i['instruction'],
+        i['deps'],
+        i['result_addr'],
+        i['scope']
     ]
 )
 

@@ -5,6 +5,8 @@ CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
 CREATE SEQUENCE IF NOT EXISTS global_planner_serial;
 
+CREATE SEQUENCE IF NOT EXISTS global_rmt_activation_serial;
+
 DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN

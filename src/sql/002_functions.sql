@@ -279,7 +279,7 @@ CREATE OR REPLACE FUNCTION new_master(
 DECLARE
     new_master_addr BIGINT;
     new_master_result_addr BIGINT;
-    addr BIGINT;
+    v_addr BIGINT;
     name TEXT;
 BEGIN
 
@@ -294,7 +294,7 @@ BEGIN
     END IF;
     
     IF req_addrs IS NOT NULL THEN
-        FOREACH addr IN ARRAY req_addrs LOOP
+        FOREACH v_addr IN ARRAY req_addrs LOOP
             INSERT INTO master_req(master_addr, req_addr) VALUES(new_master_addr, addr);
         END LOOP;
     END IF;
@@ -314,29 +314,37 @@ CREATE OR REPLACE FUNCTION activate_rmt_as_master(
     p_inputs JSONB
 ) RETURNS VOID AS $$
 
-master_addr = plpy.execute("""SELECT new_master(
-    instruction := 'NONE',
+master_addr_querry = plpy.prepare(""" SELECT new_master(
+    p_instruction := 'NONE',
     req_addrs := $1
-)""", [p_depends_on,])[0][0]
+) """, ["BIGINT[]"])
 
-master_result_addr = plpy.execute("""
-    SELECT result_addr FROM masters WHERE addr = v_master_addr;
-""")[0][0]
+master_addr = plpy.execute(master_addr_querry, [p_depends_on,])[0][0]
+
+master_result_addr_querry = plpy.prepare("""
+SELECT result_addr FROM masters WHERE addr = $1;
+""", ["BIGINT"])
+
+master_result_addr = plpy.execute(master_result_addr_querry, [master_addr,])[0][0]
+
+insert_into_slave_req_querry = plpy.prepare("""
+        INSERT INTO slave_req(slave_addr, req_addr) VALUES ($1, $2)
+        """, ["BIGINT", "BIGINT"])
 
 for i in p_required_by:
-    plpy.execute("""
-        INSERT INTO slaves(slave_addr, req_addr) VALUES ($1, $2)
-        """, [i, master_result_addr])
+    insert_into_slave_req_querry.execute([i, master_result_addr])
+    
+select_rmt_template_querry = plpy.prepare("""
+SELECT addr,
+    master_addr,
+    instruction,
+    result_addr,
+    scope, deps
+FROM rmt_slaves
+WHERE template_addr = $1
+""", ["BIGINT"])
 
-rmt_template = plpy.execute("""
-    SELECT addr,
-        master_addr,
-        instruction,
-        result_addr,
-        scope, deps
-    FROM rmt_slaves
-    WHERE template_addr = $1
-    """, [p_rmt_addr,])
+rmt_template = select_rmt_template_querry.execute([p_rmt_addr,])
 
 """
 And now its time to translate the deps. So, I need to update the entire thing.
@@ -349,23 +357,25 @@ As long as this is not the case, I will just continue with the O(n * n) approach
 for i in rmt_template:
     old_addr = i.result_addr
 
-    i.addr = plpy.execute("SELECT new_addr();")
-    i.result_addr = plpy.execute("SELECT new_addr();")
+    i.addr = plpy.execute("SELECT new_addr()")
+    i.result_addr = plpy.execute("SELECT new_addr()")
 
     for j in rmt_template:
-        for k in j.deps:
+        for indx, k in enumerate(j.deps):
             if k == old_addr:
-                k = i.result_addr
+                j.deps[indx] = i.result_addr
+
+new_slave_querry = plpy.prepare("""SELECT new_slave(
+        p_master_addr := %s
+        p_instruction := %s
+        p_requires := %s
+        p_result_addr := %s
+        p_slave_scope := %s
+    )""", ["BIGINT", "TEXT", "BIGINT[]", "BIGINT", "slave_scope"])
+
 
 for i in rmt_template:
-    plpy.execute("""SELECT new_slave(
-        p_master_addr := $1
-        p_instruction := $2
-        p_requires := $3
-        p_result_addr := $4
-        p_slave_scope := $5
-    )""",
-    [
+    new_slave_querry.execute([
         master_result_addr,
         i.instruction,
         i.deps,
@@ -374,5 +384,4 @@ for i in rmt_template:
     ]
 )
 
-
-$$ LANGUAGE plpythonu3;
+$$ LANGUAGE plpython3u SECURITY DEFINER;

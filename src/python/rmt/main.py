@@ -81,7 +81,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
             p_required_by := %s,
             p_inputs := %s
         );
-                 """)
+                 """, (rmt_addr, depends_on, required_by, inputs))
     
 
 

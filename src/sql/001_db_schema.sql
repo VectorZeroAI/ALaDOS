@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS plpython3u;
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
@@ -118,6 +119,9 @@ CREATE TABLE IF NOT EXISTS masters (
             ON UPDATE CASCADE,
     instruction TEXT NOT NULL,
     result_addr BIGINT NOT NULL
+        REFERENCES results(addr)
+            ON DELETE RESTRICT
+            ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS master_context (

@@ -2,6 +2,7 @@
 
 from typing import Sequence
 
+import psycopg
 from psycopg.errors import DataError
 from ..utils.conn_factory import conn_factory
 from ..types import ReferenceTo
@@ -26,7 +27,10 @@ def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
 
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
-    """ Creates a workflow from a master goal, semi automatically. (a few LLM calls + automatic extraction) """
+    """
+    Creates a workflow from a master goal.
+    Fully automatically, except it doesnt place variables anywhere.
+    """
 
     SLAVE_INSTR = 0
     SLAVE_ADDR = 1
@@ -141,9 +145,68 @@ def create_from_range(addrs_list: Sequence[int|str], name: str|None = None) -> R
     pass
 
 
-def delete_node(rmt_addr: ReferenceTo, node_id: int|str) -> None:
-    """ Deletes a node from an rmt, via the id. The id is ether node name or auto asigned id. Auto asigned ID is defined in the DSL for the workflows. """
-    pass
+def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
+    """
+    Deletes a node from an rmt, via the addr or name.
+    
+    concatenate: If true, it will concatenate the 2 resulting DAGs,
+    so that the execution line doesnt get broken, if false,
+    wont do anything and just errase the node and all edges to it with it.
+
+    example:
+        delete node 2
+        rmt:
+            (1) -> (2) -> (3)
+        result with concatenate = True:
+            (1) -> (3)
+        result with concatenate = False:
+            (1)
+            (2)
+
+    """
+    
+    conn = conn_factory()
+
+    with conn.transaction():
+        if isinstance(node_id, str):
+            try:
+                node_id = conn.execute("SELECT resolve_name(%s);", (node_id)).fetchone()[0]
+            except TypeError:
+                raise NameError("PROVIDED node_id string does not exist as a name!")
+
+        reqired_by = conn.execute("""
+        SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);
+                                  """, (node_id,)).fetchall()
+
+        reqired_by = [r[0] for r in reqired_by]
+
+        if concatenate:
+            requirements = conn.execute("""
+            SELECT deps FROM rmt_slaves WHERE addr = %s;
+                                        """, (node_id,)).fetchone()[0]
+            if requirements is None:
+                requirements = []
+
+            
+            for i in reqired_by:
+                for j in requirements:
+                    conn.execute("""
+                        UPDATE rmt_slaves
+                            SET deps = array_append(deps, %s)
+                        WHERE addr = %s
+                                 """, (j, i))
+
+        conn.execute("""
+        DELETE FROM addrs WHERE addr = %s
+                     """, (node_id,))
+
+
+        conn.execute("""
+            UPDATE rmt_slaves
+                SET deps = array_remove(deps, %s)
+            WHERE addr = ANY(%s)
+                     """, (node_id, reqired_by))
+
 
 
 

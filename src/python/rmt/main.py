@@ -27,7 +27,98 @@ def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a master goal, semi automatically. (a few LLM calls + automatic extraction) """
-    pass
+
+    SLAVE_INSTR = 0
+    SLAVE_ADDR = 1
+    SLAVE_SCOPE = 2
+    SLAVE_DEPS = 3
+
+    conn = conn_factory()
+
+    rmt_addr = conn.execute("""
+    INSERT INTO reusable_master_templates RETURNING addr;
+                            """).fetchone()[0]
+    
+    slaves = conn.execute("""
+    SELECT instruction, addr, scope FROM slaves WHERE master_addr = %s;
+                          """, (master_addr,)).fetchall()
+
+    slave_addrs = [s[SLAVE_ADDR] for s in slaves]
+
+    slaves = [[i for i in s] for s in slaves]
+    # NOTE:  This shenanigan transforms List[TupleRow] type into List[List] type.
+
+
+    """
+    Now we also have to remove the planner slaves as they would only hinder the rmt.
+    Notice to future me: Expand this section with any sysinternal slaves that were added. 
+    """
+
+    names = conn.execute("""
+    SELECT name, addr FROM names WHERE addr = ANY(%s)
+                         """, (slave_addrs,)).fetchall()
+
+    for n in names:
+        if n[0].startswith("planner_"):
+            for i in reversed(range(len(slaves))): # Its fine cause I reverse the order, and now I can do this. 
+                if slaves[i][SLAVE_ADDR] == n[1]:
+                    slaves.pop(i)
+
+
+    slave_addrs = [s[SLAVE_ADDR] for s in slaves] # Redefine slave addrs for deps to not include already cut out slaves.
+
+
+    deps = conn.execute("""
+    SELECT slave_addr, req_addr FROM slave_req WHERE slave_addr = ANY(%s)
+                        """, (slave_addrs,)).fetchall()
+
+
+    deps = [[i for i in dep] for dep in deps]
+    # NOTE:  This shenanigan transforms List[TupleRow] type into List[List] type.
+
+
+    slaves = [s.append([]) for s in slaves] # Add the deps element
+
+
+    for s in slaves:
+        new_addr = conn.execute("SELECT new_addr();").fetchone()[0]
+        for d in deps:
+            if d[0] == s[SLAVE_ADDR]:
+                d[0] = new_addr
+
+
+        s[SLAVE_ADDR] = new_addr
+
+    """
+    So we moved the addresses into the new ones,
+    now we have to go populate the deps field in the slaves list,
+    and then we can just write back to the DB.
+    """
+
+    for s in slaves:
+        for d in deps:
+            if d[0] == s[SLAVE_ADDR]:
+                s[SLAVE_DEPS].append(d[1])
+
+    """
+    Now writeback to DB
+    """
+
+    for s in slaves:
+        conn.execute("""
+    INSERT INTO rmt_slaves(template_addr, deps, addr, instruction, scope)
+    VALUES(%s, %s, %s, %s, %s)
+                     """, (rmt_addr, s[SLAVE_DEPS], s[SLAVE_ADDR], s[SLAVE_INSTR], s[SLAVE_SCOPE]))
+
+
+    conn.execute("""
+    INSERT INTO names(name, addr) VALUES(%s, %s)
+                 """, (name, rmt_addr))
+
+    return rmt_addr
+
+
+
 
 def create_from_range(addrs_list: Sequence[int|str], name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
@@ -38,16 +129,19 @@ def delete_node(rmt_addr: ReferenceTo, node_id: int|str) -> None:
     """ Deletes a node from an rmt, via the id. The id is ether node name or auto asigned id. Auto asigned ID is defined in the DSL for the workflows. """
     pass
 
+
+
 def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, depends_on: Sequence[int|str] = []) -> None:
     """ Inserts a node into the rmt DAG. """
     pass
 
-def activate_inline(rmt_addr: ReferenceTo,
-                    depends_on: Sequence[int|str] = [],
-                    required_by: Sequence[int|str] = [],
-                    inputs: Sequence[dict[str, str]] = []) -> None:
-    """ Inline inserts the workflow into the DAG. """
-    pass
+# def activate_inline(rmt_addr: ReferenceTo,
+#                     depends_on: Sequence[int|str] = [],
+#                     required_by: Sequence[int|str] = [],
+#                     inputs: Sequence[dict[str, str]] = []) -> None:
+#     """ Inline inserts the workflow into the DAG. """
+#     pass
+
 
 def activate_as_master(rmt_addr: ReferenceTo,
                        depends_on: Sequence[int|str] = [],

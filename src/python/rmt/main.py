@@ -31,7 +31,8 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
     SLAVE_INSTR = 0
     SLAVE_ADDR = 1
     SLAVE_SCOPE = 2
-    SLAVE_DEPS = 3
+    SLAVE_RES_ADDR = 3
+    SLAVE_DEPS = 4
 
     conn = conn_factory()
 
@@ -40,7 +41,7 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
                             """).fetchone()[0]
     
     slaves = conn.execute("""
-    SELECT instruction, addr, scope FROM slaves WHERE master_addr = %s;
+    SELECT instruction, addr, scope, result_addr FROM slaves WHERE master_addr = %s;
                           """, (master_addr,)).fetchall()
 
     slave_addrs = [s[SLAVE_ADDR] for s in slaves]
@@ -67,17 +68,20 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 
     slave_addrs = [s[SLAVE_ADDR] for s in slaves] # Redefine slave addrs for deps to not include already cut out slaves.
 
+    deps_addrs = [s[SLAVE_RES_ADDR] for s in slaves]
+
 
     deps = conn.execute("""
-    SELECT slave_addr, req_addr FROM slave_req WHERE slave_addr = ANY(%s)
-                        """, (slave_addrs,)).fetchall()
+    SELECT slave_addr, req_addr FROM slave_req WHERE slave_addr = ANY(%s) AND req_addr = ANY(%s)
+                        """, (slave_addrs, deps_addrs)).fetchall()
 
 
     deps = [[i for i in dep] for dep in deps]
     # NOTE:  This shenanigan transforms List[TupleRow] type into List[List] type.
 
 
-    slaves = [s.append([]) for s in slaves] # Add the deps element
+    for s in slaves:
+        s.append([])
 
 
     for s in slaves:
@@ -85,6 +89,9 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
         for d in deps:
             if d[0] == s[SLAVE_ADDR]:
                 d[0] = new_addr
+
+            if d[1] == s[SLAVE_RES_ADDR]:
+                d[1] = new_addr
 
 
         s[SLAVE_ADDR] = new_addr
@@ -106,9 +113,18 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 
     for s in slaves:
         conn.execute("""
-    INSERT INTO rmt_slaves(template_addr, deps, addr, instruction, scope)
-    VALUES(%s, %s, %s, %s, %s)
-                     """, (rmt_addr, s[SLAVE_DEPS], s[SLAVE_ADDR], s[SLAVE_INSTR], s[SLAVE_SCOPE]))
+    INSERT INTO rmt_slaves(template_addr, deps, addr, instruction, scope, result_addr)
+    VALUES(%s, %s, %s, %s, %s, %s)
+                     """,
+         (
+             rmt_addr,
+             s[SLAVE_DEPS],
+             s[SLAVE_ADDR],
+             s[SLAVE_INSTR],
+             s[SLAVE_SCOPE],
+             conn.execute("SELECT new_addr();").fetchone()[0]
+         )
+    )
 
 
     conn.execute("""

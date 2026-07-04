@@ -212,7 +212,13 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
 
 def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, depends_on: Sequence[int|str] = []) -> None:
     """ Inserts a node into the rmt DAG. """
+    
+    conn = conn_factory()
+
     pass
+
+
+
 
 # def activate_inline(rmt_addr: ReferenceTo,
 #                     depends_on: Sequence[int|str] = [],

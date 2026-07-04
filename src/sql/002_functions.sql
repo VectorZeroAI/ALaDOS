@@ -312,7 +312,10 @@ CREATE OR REPLACE FUNCTION activate_rmt_as_master(
     p_depends_on BIGINT[],
     p_required_by BIGINT[],
     p_inputs JSONB
-) RETURNS VOID AS $$
+) RETURNS VOID
+TRANSFORM FOR TYPE JSONB
+AS $$
+import re
 
 master_addr_querry = plpy.prepare(""" SELECT new_master(
     p_instruction := 'NONE',
@@ -378,6 +381,38 @@ for i in rmt_template:
         for indx, k in enumerate(j['deps']):
             if k == old_addr:
                 j['deps'][indx] = i['result_addr']
+
+"""
+In this part here we replace all the placeholders in format of ${{key}} 
+with their value under the key in p_inputs. 
+"""
+
+all_keys = []
+key_regex_pattern = r'\$\{\{([a-zA-Z0-9_]+)\}\}'
+
+for i in rmt_template:
+    all_keys.extend(set(re.findall(key_regex_pattern, i['instruction'])))
+
+missing_keys = [key for key in all_keys if key not in p_inputs]
+redundant_keys = [key for key in p_inputs if key not in all_keys]
+
+if missing_keys and redundant_keys:
+    plpy.fatal(f'Keys {missing_keys} are missing from inputs. Additionally, the following redundant keys were found: {redundant_keys}')
+
+if missing_keys:
+    plpy.fatal(f'Keys {missing_keys} are missing from inputs.')
+
+if redunant_keys:
+    plpy.warning(f'Input keys {redundant_keys} found in inputs but not found in the template. Double check if this is the right template.')
+
+def replace_match(match):
+    key = match.group(1)
+    return str(p_inputs[key])
+
+
+for i in rmt_template:
+    i['instruction'] = re.sub(key_regex_pattern, replace_match, i['instruction'])
+
 
 new_slave_querry = plpy.prepare("""SELECT new_slave(
         p_master_addr := $1,

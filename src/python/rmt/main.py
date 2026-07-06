@@ -2,7 +2,6 @@
 
 from typing import Sequence
 
-import psycopg
 from psycopg.errors import DataError
 from ..utils.conn_factory import conn_factory
 from ..types import ReferenceTo
@@ -140,9 +139,21 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 
 
 
-def create_from_range(addrs_list: Sequence[int|str], name: str|None = None) -> ReferenceTo:
+def create_from_range(
+        start_node_id: str|int,
+        end_node_id: str|int,
+        include_derivatives: bool = True,
+        exclusive: bool = False,
+        name: str|None = None
+        ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
-    pass
+
+    conn = conn_factory()
+
+    if isinstance(start_node_id, str):
+        start_node_id = conn.execute("SELECT resolve_name(%s);", (start_node_id,)).fetchone()[0]
+
+    backwards_nodes = conn.execute("SELECT recursive_walk_backwards_slaves_dag(%s);").fetchall()
 
 
 def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
@@ -231,7 +242,7 @@ def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, 
 def activate_as_master(rmt_addr: ReferenceTo,
                        depends_on: Sequence[int|str] = [],
                        required_by: Sequence[int|str] = [],
-                       inputs: Sequence[dict[str, str]] = []) -> None:
+                       inputs: dict[str, str] = {}) -> None:
     """
     Activates the workflow as a dedicated master. Encapsulated insdead of inlined.
 
@@ -260,10 +271,5 @@ def activate_as_master(rmt_addr: ReferenceTo,
             p_required_by := %s,
             p_inputs := %s
         );
-                 """, (rmt_addr, depends_on, required_by, inputs))
+                 """, (rmt_addr, depends_on, required_by, Jsonb(inputs)))
     
-
-
-
-
-

@@ -142,8 +142,6 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 def create_from_range(
         start_node_id: str|int,
         end_node_id: str|int,
-        include_derivatives: bool = True,
-        exclusive: bool = False,
         name: str|None = None
         ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
@@ -151,9 +149,31 @@ def create_from_range(
     conn = conn_factory()
 
     if isinstance(start_node_id, str):
-        start_node_id = conn.execute("SELECT resolve_name(%s);", (start_node_id,)).fetchone()[0]
+        try:
+            start_node_id = conn.execute("SELECT resolve_name(%s);", (start_node_id,)).fetchone()[0]
+            end_node_id = conn.execute("SELECT resolve_name(%s);", (end_node_id,)).fetchone()[0]
+        except TypeError as e:
+            raise ValueError(f"NAME COULD NOT BE RESOLVED, MOST LIKELY. ERROR: {e}")
 
-    backwards_nodes = conn.execute("SELECT recursive_walk_backwards_slaves_dag(%s);").fetchall()
+    forwards_nodes = conn.execute("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,)).fetchall()
+    backwards_nodes = conn.execute("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,)).fetchall()
+
+    forwards_nodes = [r[0] for r in forwards_nodes]
+    backwards_nodes = [r[0] for r in backwards_nodes]
+
+    forwards_nodes = set(forwards_nodes)
+    backwards_nodes = set(backwards_nodes)
+
+    intersection: set[int] = forwards_nodes & backwards_nodes # NOTE : This weird sign here is doing the intersection detection work.
+
+    """
+    Okay, so we have the steps now, so what we do is we copy slaves from slaves and slave_req into rmt_slaves, as well as init the rmt template in its respective table.
+    """
+
+    raise NotImplementedError("CREATE FROM RANGE NOT FULLY IMPLEMENTED YET!")
+
+    
+
 
 
 def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:

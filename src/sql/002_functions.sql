@@ -387,11 +387,11 @@ In this part here we replace all the placeholders in format of ${{key}}
 with their value under the key in p_inputs. 
 """
 
-all_keys = []
+all_keys = set()
 key_regex_pattern = r'\$\{\{([a-zA-Z0-9_]+)\}\}'
 
 for i in rmt_template:
-    all_keys.extend(set(re.findall(key_regex_pattern, i['instruction'])))
+    all_keys.update(re.findall(key_regex_pattern, i['instruction']))
 
 missing_keys = [key for key in all_keys if key not in p_inputs]
 redundant_keys = [key for key in p_inputs if key not in all_keys]
@@ -434,3 +434,56 @@ for i in rmt_template:
 )
 
 $$ LANGUAGE plpython3u SECURITY DEFINER;
+
+
+CREATE OR REPLACE FUNCTION recursive_walk_forwards_slaves_dag(
+    p_start_node BIGINT
+) RETURNS BIGINT[] AS $$
+DECLARE
+    v_nodes_list BIGINT[];
+BEGIN
+    WITH RECURSIVE forward_walk(nodes) AS (
+        SELECT slave_addr
+        FROM slave_req
+        WHERE req_addr = (SELECT result_addr FROM slaves WHERE addr = p_start_node)
+
+        UNION
+
+        SELECT slave_addr
+        FROM slave_req sr
+            JOIN slaves s ON s.addr = forward_walk.nodes
+        WHERE sr.req_addr = s.result_addr
+
+    ) SELECT array_agg(nodes) INTO v_nodes_list FROM forward_walk;
+
+    RETURN v_nodes_list;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION recursive_walk_backwards_slaves_dag(
+    p_start_node BIGINT
+) RETURNS BIGINT[] AS $$
+DECLARE
+    v_nodes_list BIGINT[];
+BEGIN
+    WITH RECURSIVE backward_walk(nodes) AS (
+        -- ANCHOR
+        SELECT s.addr
+        FROM slave_req sr
+            JOIN slaves s ON sr.req_addr = s.result_addr
+        WHERE sr.slave_addr = p_start_node
+
+        UNION
+
+        -- RECURSE, uses backward_walk.nodes as those are the previous results.
+        SELECT s.addr
+        FROM slave_req sr
+            JOIN slaves s ON sr.req_addr = s.result_addr
+        WHERE sr.slave_addr = backward_walk.nodes
+        
+    ) SELECT array_agg(nodes) INTO v_nodes_list FROM backward_walk;
+
+    RETURN v_nodes_list;
+
+END;
+$$ LANGUAGE plpgsql;

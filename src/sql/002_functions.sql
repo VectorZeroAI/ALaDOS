@@ -496,12 +496,7 @@ BEGIN
             INNER JOIN masters m ON m.result_addr = sr.req_addr
             INNER JOIN slaves s ON s.master_addr = m.addr
         WHERE sr.slave_addr = backward_walk.nodes
-            AND NOT EXISTS(
-                SELECT sr.req_addr
-                FROM slave_req sr
-                    INNER JOIN slaves s1 ON s.result_addr = sr.req_addr
-                WHERE s1.addr = s.addr
-                )
+            AND NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s.result_addr)
 
         UNION ALL
 
@@ -512,21 +507,24 @@ BEGIN
         -- sub case 2: master_req is a slave_result
         -- in both cases it just left joins the crap in, that means it keeps the result address
         -- while getting new info.
+        -- In sub case 2 this leg just does the same unraveling as LEG 2 does.
         -- COALESCE because only one of those is true for one row, e.g. for one cause, e.g. for one result. 
         -- The only unhandled case is if a result came out of the fucking sky, e.g. from external sources,
         -- And that would be ignored, because thats what its supposed to do.
         -- NOTE : All required results with unclear origin are ignored. 
 
-        SELECT COALESCE(s2.addr, m.addr)
+        SELECT COALESCE(s2.addr, s3.addr)
         FROM slaves s1
             INNER JOIN backward_walk ON s1.addr = backward_walk.nodes
             INNER JOIN master_req mr ON mr.master_addr = s1.master_addr
             LEFT JOIN slaves s2 ON mr.req_addr = s2.result_addr
-            LEFT JOIN masters m ON mr.req_adr = m.result_addr
-        WHERE COALESCE(s2.addr, m.addr) IS NOT NULL
+            LEFT JOIN masters m ON mr.req_addr = m.result_addr
+            JOIN slaves s3 ON s.master_addr = m.addr
+        WHERE COALESCE(s2.addr, s3.addr) IS NOT NULL
             AND NOT EXISTS(
                 SELECT req_addr FROM slave_req WHERE slave_addr = backward_walk.nodes
             )
+            AND NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s3.result_addr)
 
     ) SELECT array_agg(nodes) INTO v_nodes_list FROM backward_walk;
 

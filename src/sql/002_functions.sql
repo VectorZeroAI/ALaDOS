@@ -475,13 +475,21 @@ BEGIN
 
         UNION
 
-        -- RECURSE, uses backward_walk.nodes as those are the previous results.
+        -- RECURSE, uses backward_walk.nodes as those are the previous results
+        -- just gets the requirements of a node.
         SELECT s.addr
         FROM slave_req sr
             JOIN slaves s ON s.result_addr = sr.req_addr
         WHERE sr.slave_addr = backward_walk.nodes
 
         UNION ALL
+        
+
+        -- LEG 2, EDGE CASE "req_addr is a master_result"
+        -- Only executed for those that arent slave results.
+        -- Goes to the master, and grabs its slaves.
+        -- Grabs only the slaves of the master that are not required anywhere,
+        -- for it to then naturally continue downwards
 
         SELECT s.addr
         FROM slave_req sr
@@ -496,6 +504,18 @@ BEGIN
                 )
 
         UNION ALL
+
+        -- LEG 3, the edge case of "No requirements left of slaves"
+        -- Executed only for slaves that have no requirements.
+        -- Has 2 cases inside of it melded together for performance.
+        -- sub case 1: master_req is a master_result
+        -- sub case 2: master_req is a slave_result
+        -- in both cases it just left joins the crap in, that means it keeps the result address
+        -- while getting new info.
+        -- COALESCE because only one of those is true for one row, e.g. for one cause, e.g. for one result. 
+        -- The only unhandled case is if a result came out of the fucking sky, e.g. from external sources,
+        -- And that would be ignored, because thats what its supposed to do.
+        -- NOTE : All required results with unclear origin are ignored. 
 
         SELECT COALESCE(s2.addr, m.addr)
         FROM slaves s1

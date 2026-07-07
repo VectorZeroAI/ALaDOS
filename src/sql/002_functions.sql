@@ -478,9 +478,36 @@ BEGIN
         -- RECURSE, uses backward_walk.nodes as those are the previous results.
         SELECT s.addr
         FROM slave_req sr
-            JOIN slaves s ON sr.req_addr = s.result_addr
+            JOIN slaves s ON s.result_addr = sr.req_addr
         WHERE sr.slave_addr = backward_walk.nodes
-        
+
+        UNION ALL
+
+        SELECT s.addr
+        FROM slave_req sr
+            INNER JOIN masters m ON m.result_addr = sr.req_addr
+            INNER JOIN slaves s ON s.master_addr = m.addr
+        WHERE sr.slave_addr = backward_walk.nodes
+            AND NOT EXISTS(
+                SELECT sr.req_addr
+                FROM slave_req sr
+                    INNER JOIN slaves s1 ON s.result_addr = sr.req_addr
+                WHERE s1.addr = s.addr
+                )
+
+        UNION ALL
+
+        SELECT COALESCE(s2.addr, m.addr)
+        FROM slaves s1
+            INNER JOIN backward_walk ON s1.addr = backward_walk.nodes
+            INNER JOIN master_req mr ON mr.master_addr = s1.master_addr
+            LEFT JOIN slaves s2 ON mr.req_addr = s2.result_addr
+            LEFT JOIN masters m ON mr.req_adr = m.result_addr
+        WHERE COALESCE(s2.addr, m.addr) IS NOT NULL
+            AND NOT EXISTS(
+                SELECT req_addr FROM slave_req WHERE slave_addr = backward_walk.nodes
+            )
+
     ) SELECT array_agg(nodes) INTO v_nodes_list FROM backward_walk;
 
     RETURN v_nodes_list;

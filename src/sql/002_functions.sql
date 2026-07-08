@@ -459,7 +459,7 @@ BEGIN
             JOIN slaves s ON s.addr = forward_walk.nodes
         WHERE sr.req_addr = s.result_addr
 
-        UNION ALL
+        UNION
         
         -- LEG 2:
         -- Case 2: result required by master
@@ -477,7 +477,7 @@ BEGIN
             WHERE slave_addr = s2.addr
         )
 
-        UNION ALL
+        UNION
         
         -- LEG 3:
         -- Case 3: No more slaves, in the master, try to jump through master result
@@ -491,14 +491,11 @@ BEGIN
         FROM slaves s
             JOIN forward_walk ON forward_walk.nodes = s.addr
             JOIN masters m ON s.master_addr = m.addr
-            LEFT JOIN slave_req sr ON m.result_addr = slave_req.req_addr
+            LEFT JOIN slave_req sr ON m.result_addr = sr.req_addr
             LEFT JOIN master_req mr ON m.result_addr = mr.req_addr
             JOIN slaves s2 ON mr.master_addr = s2.master_addr
         WHERE NOT EXISTS (
-            SELECT 1
-            FROM slaves s
-                JOIN forward_walk ON s.addr = forward_walk.nodes
-                JOIN slave_req sr ON s.result_addr = sr.req_addr
+            SELECT 1 FROM slave_req WHERE req_addr = s.result_addr
         ) AND NOT EXISTS (
             SELECT 1
             FROM slave_req sr2

@@ -3,8 +3,7 @@ CREATE OR REPLACE FUNCTION position_placeholder()
     DECLARE
         max_pos NUMERIC;
     BEGIN
-        SELECT MAX(position) INTO max_pos FROM vector_ops;
-        NEW.position := COALESCE(max_pos, 0) + 100;
+        NEW.position := nextval('vector_ops_position')
     RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;

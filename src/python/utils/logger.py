@@ -6,7 +6,7 @@ import threading
 import time
 import json
 
-_log_conn = conn_factory()
+global _log_conn
 
 _logger_queue = Uqueue[dict]()
 
@@ -45,5 +45,8 @@ def _logger_thread() -> None:
 
 
 def startup():
+    global _log_conn
+    _log_conn = conn_factory()
+
     threading.Thread(target=_logger_thread, daemon=True).start()
     print("logger thread started successfully")

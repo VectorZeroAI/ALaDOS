@@ -72,16 +72,27 @@ def resolve_context(slave_obj: SlaveObj):
                           f"Previous steps results are: [{results_context}]",
                           f"Tool headers are: {TOOL_HEADERS}",
                           f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."
-                          f"Currently claimed items are: [{claimed_items}]"
+                          f"Currently claimed items are: [{claimed_items}], please release those items when you no longer require them."
                           ])
 
 
-def resolve_claimed_items(slave_obj: SlaveObj, conn: psycopg.Connection):
+def resolve_claimed_items(slave_obj: SlaveObj, conn: psycopg.Connection) -> str:
     """
     Resolved the claimed items to remind the AI of them, so it doesnt forget it has them claimed.
     """
-    print("\n\n\n FINISH THE CLAIMED ITEMS DEVELOPER! \n\n\n")
 
+    addrs_fetch = conn.execute("""
+    SELECT addr FROM ownership WHERE owner = %s;
+                 """, (slave_obj['master_addr'],)).fetchall()
+
+    addrs = [a[0] for a in addrs_fetch]
+
+    result = "\n".join([f"You currently hold exclusive ownership over item at address {a}. " for a in addrs])
+    return result
+    
+
+
+    
 
 
 def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):

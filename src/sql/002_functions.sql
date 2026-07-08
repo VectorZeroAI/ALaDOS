@@ -295,7 +295,7 @@ BEGIN
     
     IF req_addrs IS NOT NULL THEN
         FOREACH v_addr IN ARRAY req_addrs LOOP
-            INSERT INTO master_req(master_addr, req_addr) VALUES(new_master_addr, addr);
+            INSERT INTO master_req(master_addr, req_addr) VALUES(new_master_addr, v_addr);
         END LOOP;
     END IF;
 

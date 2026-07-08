@@ -40,7 +40,7 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
     conn = conn_factory()
 
     rmt_addr = conn.execute("""
-    INSERT INTO reusable_master_templates RETURNING addr;
+    INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
                             """).fetchone()[0]
     
     slaves = conn.execute("""

@@ -21,10 +21,10 @@ CREATE OR REPLACE FUNCTION position_calculation()
         item_2_distance DOUBLE PRECISION;
     BEGIN 
         SELECT position, NEW.emb <=> emb AS distance INTO item_1_pos, item_1_distance
-        FROM vector_ops WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1;
+        FROM vector_ops WHERE emb IS NOT NULL AND addr != NEW.addr ORDER BY distance LIMIT 1;
 
         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
-        FROM vector_ops WHERE emb IS NOT NULL AND emb != NEW.emb ORDER BY distance LIMIT 1 OFFSET 1;
+        FROM vector_ops WHERE emb IS NOT NULL AND addr != NEW.addr ORDER BY distance LIMIT 1 OFFSET 1;
 
         IF item_1_pos IS NULL THEN
             NEW.position := 0;

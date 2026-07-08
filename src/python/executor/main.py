@@ -78,7 +78,7 @@ WITH ordered AS (
 )
 SELECT addr, o.rn
 FROM ordered o, anchor a
-WHERE o.rn BETWEEN a.rn + %s AND a.rn - %s;
+WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
                  """, ((window_data[0] if window_data[0] is not None else window_data[1]),
                         window_data[2],
                        window_data[3]
@@ -173,6 +173,16 @@ async def core(
                 llm_output = await execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
                 tool_calls = llm_to_json(llm_output)
                 await execute_tool_calls(tool_calls)
+                try:
+                    nonlocal instr
+                    nonlocal str_instr
+                    instr = slave_addr_to_instr(slave_addr, conn)
+                    str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+                except Exception as e:
+                    print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+                    conn.execute("""
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+                                 """, (slave_addr,))
         return llm_output_new
 
 

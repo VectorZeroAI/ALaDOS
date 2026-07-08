@@ -74,6 +74,9 @@ def embedder_thread():
                     print(f"api embedding over this method {api_object} encoutered this error: {e}. Trying the next method.")
                     continue
                 break
+            else: # This means all methods didnt work.
+                print("falling back to local embeddings as API embeddings all failed spectacularly.")
+                emb = _local_emb_call(desc_and_type[0])
 
         conn.execute("""
              UPDATE vector_ops SET emb = %s::vector(768) WHERE addr = %s;

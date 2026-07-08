@@ -443,11 +443,16 @@ DECLARE
     v_nodes_list BIGINT[];
 BEGIN
     WITH RECURSIVE forward_walk(nodes) AS (
+        -- ANCHOR
+
         SELECT slave_addr
         FROM slave_req
         WHERE req_addr = (SELECT result_addr FROM slaves WHERE addr = p_start_node)
 
         UNION
+
+        -- LEG 1: 
+        -- Base case, just go forward through the graph.
 
         SELECT slave_addr
         FROM slave_req sr
@@ -455,6 +460,11 @@ BEGIN
         WHERE sr.req_addr = s.result_addr
 
         UNION ALL
+        
+        -- LEG 2:
+        -- Case 2: result required by master
+        -- goes through master, of course only if master really required the result,
+        -- and just goes through to the first nodes of the master.
 
         SELECT s2.addr
         FROM slaves s
@@ -469,6 +479,14 @@ BEGIN
 
         UNION ALL
         
+        -- LEG 3:
+        -- Case 3: No more slaves, in the master, try to jump through master result
+        -- Checks if no more slaves present in the graph, and if yes,
+        -- then it goes to masters result, and then checks through master result, and looks if anyone requires it.
+        -- if yes, for slave case, it just gives the slave, and for master case,
+        -- it goes into the master and selects the starting slaves of the master, and returns them,
+        -- All in a single querry. 
+
         SELECT COALESCE(sr.slave_addr, s2.addr)
         FROM slaves s
             JOIN forward_walk ON forward_walk.nodes = s.addr

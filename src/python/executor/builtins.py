@@ -587,7 +587,8 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
         "cronjob_type": cronjob_type,
         "params": params,
         "run_after_or_every_s": time_between_runs
-    })
+    }, _meta['conn'])
+
     return f"Added a cronjob doing {cronjob_action}"
 
 

@@ -2,6 +2,7 @@
 
 import time
 from typing import Literal, TypedDict, Any
+import psycopg
 from psycopg.types.json import Jsonb
 
 from ...utils.conn_factory import conn_factory
@@ -15,8 +16,7 @@ class CronjobExpression(TypedDict):
     cronjob_type: Literal["loop","once"]
     run_after_or_every_s: int
 
-def parse(input_cronjob: CronjobExpression):
-    conn = conn_factory()
+def parse(input_cronjob: CronjobExpression, conn: psycopg.Connection = conn_factory()):
 
     if input_cronjob['cronjob_type'] == "once":
         conn.execute("""

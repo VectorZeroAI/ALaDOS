@@ -454,6 +454,39 @@ BEGIN
             JOIN slaves s ON s.addr = forward_walk.nodes
         WHERE sr.req_addr = s.result_addr
 
+        UNION ALL
+
+        SELECT s2.addr
+        FROM slaves s
+            JOIN forward_walk ON s.addr = forward_walk.nodes
+            JOIN master_req mr ON mr.req_addr = s.result_addr
+            JOIN slaves s2 ON s2.master_addr = mr.master_addr
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM slave_req
+            WHERE slave_addr = s2.addr
+        )
+
+        UNION ALL
+        
+        SELECT COALESCE(sr.slave_addr, s2.addr)
+        FROM slaves s
+            JOIN forward_walk ON forward_walk.nodes = s.addr
+            JOIN masters m ON s.master_addr = m.addr
+            LEFT JOIN slave_req sr ON m.result_addr = slave_req.req_addr
+            LEFT JOIN master_req mr ON m.result_addr = mr.req_addr
+            JOIN slaves s2 ON mr.master_addr = s2.master_addr
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM slaves s
+                JOIN forward_walk ON s.addr = forward_walk.nodes
+                JOIN slave_req sr ON s.result_addr = sr.req_addr
+        ) AND NOT EXISTS (
+            SELECT 1
+            FROM slave_req sr2
+                JOIN s2 ON s2.addr = sr2.slave_addr
+        )
+
     ) SELECT array_agg(nodes) INTO v_nodes_list FROM forward_walk;
 
     RETURN v_nodes_list;

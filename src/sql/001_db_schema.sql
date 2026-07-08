@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS slaves (
             ON UPDATE CASCADE 
             ON DELETE CASCADE,
     instruction TEXT NOT NULL,
-    result_addr BIGINT
+    result_addr BIGINT UNIQUE
         REFERENCES results(addr) 
             ON UPDATE CASCADE 
             ON DELETE CASCADE,

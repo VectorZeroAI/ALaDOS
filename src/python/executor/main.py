@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 
-import asyncio
-import traceback
 import re
 import threading
 import tomllib
+import traceback
 from types import FunctionType
-from typing import Any, Callable, Coroutine, Sequence
+from typing import Sequence
+
 import psycopg
 from psycopg.types.json import Jsonb
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..sceduler.main import slave_addr_to_instr
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
-from ..sceduler.goal_stack.context import HEADERS_REGISTRY
-from ..sceduler.goal_stack.context import resolve_loads
+from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
+from ..sceduler.main import slave_addr_to_instr
 from ..types import ReferenceTo
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.conn_factory import conn_factory
@@ -24,11 +23,10 @@ from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
 from ..utils.uqueue import Uqueue
 from . import embedder
-from .queue import embedder_queue
-from .queue import executor_interrupt_queue, executor_queue
-from .types import _ExecToolMetaData, Api, InstrJson, ToolCallsBlock, ToolCall
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
+from .queue import embedder_queue, executor_interrupt_queue, executor_queue
+from .types import Api, InstrJson, ToolCall, ToolCallsBlock, _ExecToolMetaData
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"

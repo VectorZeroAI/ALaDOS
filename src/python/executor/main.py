@@ -2,12 +2,10 @@
 
 import asyncio
 import traceback
-import json
 import re
 import threading
 import tomllib
 from typing import Any, Callable, Coroutine, Sequence
-from numpy import ma
 import psycopg
 from psycopg.types.json import Jsonb
 
@@ -161,6 +159,8 @@ async def core(
     conn = conn_factory()
 
     async def execute_llm_call(prompt: str) -> str:
+        nonlocal instr
+        nonlocal str_instr
         while True:
             try:
                 await checkpoint()
@@ -174,8 +174,6 @@ async def core(
                 tool_calls = llm_to_json(llm_output)
                 await execute_tool_calls(tool_calls)
                 try:
-                    nonlocal instr
-                    nonlocal str_instr
                     instr = slave_addr_to_instr(slave_addr, conn)
                     str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
                 except Exception as e:

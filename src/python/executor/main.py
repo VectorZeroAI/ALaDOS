@@ -2,12 +2,11 @@
 
 import asyncio
 import traceback
-import json
 import re
 import threading
 import tomllib
+from types import FunctionType
 from typing import Any, Callable, Coroutine, Sequence
-from numpy import ma
 import psycopg
 from psycopg.types.json import Jsonb
 
@@ -151,28 +150,28 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
 
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
-async def core(
-        checkpoint: Callable[[], Coroutine[Any, Any, None]],
+def core(
+        checkpoint: FunctionType,
         queue: Uqueue[int],
         apis: Sequence[Api],
         ) -> None:
 
-    await checkpoint()
+    checkpoint()
     conn = conn_factory()
 
-    async def execute_llm_call(prompt: str) -> str:
+    def execute_llm_call(prompt: str) -> str:
         while True:
             try:
-                await checkpoint()
-                llm_output_new = await api_calls_block(apis, checkpoint, prompt)
+                checkpoint()
+                llm_output_new = api_calls_block(apis, checkpoint, prompt)
                 if llm_output_new is not None:
                     break
                 else:
                     continue
             except ContextLimitExceededError as e:
-                llm_output = await execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
+                llm_output = execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
                 tool_calls = llm_to_json(llm_output)
-                await execute_tool_calls(tool_calls)
+                execute_tool_calls(tool_calls)
                 try:
                     nonlocal instr
                     nonlocal str_instr
@@ -186,23 +185,23 @@ async def core(
         return llm_output_new
 
 
-    async def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
+    def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
         nresults = []
         with conn.transaction():
             for ncall in tool_calls_block:
-                await checkpoint()
+                checkpoint()
                 try:
                     ntool_result = execute_tool(ncall, metadata_c)
-                except Exception as e2:
-                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e2) 
-                await checkpoint()
+                except Exception as e:
+                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e) 
+                checkpoint()
                 nresults.append(ntool_result)
         return nresults
 
     while True:
-        await checkpoint()
+        checkpoint()
 
-        slave_addr = await queue.get()
+        slave_addr = queue.get_blocking()
 
         with conn.transaction():
             try:
@@ -217,9 +216,9 @@ async def core(
                 str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
                 print(str_instr)
 
-                llm_response = await execute_llm_call(str_instr)
+                llm_response = execute_llm_call(str_instr)
                 
-                await checkpoint()
+                checkpoint()
                 log_json({
                     'type': 'llm_response',
                     'status': 'normal',
@@ -241,7 +240,7 @@ async def core(
                         }
 
                 for call in tool_calls:
-                    await checkpoint()
+                    checkpoint()
                     try:
                         with conn.transaction():
                             print(f"executing tool call {call}")
@@ -271,11 +270,11 @@ async def core(
                         PARADOX BEGIN: {e.paradox} PARADOX END.
                         AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                             """
-                        llm_response = await execute_llm_call(prompt)
+                        llm_response = execute_llm_call(prompt)
 
                         tool_calls_block = llm_to_json(llm_response)
                         with conn.transaction():
-                            nresults = await execute_tool_calls(tool_calls_block)
+                            nresults = execute_tool_calls(tool_calls_block)
                         results.extend(nresults)
 
                         continue
@@ -294,7 +293,7 @@ async def core(
                         The following is the tool call format instructions and all the valid tools:
                         """ + "\n".join(HEADERS_REGISTRY['general'])
 
-                        llm_output_new = await execute_llm_call(prompt)
+                        llm_output_new = execute_llm_call(prompt)
 
                         new_calls = llm_to_json(llm_output_new)
                         log_json({
@@ -304,7 +303,7 @@ async def core(
                             'new_tool_calls': new_calls
                         })
                         with conn.transaction():
-                            nresults = await execute_tool_calls(new_calls)
+                            nresults = execute_tool_calls(new_calls)
                         results.extend(nresults)
 
                         continue
@@ -313,7 +312,7 @@ async def core(
 
                 result_str = "\n".join([str(r) for r in results])
 
-                await checkpoint()
+                checkpoint()
                 conn.execute("""
                 SELECT new_result(%s, %s);
                              """, (result_str, instr["result_addr"]))
@@ -339,15 +338,12 @@ async def core(
                 print(f"CORE THREAD ERROR CAUGHT: {e}, with args {e.args}, and traceback {traceback.print_tb(e.__traceback__)} REVERTING TRANSACTION")
                 print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
-def core_thread(coroutine, queue: Uqueue, apis: Sequence[Api]) -> None:
-    loop = asyncio.new_event_loop()
+def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
     try:
-        loop.run_until_complete(coroutine(queue, apis)) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
+        core(queue, apis) # This is valid, because checkpoint is part of the interruptable decorator, and is injected at decoration time. 
     except Exception as e:
         print(f"CORE THREAD ERRORED OUT: {e}")
         raise RuntimeError(f"CORE THREAD FAILED: {e}") from e
-    finally:
-        loop.close()
 
 def startup() -> None:
     """ The startup function that starts up the whole executor system """
@@ -364,7 +360,7 @@ def startup() -> None:
     for _ in range(config["cores_number"]):
         threading.Thread(
                 target=core_thread,
-                args=(core, executor_queue, apis),
+                args=(executor_queue, apis),
                 daemon=True
                 ).start()
     print("startup of the executor finished")

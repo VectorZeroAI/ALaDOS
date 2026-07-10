@@ -26,6 +26,13 @@ class Uqueue(Generic[T]):
         """ Escape hatch for non-async contexts """
         return self._queue.get()
 
+    def get_nowait(self) -> T|None:
+        """ Returns an item if available, or None if no items. """
+        try:
+            return self._queue.get_nowait()
+        except queue.Empty:
+            return None
+
     def get_all(self) -> list[T]:
         items = []
         while True:

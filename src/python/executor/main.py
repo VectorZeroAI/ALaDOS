@@ -156,6 +156,9 @@ def core(
     conn = conn_factory()
 
     def execute_llm_call(prompt: str) -> str:
+        nonlocal instr
+        nonlocal str_instr
+
         while True:
             try:
                 checkpoint()
@@ -169,8 +172,6 @@ def core(
                 tool_calls = llm_to_json(llm_output)
                 execute_tool_calls(tool_calls)
                 try:
-                    nonlocal instr
-                    nonlocal str_instr
                     instr = slave_addr_to_instr(slave_addr, conn)
                     str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
                 except Exception as e:

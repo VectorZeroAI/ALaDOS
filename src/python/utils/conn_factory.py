@@ -40,11 +40,7 @@ def conn_factory() -> Conn:
     Credentials are hardcoded, because the application sets the DB up internally,
     and there is no user API available for changing it.
     """
-    conn = psycopg.connect(
-            host="127.0.0.1",
-            port=5432,
-            dbname="alados"
-            )
+    conn = conn_factory_raw()
 
     conn.autocommit = True
 
@@ -56,10 +52,17 @@ def conn_factory() -> Conn:
     return cast(Conn, conn)
 
 
-def register_all_the_composite_types(conn: Conn) -> psycopg.Connection:
+def register_all_the_composite_types(conn: psycopg.Connection) -> psycopg.Connection:
 
     rmt_node_info = composite.CompositeInfo.fetch(conn, "rmt_node")
     assert rmt_node_info is not None
     RmtNodeClass = composite.register_composite(rmt_node_info)
     conn.RmtNodeClass = RmtNodeClass # pyright: ignore
     return conn
+
+def conn_factory_raw() -> psycopg.Connection:
+    return psycopg.connect(
+            host="127.0.0.1",
+            port=5432,
+            dbname="alados"
+        )

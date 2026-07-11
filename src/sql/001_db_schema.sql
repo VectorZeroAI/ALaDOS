@@ -1,7 +1,4 @@
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS plpython3u;
-CREATE EXTENSION IF NOT EXISTS jsonb_plpython3u;
-
 
 CREATE SEQUENCE IF NOT EXISTS global_next_id;
 
@@ -10,7 +7,7 @@ CREATE SEQUENCE IF NOT EXISTS global_planner_serial;
 CREATE SEQUENCE IF NOT EXISTS global_rmt_activation_serial;
 
 CREATE SEQUENCE IF NOT EXISTS vector_ops_position
-    START WITH 0
+    START WITH 100
     INCREMENT BY 100;
 
 DO $$

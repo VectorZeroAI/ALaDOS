@@ -117,6 +117,26 @@ CREATE TABLE IF NOT EXISTS logs (
     content JSONB NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS results (
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
+        REFERENCES addrs(addr) 
+            ON UPDATE CASCADE 
+            ON DELETE CASCADE,
+    content_str TEXT,
+    ready BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT, -- Status, e.g. error, paradox, impossible instruction.
+    status_inf JSONB, -- additional unstructured information, with per status different keys and values.
+    metadata JSONB, -- for things such as type for webui sessions, and other crap
+    CONSTRAINT content_present_when_ready CHECK (
+        (ready IS FALSE AND content_str IS NULL)
+        OR 
+        (ready IS TRUE AND content_str IS NOT NULL)
+    ),
+    CONSTRAINT status_inf_not_without_status CHECK (
+        NOT(status_inf IS NOT NULL AND status IS NULL)
+    )
+);
+
 CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
         REFERENCES addrs(addr)
@@ -166,25 +186,6 @@ CREATE TABLE IF NOT EXISTS master_load (
     PRIMARY KEY (master_addr, item_addr)
 );
 
-CREATE TABLE IF NOT EXISTS results (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
-    content_str TEXT,
-    ready BOOLEAN NOT NULL DEFAULT FALSE,
-    status TEXT, -- Status, e.g. error, paradox, impossible instruction.
-    status_inf JSONB, -- additional unstructured information, with per status different keys and values.
-    metadata JSONB, -- for things such as type for webui sessions, and other crap
-    CONSTRAINT content_present_when_ready CHECK (
-        (ready IS FALSE AND content_str IS NULL)
-        OR 
-        (ready IS TRUE AND content_str IS NOT NULL)
-    ),
-    CONSTRAINT status_inf_not_without_status CHECK (
-        NOT(status_inf IS NOT NULL AND status IS NULL)
-    )
-);
 
 CREATE TABLE IF NOT EXISTS slaves (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 

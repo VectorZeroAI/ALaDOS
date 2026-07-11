@@ -360,7 +360,6 @@ def startup() -> None:
                 args=(executor_queue, apis),
                 daemon=True
                 ).start()
-    print("startup of the executor finished")
 
     embedder.setup()
     cronjob_handler.setup()

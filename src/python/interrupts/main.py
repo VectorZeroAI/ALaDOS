@@ -23,18 +23,21 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
     @interruptible(queue1, queue2)
     """
     def decorator(input_func):
-
         def checkpoint() -> None: 
             while True:
+                interrupt_found = False
                 for i in q:
                     interrupt = i.get_nowait()
                     
                     if not interrupt:
-                        break
+                        continue
 
+                    interrupt_found = True
                     interrupt_handler = INTERRUPT_TABLE.get(interrupt)
                     if interrupt_handler:
                         interrupt_handler()
+                if not interrupt_found:
+                    break
 
         
         @functools.wraps(input_func)

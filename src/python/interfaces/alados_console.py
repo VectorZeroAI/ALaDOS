@@ -8,7 +8,7 @@ from ..utils.conn_factory import Conn, conn_factory
 def add_master(instruction: list[str], conn: Conn):
     conn.execute("""
                  SELECT new_master(
-                     instruction := %s
+                     p_instruction := (%s)::TEXT
                                   )
                  """, (" ".join(instruction),))
 

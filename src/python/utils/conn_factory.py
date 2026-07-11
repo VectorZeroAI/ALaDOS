@@ -42,8 +42,6 @@ def conn_factory() -> Conn:
     """
     conn = conn_factory_raw()
 
-    conn.autocommit = True
-
     conn = register_all_the_composite_types(conn)
 
     conn.execute_fetchval = types.MethodType(_execute_fetchval, conn) # pyright: ignore
@@ -61,8 +59,9 @@ def register_all_the_composite_types(conn: psycopg.Connection) -> psycopg.Connec
     return conn
 
 def conn_factory_raw() -> psycopg.Connection:
-    return psycopg.connect(
-            host="127.0.0.1",
-            port=5432,
-            dbname="alados"
-        )
+    conn = psycopg.connect(
+        host='/data/data/com.termux/files/usr/tmp',
+        dbname='alados'
+    )
+    conn.autocommit = True
+    return conn

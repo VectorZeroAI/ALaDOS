@@ -3,7 +3,6 @@
 from typing import Callable, Sequence
 import tomllib
 import httpx
-import asyncio
 import time
 
 from ..executor.exceptions import ContextLimitExceededError
@@ -32,7 +31,7 @@ def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str)
 
     for api_spec in api_specs_sorted:
         checkpoint()
-        asyncio.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
+        time.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
         checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)

@@ -31,7 +31,7 @@ def slave_addr_to_instr(slave_addr: int, conn: Conn) -> InstrJson:
         s.scope
     FROM slaves s
         LEFT JOIN names n ON n.addr = s.result_addr
-    WHERE addr = %s;
+    WHERE s.addr = %s;
                                     """, (slave_addr,)).fetchone()
 
     assert context_prefetch is not None

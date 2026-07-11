@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from enum import Enum, auto
 import re
 import threading
 import tomllib
@@ -46,7 +47,6 @@ class ExecutionFailed(Exception):
 
     def __str__(self) -> str:
         return f"call1: {self.call1}, call2: {self.call2}, callblock 1: {self.callb1}, callblock2: {self.callb2}, error1: {self.error1}, error2: {self.error2}"
-
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
                                       conn: Conn,
@@ -143,6 +143,100 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
 
     return tool_calls
 
+class Cs(Enum):
+    GET_SLAVE = auto()
+    CONTEXT_GEN = auto()
+    API_CALL = auto()
+    EXECUTE_TOOLS = auto()
+    CONTEXT_SHORTENING = auto()
+    ERROR = auto()
+
+@interruptable(executor_interrupt_queue, global_interrupt_queue)
+def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> None:
+    """
+The executor core, handles the execution of tasks.
+Interruptable to handle more prioritised tasks then the task currently being handled.
+    """
+
+    state: Cs = Cs.GET_SLAVE
+    conn = conn_factory()
+    slave_addr = -1 # NOTE : This is quite impossible but like, I dont want to use ignore again, so here you go type checker.
+    str_instr = ""
+
+    while True:
+        match state:
+            case Cs.GET_SLAVE:
+                slave_addr = queue.get_blocking()
+                state = Cs.CONTEXT_GEN
+
+            case Cs.CONTEXT_GEN:
+                try:
+                    with conn.transaction():
+                        instr = slave_addr_to_instr(slave_addr, conn)
+                except Exception as e:
+                    log_json({
+                        'type': 'core',
+                        'status': 'error',
+                        'message': str(e),
+                        'state': str(state)
+                    })
+                    conn.execute("""
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+                                 """, (slave_addr,))
+                    continue
+
+                str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+
+                state = Cs.API_CALL
+
+            case Cs.API_CALL:
+                while True:
+                    try:
+                        checkpoint()
+                        llm_output_new = api_calls_block(apis, checkpoint, str_instr)
+                        if llm_output_new is not None:
+                            break
+                        else:
+                            continue
+                    except ContextLimitExceededError as e:
+                        log_json({
+                            'type': 'core',
+                            'status': 'error',
+                            'message': str(e),
+                            'state': state
+                        })
+                        state = Cs.CONTEXT_SHORTENING
+                    except Exception as e:
+                        log_json({
+                            'type': 'core', 
+                            'status': 'fatal',
+                            'message': str(e),
+                            'state': state
+                        })
+                        state = Cs.ERROR
+
+            case Cs.EXECUTE_TOOLS:
+                pass
+
+            case Cs.CONTEXT_SHORTENING:
+                llm_output = execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
+                tool_calls = llm_to_json(llm_output)
+                execute_tool_calls(tool_calls)
+                try:
+                    instr = slave_addr_to_instr(slave_addr, conn)
+                    str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+                except Exception as e:
+                    print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+                    conn.execute("""
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+                                 """, (slave_addr,))
+
+            case Cs.ERROR:
+                pass
+
+
+
+    
 
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)

@@ -109,9 +109,9 @@ SELECT n.name, m.addr FROM masters m JOIN names n ON m.addr = n.addr WHERE n.nam
 
 
 def _create_session_sql(first_msg: str, conn: Conn):
-    session_name = conn.execute("""
+    session_name = conn.execute_fetchval("""
     SELECT create_session(%s, %s);
-                 """, (first_msg, AI_SESSION_HANDLER_PROMPT)).fetchone()[0]
+                 """, (first_msg, AI_SESSION_HANDLER_PROMPT))
 
     return session_name
 

@@ -155,9 +155,9 @@ def resolve_loads(loads_data: LoadsData) -> str:
 
     result_str: list[str] = []
     for addr in loads_data['items_addrs']:
-        table = conn.execute("""
+        table = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s 
-                     """, (addr,)).fetchone()[0]
+                     """, (addr,))
 
         match table:
             case 'knowledge':

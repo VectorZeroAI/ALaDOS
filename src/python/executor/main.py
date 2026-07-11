@@ -256,7 +256,7 @@ def core(
 
                         addrs_items: Sequence[int] = []
                         for i in n_items:
-                             addrs_items.append(conn.execute("SELECT resolve_name(%s);", (i,)).fetchone()[0])
+                             addrs_items.append(conn.execute_fetchval("SELECT resolve_name(%s);", (i,)))
 
                         prompt = f"""
                         Your task is to resolve the following paradox in the following items.

@@ -18,26 +18,26 @@ if not config_file.exists():
     raise ValueError(f"CONFIGUATION FILE {config_file} NOT FOUND !!!!")
 config = tomllib.loads(config_file.read_text())
 
-async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str) -> str|None:
+def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str) -> str|None:
     """
     The api calls block. Returns None if no API worked. Returns llm_result str if one API worked.
     """
-    await checkpoint()
+    checkpoint()
     api_specs_sorted = sorted(api_specs, key=lambda x: x['rate_limited_until'])
-    await checkpoint()
+    checkpoint()
     print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.time() for r in api_specs_sorted]}")
 
     if len(prompt) > config.get("context_limit", 40000):
         raise ContextLimitExceededError(prompt)
 
     for api_spec in api_specs_sorted:
-        await checkpoint()
-        await asyncio.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
-        await checkpoint()
+        checkpoint()
+        asyncio.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
+        checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
             print("got llm result!!!")
-            await checkpoint()
+            checkpoint()
         except httpx.HTTPStatusError as e:
             print(e, e.response, e.response.status_code)
             if e.response.status_code == 429:
@@ -46,19 +46,19 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
                         sleep_seconds = float(e.response.headers.get('Retry-After'))
                     except ValueError:
                         sleep_seconds = 5
-                    await checkpoint()
+                    checkpoint()
                     with api_spec['lock']:
                         api_spec['rate_limited_until'] = time.time() + min(sleep_seconds, 60)
                         api_spec['consecutive_ratelimits'] += 1
                     continue
                 if api_spec['consecutive_ratelimits'] == 0:
-                    await checkpoint()
+                    checkpoint()
                     with api_spec['lock']:
                         api_spec['rate_limited_until'] = time.time() + 5
                         api_spec['consecutive_ratelimits'] += 1
                     continue
                 else:
-                    await checkpoint()
+                    checkpoint()
                     with api_spec['lock']:
                         api_spec['rate_limited_until'] = time.time() + (5 * api_spec['consecutive_ratelimits'])
                         api_spec['consecutive_ratelimits'] += 1
@@ -69,11 +69,11 @@ async def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt
             with api_spec['lock']:
                 api_spec['consecutive_ratelimits'] = 0
                 api_spec['rate_limited_until'] = 0
-            await checkpoint()
+            checkpoint()
             break
     else:
 
-        await checkpoint()
+        checkpoint()
         for _ in range(config['cores_number']):
             global_interrupt_queue.put('WAIT')
             log_json({

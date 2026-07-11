@@ -189,7 +189,7 @@ def core(
                 try:
                     ntool_result = execute_tool(ncall, metadata_c)
                 except Exception as e:
-                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e) 
+                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e) 
                 checkpoint()
                 nresults.append(ntool_result)
         return nresults

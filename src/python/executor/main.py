@@ -146,9 +146,9 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
 class Cs(Enum):
     GET_SLAVE = auto()
     CONTEXT_GEN = auto()
-    API_CALL = auto()
-    EXECUTE_TOOLS = auto()
+    EXECUTE = auto()
     CONTEXT_SHORTENING = auto()
+    PARADOX = auto()
     ERROR = auto()
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
@@ -156,12 +156,71 @@ def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> N
     """
 The executor core, handles the execution of tasks.
 Interruptable to handle more prioritised tasks then the task currently being handled.
+
+Architecture of states:
+    1. GET_SLAVE
+    2. CONTEXT_GEN
+    3. PREPARE (API calls and getting of tool calls) 
+    4. EXECUTE (only executes tool calls)
+    5. PARADOX
+    6. ERROR
+    7. CONTEXT_SHORTENING
+    8. FINISH (Write the result)
+
+Transitions:
+    1 -> 2 -> 3 -> 4 -> 8
+    3 -> 7 -> 4 -> 3
+    4 -> 5 -> 4
+    1 -> 6
+    2 -> 6
+    3 -> 6
+    4 -> 6
+    5 -> 6
+    7 -> 6
+    8 -> 6
+
+    NOT YET DONE
+
     """
 
     state: Cs = Cs.GET_SLAVE
-    conn = conn_factory()
-    slave_addr = -1 # NOTE : This is quite impossible but like, I dont want to use ignore again, so here you go type checker.
-    str_instr = ""
+    conn: Conn = conn_factory()
+    slave_addr: int = -1 # NOTE : This is quite impossible but like, I dont want to use ignore again, so here you go type checker.
+    error_count: int = 0
+    original_tool_calls_amount: int = 0
+    instr: InstrJson
+    str_instr: str = ""
+    results: list[str] = []
+
+    metadata_c: _ExecToolMetaData
+    
+    def llm_call(prompt: str) -> str:
+        nonlocal state
+
+        while True:
+            try:
+                checkpoint()
+                llm_output_new = api_calls_block(apis, checkpoint, prompt)
+                if llm_output_new is not None:
+                    return llm_output_new
+                else:
+                    continue
+            except ContextLimitExceededError as e:
+                log_json({
+                    'type': 'core',
+                    'status': 'error',
+                    'message': str(e),
+                    'state': state
+                })
+                state = Cs.CONTEXT_SHORTENING
+            except Exception as e:
+                log_json({
+                    'type': 'core', 
+                    'status': 'fatal',
+                    'message': str(e),
+                    'state': state
+                })
+                state = Cs.ERROR
 
     while True:
         match state:
@@ -176,50 +235,124 @@ Interruptable to handle more prioritised tasks then the task currently being han
                 except Exception as e:
                     log_json({
                         'type': 'core',
-                        'status': 'error',
+                        'status': 'fatal',
                         'message': str(e),
                         'state': str(state)
                     })
-                    conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
-                                 """, (slave_addr,))
+
+                    state = Cs.ERROR
                     continue
+
 
                 str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
 
-                state = Cs.API_CALL
+                state = Cs.EXECUTE
 
-            case Cs.API_CALL:
-                while True:
-                    try:
+
+            case Cs.EXECUTE:
+                try:
+                    llm_out = llm_call(str_instr)
+                except Exception as e:
+                    log_json({
+                        'type': 'core',
+                        'status': 'fatal',
+                        'message': str(e),
+                        'state': state
+                    })
+                    state = Cs.ERROR
+                    continue
+
+                try:
+                    tool_calls = llm_to_json(llm_out)
+                except ValueError:
+                    log_json({
+                        'type': 'core',
+                        'status': 'error',
+                        'message': str(e),
+                        'state': state
+                    })
+                    tool_calls = fix_llm_response(instr, llm_out)
+
+                metadata_c: _ExecToolMetaData = {
+                        'conn': conn,
+                        'master_id': instr['master_addr'],
+                        '_embedder_queue': Uqueue[ReferenceTo](),
+                        'slave_id': slave_addr,
+                        'context_limit': config.get('context_limit', 40000)
+                        }
+                
+                original_tool_calls_amount = len(tool_calls)
+
+                with conn.transaction():
+                    for i, call in enumerate(tool_calls):
                         checkpoint()
-                        llm_output_new = api_calls_block(apis, checkpoint, str_instr)
-                        if llm_output_new is not None:
-                            break
-                        else:
+                        try:
+                            with conn.transaction():
+                                results.append(execute_tool(call, metadata_c))
+
+                        except ParadoxDetected as e:
+                            paradox_e: ParadoxDetected = e
+                            Cs.PARADOX
                             continue
-                    except ContextLimitExceededError as e:
-                        log_json({
-                            'type': 'core',
-                            'status': 'error',
-                            'message': str(e),
-                            'state': state
-                        })
-                        state = Cs.CONTEXT_SHORTENING
-                    except Exception as e:
-                        log_json({
-                            'type': 'core', 
-                            'status': 'fatal',
-                            'message': str(e),
-                            'state': state
-                        })
-                        state = Cs.ERROR
 
-            case Cs.EXECUTE_TOOLS:
-                pass
+                        except Exception as e:
+                            log_json({
+                                'type': 'core',
+                                'subtype': 'tool',
+                                'status': 'error',
+                                'message': str(e),
+                                'state': state,
+                                'action': 'attempting recovery'
+                            })
+                            error_count += 1
 
+                            if error_count > original_tool_calls_amount:
+                                log_json({
+                                    'type': 'core',
+                                    'subtype': 'tool', 
+                                    'status': 'fatal',
+                                    'message': 'Recursive tool call errors detected!'
+                                })
+                                state = Cs.ERROR
+                                continue
+
+                            prompt = f"""The following tool call failed for the following reason: {call}, {e}
+                            Your task is to figure out what went wrong there, and create a working tool call.
+                            Here is what it attempted to do "{instr['instruction']}".
+                            The following is the tool call format instructions and all the valid tools:
+                            """ + "\n".join(HEADERS_REGISTRY['general'])
+
+                            n_llm_out = llm_call(prompt)
+                            try:
+                                n_tool_calls = llm_to_json(n_llm_out)
+                            except ValueError:
+                                log_json({
+                                    'type': 'core',
+                                    'status': 'error',
+                                    'message': str(e),
+                                    'state': state
+                                })
+                                n_tool_calls = fix_llm_response(instr, n_llm_out)
+                            for j, ntc in enumerate(n_tool_calls, 1):
+                                tool_calls.insert(i+j, ntc) # NOTE : This inserts the new tool calls in, wich is way better then repeating all the mashienery of execution.
+
+
+                result_str = "\n".join(results)
+
+                checkpoint()
+
+                conn.execute("""
+                SELECT new_result(%s, %s);
+                             """, (result_str, instr["result_addr"]))
+
+                items = metadata_c['_embedder_queue'].get_all()
+                for i in items:
+                    embedder_queue.put(i)
+                state = Cs.CONTEXT_SHORTENING # FIXME : REMOVE THIS AFTER FINALLY GETTING CONTEXT SHORTENING DONE. 
+                                                # TYPE CHECKERS HATE ME BTW
+                
             case Cs.CONTEXT_SHORTENING:
-                llm_output = execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
+                llm_output = llm_call(prepare_context_shortening_prompt(e, conn, instr))
                 tool_calls = llm_to_json(llm_output)
                 execute_tool_calls(tool_calls)
                 try:
@@ -231,8 +364,51 @@ Interruptable to handle more prioritised tasks then the task currently being han
             UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
                                  """, (slave_addr,))
 
+                
+
+                    state = Cs.PARADOX # FIXME : REMOVE THIS AFTER FINALLY GETTING CONTEXT SHORTENING DONE. 
+                                        # TYPE CHECKERS HATE ME BTW
+
+
+            case Cs.PARADOX:
+                # TODO : When reusable master templates are implemented
+                # Turn this into a reusable master template
+                # With all the required logic for a robust paradox resolver.
+                items = list(paradox_e.items)
+                n_items =  []
+                for i in reversed(items):
+                    if isinstance(i, str):
+                        n_items.append(i)
+                        items.remove(i)
+
+                assert items is list[int]
+
+                addrs_items: list[int] = items
+                for i in n_items:
+                     addrs_items.append(conn.execute_fetchval("SELECT resolve_name(%s);", (i,)))
+
+                prompt = f"""
+                Your task is to resolve the following paradox in the following items.
+                Your task is to resolve the following paradox in the following items.
+                Your task is to resolve the following paradox in the following items.
+                ITEMS: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
+                PARADOX: {e.paradox} PARADOX END.
+                AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
+                    """
+                llm_response = llm_call(prompt)
+
+                tool_calls_block = llm_to_json(llm_response)
+                with conn.transaction():
+                    nresults = execute_tool_calls(tool_calls_block)
+                results.extend(nresults)
+
+                continue
+
             case Cs.ERROR:
-                pass
+                with conn.transaction():
+                    conn.execute("""
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+                                 """, (slave_addr,))
 
 
 

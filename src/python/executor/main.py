@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import re
 import threading
 import tomllib
@@ -7,7 +6,6 @@ import traceback
 from types import FunctionType
 from typing import Sequence
 
-import psycopg
 from psycopg.types.json import Jsonb
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
@@ -18,7 +16,7 @@ from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
 from ..sceduler.main import slave_addr_to_instr
 from ..types import ReferenceTo
 from ..utils.config_dir_resolver import config_dir_resolver
-from ..utils.conn_factory import conn_factory
+from ..utils.conn_factory import Conn, conn_factory
 from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
 from ..utils.uqueue import Uqueue
@@ -51,7 +49,7 @@ class ExecutionFailed(Exception):
 
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
-                                      conn: psycopg.Connection,
+                                      conn: Conn,
                                       instr: InstrJson) -> str:
     """ Prepares the special prompt that would make the LLM get it all done correctly. """
 

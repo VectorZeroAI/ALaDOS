@@ -22,6 +22,7 @@ import os
 import sys
 import pytest
 import psycopg
+from python.utils.conn_factory import Conn
 
 # ---------------------------------------------------------------------------
 # Make src/ importable
@@ -129,14 +130,14 @@ def clean_db(db: psycopg.Connection):
 # Seed helpers
 # ---------------------------------------------------------------------------
 
-def new_addr(conn: psycopg.Connection) -> int:
+def new_addr(conn: Conn) -> int:
     return conn.execute("SELECT new_addr()").fetchone()[0]
 
 
 _ZERO_EMB = "[" + ",".join(["0"] * 384) + "]"
 
 
-def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
+def insert_knowledge(conn: Conn, name: str, content: str,
                      description: str, position: int = 10) -> int:
     addr = conn.execute(
         "INSERT INTO knowledge (content, description, position, emb) VALUES (%s,%s,%s,%s::vector) RETURNING addr",
@@ -146,7 +147,7 @@ def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
     return addr
 
 
-def insert_executable(conn: psycopg.Connection, name: str, header: str,
+def insert_executable(conn: Conn, name: str, header: str,
                        body: str, description: str, position: int = 20) -> int:
     addr = conn.execute(
         "INSERT INTO executables (header, body, description, position, emb) VALUES (%s,%s,%s,%s,%s::vector) RETURNING addr",
@@ -156,20 +157,20 @@ def insert_executable(conn: psycopg.Connection, name: str, header: str,
     return addr
 
 
-def insert_master(conn: psycopg.Connection) -> int:
+def insert_master(conn: Conn) -> int:
     return conn.execute(
         "INSERT INTO masters DEFAULT VALUES RETURNING addr"
     ).fetchone()[0]
 
 
-def insert_result(conn: psycopg.Connection, content: str = "", ready: bool = False) -> int:
+def insert_result(conn: Conn, content: str = "", ready: bool = False) -> int:
     return conn.execute(
         "INSERT INTO results (content_str, ready) VALUES (%s,%s) RETURNING addr",
         (content, ready)
     ).fetchone()[0]
 
 
-def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
+def insert_slave(conn: Conn, master_addr: int, name: str,
                  instruction: str, result_addr: int,
                  result_name: str, requires: list[int] | None = None) -> int:
     requires = requires or []
@@ -179,7 +180,7 @@ def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
     ).fetchone()[0]
 
 
-def insert_log(conn: psycopg.Connection, name: str, action: str,
+def insert_log(conn: Conn, name: str, action: str,
                created_by: str) -> int:
     addr = conn.execute(
         "INSERT INTO logs (action, created_by) VALUES (%s,%s) RETURNING addr",

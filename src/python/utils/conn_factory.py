@@ -56,7 +56,7 @@ def conn_factory() -> Conn:
     return cast(Conn, conn)
 
 
-def register_all_the_composite_types(conn: psycopg.Connection) -> psycopg.Connection:
+def register_all_the_composite_types(conn: Conn) -> psycopg.Connection:
 
     rmt_node_info = composite.CompositeInfo.fetch(conn, "rmt_node")
     assert rmt_node_info is not None

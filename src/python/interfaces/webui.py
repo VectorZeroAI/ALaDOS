@@ -7,12 +7,15 @@ Architecture is simple:
     websocket for new events. 
     
 """
-from typing import TypeAlias
-from flask import Flask, Response, render_template_string, request, jsonify
-from psycopg import sql
-from ..utils.conn_factory import conn_factory
-import psycopg
+
 from pathlib import Path
+from typing import TypeAlias
+
+import psycopg
+from flask import Flask, Response, jsonify, render_template_string, request
+from psycopg import sql
+
+from ..utils.conn_factory import Conn, conn_factory
 
 ai_msg: TypeAlias = str
 h_msg: TypeAlias = str
@@ -99,13 +102,13 @@ def stream_ai_responses(session_name: str):
     )
 
 
-def _get_session_names_and_ids(conn: psycopg.Connection):
+def _get_session_names_and_ids(conn: Conn):
     return conn.execute("""
 SELECT n.name, m.addr FROM masters m JOIN names n ON m.addr = n.addr WHERE n.name LIKE 'session_%'
                         """).fetchall()
 
 
-def _create_session_sql(first_msg: str, conn: psycopg.Connection):
+def _create_session_sql(first_msg: str, conn: Conn):
     session_name = conn.execute("""
     SELECT create_session(%s, %s);
                  """, (first_msg, AI_SESSION_HANDLER_PROMPT)).fetchone()[0]
@@ -113,7 +116,7 @@ def _create_session_sql(first_msg: str, conn: psycopg.Connection):
     return session_name
 
 
-def _get_messages(session_name: str, conn: psycopg.Connection):
+def _get_messages(session_name: str, conn: Conn):
 
     messages_array = conn.execute("""
     SELECT turn, human_msg, ai_msg FROM get_messages(%s);
@@ -122,7 +125,7 @@ def _get_messages(session_name: str, conn: psycopg.Connection):
     return messages_array
 
 
-def _submit_human_message(msg: str, session_name: str, conn: psycopg.Connection):
+def _submit_human_message(msg: str, session_name: str, conn: Conn):
 
     conn.execute("""
     SELECT submit_human_msg(%s, %s, %s);

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from typing import Literal, Sequence, TypeAlias, TypedDict, Optional, get_args
-import psycopg
+from typing import Literal, Optional, Sequence, TypeAlias, TypedDict, get_args
+
 from pydantic import JsonValue
+
+from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
 
 JsonSerializable: TypeAlias = JsonValue
@@ -44,7 +46,7 @@ ToolCallsBlock: TypeAlias = list[ToolCall]
 class _ExecToolMetaData(TypedDict):
     """ Typed dict for the metadata transfer to the executed tools. """
     master_id: int
-    conn: psycopg.Connection
+    conn: Conn 
     _embedder_queue: Uqueue
     slave_id: int
     context_limit: int

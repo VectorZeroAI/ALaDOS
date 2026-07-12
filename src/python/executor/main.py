@@ -244,11 +244,12 @@ Transitions:
             try:
                 checkpoint()
                 llm_output = api_calls_block(apis, checkpoint, str_instr)
-                if llm_output is str:
+                if llm_output is not None:
                     return (llm_output, None)
                 else:
                     continue
             except ContextLimitExceededError as e:
+                print("CONTEXT LIMIT EXCEEDED ERROR")
                 log_json({
                     'type': 'core',
                     'status': 'error',
@@ -258,26 +259,30 @@ Transitions:
                 return ('', ContextShortState(instr['slave_addr'], e, instr))
 
             except Exception as e:
+                print(f"FATAL ERROR {e}")
                 log_json({
                     'type': 'core', 
                     'status': 'fatal',
                     'message': str(e),
                     'state': state
                 })
-                return ('', ErrorState())
+                return ('', ErrorState(instr['slave_addr']))
 
     conn: Conn = conn_factory()
 
     state_queue = Uqueue[State]()
 
     def set_next_state(state: State) -> None:
+        state_queue.prepend(state)
+
+    def add_state(state: State) -> None:
         state_queue.put(state)
 
     def set_error_state(state: ErrorState) -> None:
-        state_queue.get_all()
+        state_queue.clear()
         state_queue.put(state)
 
-    set_next_state(GetSlaveState())
+    add_state(GetSlaveState())
 
     while True:
         state: State = state_queue.get()
@@ -316,6 +321,8 @@ Transitions:
                     if next_state:
                         set_next_state(next_state)
                         continue
+                    print(f"LLM OUTPUT: {llm_output}")
+
                 except Exception as e:
                     log_json({
                         'type': 'core',
@@ -436,7 +443,11 @@ Transitions:
             case ContextShortState():
                 curr = state
                 set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr))
-                set_next_state(ContextGetState(curr.instr['slave_addr']))
+                add_state(ContextGetState(curr.instr['slave_addr']))
+                """
+                This means that first it will execute the entire chain of the context shortening tool calls and API calls,
+                and then it will execute the normal path again from ContextGetState.
+                """
 
                 continue
 
@@ -470,6 +481,7 @@ Transitions:
                     """
 
                 set_next_state(ApiCallsState(prompt, curr.instr))
+                add_state(ContextGetState(curr.instr['slave_addr']))
                 continue
 
             case ErrorState():

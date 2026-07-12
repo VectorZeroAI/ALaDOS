@@ -5,7 +5,8 @@ import threading
 import tomllib
 import traceback
 from types import FunctionType
-from typing import Sequence
+from typing import Literal, Protocol, Sequence, Union
+from dataclasses import dataclass
 
 from psycopg.types.json import Jsonb
 
@@ -146,10 +147,48 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
 class Cs(Enum):
     GET_SLAVE = auto()
     CONTEXT_GEN = auto()
+    API_CALLS = auto()
     EXECUTE = auto()
     CONTEXT_SHORTENING = auto()
     PARADOX = auto()
     ERROR = auto()
+
+
+@dataclass(slots=True)
+class GetSlaveState:
+    tag: Literal[Cs.GET_SLAVE] = Cs.GET_SLAVE
+
+@dataclass(slots=True)
+class ContextGetState:
+    slave_addr: ReferenceTo
+    tag: Literal[Cs.CONTEXT_GEN] = Cs.CONTEXT_GEN
+
+@dataclass(slots=True)
+class ApiCallsState:
+    str_instr: str
+    instr: InstrJson
+    tag: Literal[Cs.API_CALLS] = Cs.API_CALLS
+
+@dataclass(slots=True)
+class ExecuteState:
+    tool_calls: ToolCallsBlock
+    tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
+
+@dataclass(slots=True)
+class ContextShortState:
+    slave_addr: ReferenceTo
+    tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
+
+@dataclass(slots=True)
+class ParadoxState:
+    paradox_e: ParadoxDetected
+    tag: Literal[Cs.PARADOX] = Cs.PARADOX
+
+@dataclass(slots=True)
+class ErrorState:
+    tag: Literal[Cs.ERROR] = Cs.ERROR
+    
+State = Union[GetSlaveState, ContextGetState, ApiCallsState, ExecuteState, ContextShortState, ParadoxState, ErrorState]
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
 def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> None:
@@ -183,8 +222,10 @@ Transitions:
 
     """
 
-    state: Cs = Cs.GET_SLAVE
     conn: Conn = conn_factory()
+
+    state: State = GetSlaveState()
+
     slave_addr: int = -1 # NOTE : This is quite impossible but like, I dont want to use ignore again, so here you go type checker.
     error_count: int = 0
     original_tool_calls_amount: int = 0
@@ -194,41 +235,14 @@ Transitions:
 
     metadata_c: _ExecToolMetaData
     
-    def llm_call(prompt: str) -> str:
-        nonlocal state
-
-        while True:
-            try:
-                checkpoint()
-                llm_output_new = api_calls_block(apis, checkpoint, prompt)
-                if llm_output_new is not None:
-                    return llm_output_new
-                else:
-                    continue
-            except ContextLimitExceededError as e:
-                log_json({
-                    'type': 'core',
-                    'status': 'error',
-                    'message': str(e),
-                    'state': state
-                })
-                state = Cs.CONTEXT_SHORTENING
-            except Exception as e:
-                log_json({
-                    'type': 'core', 
-                    'status': 'fatal',
-                    'message': str(e),
-                    'state': state
-                })
-                state = Cs.ERROR
 
     while True:
         match state:
-            case Cs.GET_SLAVE:
+            case GetSlaveState():
                 slave_addr = queue.get_blocking()
-                state = Cs.CONTEXT_GEN
+                state = ContextGetState(slave_addr)
 
-            case Cs.CONTEXT_GEN:
+            case ContextGetState():
                 try:
                     with conn.transaction():
                         instr = slave_addr_to_instr(slave_addr, conn)
@@ -240,18 +254,41 @@ Transitions:
                         'state': str(state)
                     })
 
-                    state = Cs.ERROR
+                    state = ErrorState()
                     continue
 
 
                 str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
 
-                state = Cs.EXECUTE
+                state = ApiCallsState(str_instr, instr)
 
-
-            case Cs.EXECUTE:
+            case ApiCallsState():
                 try:
-                    llm_out = llm_call(str_instr)
+                    while True:
+                        try:
+                            checkpoint()
+                            llm_output = api_calls_block(apis, checkpoint, state.str_instr)
+                            if llm_output is str:
+                                break
+                            else:
+                                continue
+                        except ContextLimitExceededError as e:
+                            log_json({
+                                'type': 'core',
+                                'status': 'error',
+                                'message': str(e),
+                                'state': state
+                            })
+                            state = ContextShortState(state.instr['slave_addr'])
+                        except Exception as e:
+                            log_json({
+                                'type': 'core', 
+                                'status': 'fatal',
+                                'message': str(e),
+                                'state': state
+                            })
+                            state = ErrorState()
+
                 except Exception as e:
                     log_json({
                         'type': 'core',
@@ -259,9 +296,13 @@ Transitions:
                         'message': str(e),
                         'state': state
                     })
-                    state = Cs.ERROR
+                    state = ErrorState()
                     continue
 
+                state = ExecuteState()
+
+
+            case ExecuteState():
                 try:
                     tool_calls = llm_to_json(llm_out)
                 except ValueError:
@@ -292,7 +333,7 @@ Transitions:
 
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
-                            Cs.PARADOX
+                            state = ParadoxState(paradox_e)
                             continue
 
                         except Exception as e:
@@ -313,7 +354,7 @@ Transitions:
                                     'status': 'fatal',
                                     'message': 'Recursive tool call errors detected!'
                                 })
-                                state = Cs.ERROR
+                                state = ErrorState()
                                 continue
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
@@ -348,10 +389,8 @@ Transitions:
                 items = metadata_c['_embedder_queue'].get_all()
                 for i in items:
                     embedder_queue.put(i)
-                state = Cs.CONTEXT_SHORTENING # FIXME : REMOVE THIS AFTER FINALLY GETTING CONTEXT SHORTENING DONE. 
-                                                # TYPE CHECKERS HATE ME BTW
-                
-            case Cs.CONTEXT_SHORTENING:
+
+            case ContextShortState():
                 llm_output = llm_call(prepare_context_shortening_prompt(e, conn, instr))
                 tool_calls = llm_to_json(llm_output)
                 execute_tool_calls(tool_calls)
@@ -364,17 +403,11 @@ Transitions:
             UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
                                  """, (slave_addr,))
 
-                
-
-                    state = Cs.PARADOX # FIXME : REMOVE THIS AFTER FINALLY GETTING CONTEXT SHORTENING DONE. 
-                                        # TYPE CHECKERS HATE ME BTW
-
-
-            case Cs.PARADOX:
+            case ParadoxState():
                 # TODO : When reusable master templates are implemented
                 # Turn this into a reusable master template
                 # With all the required logic for a robust paradox resolver.
-                items = list(paradox_e.items)
+                items = list(state.paradox_e.items)
                 n_items =  []
                 for i in reversed(items):
                     if isinstance(i, str):
@@ -392,7 +425,7 @@ Transitions:
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
                 ITEMS: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
-                PARADOX: {e.paradox} PARADOX END.
+                PARADOX: {state.paradox_e.paradox} PARADOX END.
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """
                 llm_response = llm_call(prompt)
@@ -404,7 +437,7 @@ Transitions:
 
                 continue
 
-            case Cs.ERROR:
+            case ErrorState():
                 with conn.transaction():
                     conn.execute("""
             UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
@@ -415,195 +448,195 @@ Transitions:
     
 
 
-@interruptable(executor_interrupt_queue, global_interrupt_queue)
-def core(
-        checkpoint: FunctionType,
-        queue: Uqueue[int],
-        apis: Sequence[Api],
-        ) -> None:
-
-    checkpoint()
-    conn = conn_factory()
-
-    def execute_llm_call(prompt: str) -> str:
-        nonlocal instr
-        nonlocal str_instr
-
-        while True:
-            try:
-                checkpoint()
-                llm_output_new = api_calls_block(apis, checkpoint, prompt)
-                if llm_output_new is not None:
-                    break
-                else:
-                    continue
-            except ContextLimitExceededError as e:
-                llm_output = execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
-                tool_calls = llm_to_json(llm_output)
-                execute_tool_calls(tool_calls)
-                try:
-                    instr = slave_addr_to_instr(slave_addr, conn)
-                    str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
-                except Exception as e:
-                    print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
-                    conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
-                                 """, (slave_addr,))
-        return llm_output_new
-
-
-    def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
-        nresults = []
-        with conn.transaction():
-            for ncall in tool_calls_block:
-                checkpoint()
-                try:
-                    ntool_result = execute_tool(ncall, metadata_c)
-                except Exception as e:
-                    raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e) 
-                checkpoint()
-                nresults.append(ntool_result)
-        return nresults
-
-    while True:
-        checkpoint()
-
-        slave_addr = queue.get_blocking()
-
-        with conn.transaction():
-            try:
-                instr = slave_addr_to_instr(slave_addr, conn)
-            except Exception as e:
-                print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
-                conn.execute("""
-        UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
-                             """, (slave_addr,))
-                continue
-            try:
-                str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
-                print(str_instr)
-
-                llm_response = execute_llm_call(str_instr)
-                
-                checkpoint()
-                log_json({
-                    'type': 'llm_response',
-                    'status': 'normal',
-                    'response': llm_response
-                })
-                try:
-                    tool_calls: ToolCallsBlock = llm_to_json(llm_response)
-                except ValueError:
-                    tool_calls = fix_llm_response(instr, llm_response)
-
-                results = []
-
-                metadata_c: _ExecToolMetaData = {
-                        'conn': conn,
-                        'master_id': instr['master_addr'],
-                        '_embedder_queue': Uqueue[ReferenceTo](),
-                        'slave_id': slave_addr,
-                        'context_limit': config.get('context_limit', 40000)
-                        }
-
-                for call in tool_calls:
-                    checkpoint()
-                    try:
-                        with conn.transaction():
-                            print(f"executing tool call {call}")
-                            tool_result = execute_tool(call, metadata_c)
-
-                    except ParadoxDetected as e:
-                        # TODO : When reusable master templates are implemented
-                        # Turn this into a reusable master template
-                        # With all the required logic for a robust paradox resolver.
-                        items = list(e.items)
-                        n_items =  []
-                        for i in items:
-                            if isinstance(i, str):
-                                n_items.append(i)
-                        for i in n_items:
-                            items.remove(i)
-
-                        addrs_items: Sequence[int] = []
-                        for i in n_items:
-                             addrs_items.append(conn.execute_fetchval("SELECT resolve_name(%s);", (i,)))
-
-                        prompt = f"""
-                        Your task is to resolve the following paradox in the following items.
-                        Your task is to resolve the following paradox in the following items.
-                        Your task is to resolve the following paradox in the following items.
-                        ITEMS BEGIN: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
-                        PARADOX BEGIN: {e.paradox} PARADOX END.
-                        AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
-                            """
-                        llm_response = execute_llm_call(prompt)
-
-                        tool_calls_block = llm_to_json(llm_response)
-                        with conn.transaction():
-                            nresults = execute_tool_calls(tool_calls_block)
-                        results.extend(nresults)
-
-                        continue
-
-                    except Exception as e:
-                        log_json({
-                            'type': 'tool',
-                            'status': 'error',
-                            'message': str(e),
-                            'tool': call,
-                            'metadata': metadata_c
-                        })
-                        prompt = f"""The following tool call failed for the following reason: {call}, {e}
-                        Your task is to figure out what went wrong there, and create a working tool call.
-                        Here is what it attempted to do "{instr['instruction']}".
-                        The following is the tool call format instructions and all the valid tools:
-                        """ + "\n".join(HEADERS_REGISTRY['general'])
-
-                        llm_output_new = execute_llm_call(prompt)
-
-                        new_calls = llm_to_json(llm_output_new)
-                        log_json({
-                            'type': 'tool_error_recovery',
-                            'status': 'normal',
-                            'new_llm_output': llm_output_new,
-                            'new_tool_calls': new_calls
-                        })
-                        with conn.transaction():
-                            nresults = execute_tool_calls(new_calls)
-                        results.extend(nresults)
-
-                        continue
-
-                    results.append(tool_result)
-
-                result_str = "\n".join([str(r) for r in results])
-
-                checkpoint()
-                conn.execute("""
-                SELECT new_result(%s, %s);
-                             """, (result_str, instr["result_addr"]))
-
-                items = metadata_c['_embedder_queue'].get_all()
-                for i in items:
-                    embedder_queue.put(i)
-
-            except ExecutionFailed as e:
-                with conn.transaction():
-                    conn.execute("""
-                    UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
-                                 """, (Jsonb({
-                                     'tool_call': e.call1,
-                                     'tool_call_recovery': e.call2,
-                                     'tool_calls_block': e.callb1,
-                                     'tool_calls_block_recovery': e.callb2,
-                                     'error_original': str(e.error1),
-                                     'error_from_recovery': str(e.error2)
-                                 }), instr['result_addr']))
-            
-            except Exception as e:
-                print(f"CORE THREAD ERROR CAUGHT: {e}, with args {e.args}, and traceback {traceback.print_tb(e.__traceback__)} REVERTING TRANSACTION")
-                print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
+# @interruptable(executor_interrupt_queue, global_interrupt_queue)
+# def core(
+#         checkpoint: FunctionType,
+#         queue: Uqueue[int],
+#         apis: Sequence[Api],
+#         ) -> None:
+# 
+#     checkpoint()
+#     conn = conn_factory()
+# 
+#     def execute_llm_call(prompt: str) -> str:
+#         nonlocal instr
+#         nonlocal str_instr
+# 
+#         while True:
+#             try:
+#                 checkpoint()
+#                 llm_output_new = api_calls_block(apis, checkpoint, prompt)
+#                 if llm_output_new is not None:
+#                     break
+#                 else:
+#                     continue
+#             except ContextLimitExceededError as e:
+#                 llm_output = execute_llm_call(prepare_context_shortening_prompt(e, conn, instr))
+#                 tool_calls = llm_to_json(llm_output)
+#                 execute_tool_calls(tool_calls)
+#                 try:
+#                     instr = slave_addr_to_instr(slave_addr, conn)
+#                     str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+#                 except Exception as e:
+#                     print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+#                     conn.execute("""
+#             UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+#                                  """, (slave_addr,))
+#         return llm_output_new
+# 
+# 
+#     def execute_tool_calls(tool_calls_block: ToolCallsBlock) -> list[str]:
+#         nresults = []
+#         with conn.transaction():
+#             for ncall in tool_calls_block:
+#                 checkpoint()
+#                 try:
+#                     ntool_result = execute_tool(ncall, metadata_c)
+#                 except Exception as e:
+#                     raise ExecutionFailed(str(None), call, ncall, tool_calls, new_calls, e, e) 
+#                 checkpoint()
+#                 nresults.append(ntool_result)
+#         return nresults
+# 
+#     while True:
+#         checkpoint()
+# 
+#         slave_addr = queue.get_blocking()
+# 
+#         with conn.transaction():
+#             try:
+#                 instr = slave_addr_to_instr(slave_addr, conn)
+#             except Exception as e:
+#                 print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
+#                 conn.execute("""
+#         UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+#                              """, (slave_addr,))
+#                 continue
+#             try:
+#                 str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+#                 print(str_instr)
+# 
+#                 llm_response = execute_llm_call(str_instr)
+#                 
+#                 checkpoint()
+#                 log_json({
+#                     'type': 'llm_response',
+#                     'status': 'normal',
+#                     'response': llm_response
+#                 })
+#                 try:
+#                     tool_calls: ToolCallsBlock = llm_to_json(llm_response)
+#                 except ValueError:
+#                     tool_calls = fix_llm_response(instr, llm_response)
+# 
+#                 results = []
+# 
+#                 metadata_c: _ExecToolMetaData = {
+#                         'conn': conn,
+#                         'master_id': instr['master_addr'],
+#                         '_embedder_queue': Uqueue[ReferenceTo](),
+#                         'slave_id': slave_addr,
+#                         'context_limit': config.get('context_limit', 40000)
+#                         }
+# 
+#                 for call in tool_calls:
+#                     checkpoint()
+#                     try:
+#                         with conn.transaction():
+#                             print(f"executing tool call {call}")
+#                             tool_result = execute_tool(call, metadata_c)
+# 
+#                     except ParadoxDetected as e:
+#                         # TODO : When reusable master templates are implemented
+#                         # Turn this into a reusable master template
+#                         # With all the required logic for a robust paradox resolver.
+#                         items = list(e.items)
+#                         n_items =  []
+#                         for i in items:
+#                             if isinstance(i, str):
+#                                 n_items.append(i)
+#                         for i in n_items:
+#                             items.remove(i)
+# 
+#                         addrs_items: Sequence[int] = []
+#                         for i in n_items:
+#                              addrs_items.append(conn.execute_fetchval("SELECT resolve_name(%s);", (i,)))
+# 
+#                         prompt = f"""
+#                         Your task is to resolve the following paradox in the following items.
+#                         Your task is to resolve the following paradox in the following items.
+#                         Your task is to resolve the following paradox in the following items.
+#                         ITEMS BEGIN: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
+#                         PARADOX BEGIN: {e.paradox} PARADOX END.
+#                         AVAILABLE TOOLS BEGIN: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
+#                             """
+#                         llm_response = execute_llm_call(prompt)
+# 
+#                         tool_calls_block = llm_to_json(llm_response)
+#                         with conn.transaction():
+#                             nresults = execute_tool_calls(tool_calls_block)
+#                         results.extend(nresults)
+# 
+#                         continue
+# 
+#                     except Exception as e:
+#                         log_json({
+#                             'type': 'tool',
+#                             'status': 'error',
+#                             'message': str(e),
+#                             'tool': call,
+#                             'metadata': metadata_c
+#                         })
+#                         prompt = f"""The following tool call failed for the following reason: {call}, {e}
+#                         Your task is to figure out what went wrong there, and create a working tool call.
+#                         Here is what it attempted to do "{instr['instruction']}".
+#                         The following is the tool call format instructions and all the valid tools:
+#                         """ + "\n".join(HEADERS_REGISTRY['general'])
+# 
+#                         llm_output_new = execute_llm_call(prompt)
+# 
+#                         new_calls = llm_to_json(llm_output_new)
+#                         log_json({
+#                             'type': 'tool_error_recovery',
+#                             'status': 'normal',
+#                             'new_llm_output': llm_output_new,
+#                             'new_tool_calls': new_calls
+#                         })
+#                         with conn.transaction():
+#                             nresults = execute_tool_calls(new_calls)
+#                         results.extend(nresults)
+# 
+#                         continue
+# 
+#                     results.append(tool_result)
+# 
+#                 result_str = "\n".join([str(r) for r in results])
+# 
+#                 checkpoint()
+#                 conn.execute("""
+#                 SELECT new_result(%s, %s);
+#                              """, (result_str, instr["result_addr"]))
+# 
+#                 items = metadata_c['_embedder_queue'].get_all()
+#                 for i in items:
+#                     embedder_queue.put(i)
+# 
+#             except ExecutionFailed as e:
+#                 with conn.transaction():
+#                     conn.execute("""
+#                     UPDATE results SET status = 'error', status_inf = %s WHERE addr = %s;
+#                                  """, (Jsonb({
+#                                      'tool_call': e.call1,
+#                                      'tool_call_recovery': e.call2,
+#                                      'tool_calls_block': e.callb1,
+#                                      'tool_calls_block_recovery': e.callb2,
+#                                      'error_original': str(e.error1),
+#                                      'error_from_recovery': str(e.error2)
+#                                  }), instr['result_addr']))
+#             
+#             except Exception as e:
+#                 print(f"CORE THREAD ERROR CAUGHT: {e}, with args {e.args}, and traceback {traceback.print_tb(e.__traceback__)} REVERTING TRANSACTION")
+#                 print("MOVING ON TO THE NEXT THING. PRODUCING INVALID STATE IN THE PROCESS")
 
 def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
     try:

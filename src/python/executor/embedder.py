@@ -80,7 +80,7 @@ def embedder_thread():
 
         conn.execute("""
              UPDATE vector_ops SET emb = %s::vector(768) WHERE addr = %s;
-                 """, (emb, ))
+                 """, (emb, item_addr))
 
 def _call_jina_embedding(api: Api, text: str):
     with httpx.Client(timeout=15) as client:

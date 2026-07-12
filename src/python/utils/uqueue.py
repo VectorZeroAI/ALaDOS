@@ -17,9 +17,15 @@ class Uqueue(Generic[T]):
         
     def put(self, item: T) -> None:
         """ Normal put of a queue """
-        self._queue.append(item)
-        self._item_available.notify()
-    
+        with self._item_available:
+            self._queue.append(item)
+            self._item_available.notify()
+
+    def prepend(self, item: T) -> None:
+        with self._item_available:
+            self._queue.appendleft(item)
+            self._item_available.notify()
+
     async def async_get(self) -> T:
         """ Awaitable, non-blocking to the event loop """
         loop = asyncio.get_running_loop()
@@ -28,40 +34,32 @@ class Uqueue(Generic[T]):
     def get(self) -> T:
         """ Waits for the item and gives you the item """
         with self._item_available:
-            while not self._item_available:
+            while not self._queue:
                 self._item_available.wait()
             return self._queue.popleft()
 
-    def put_priotity(self, item: T) -> None:
-        """ Puts at the start of the queue, e.g. as next item """
-        self._queue.append(item)
-        self._item_available.notify()
-
-
     def get_nowait(self) -> T|None:
         """ Returns an item if available, or None if no items. """
-        try:
-            return self._queue.popleft()
-        except IndexError:
-            return None
+        with self._item_available:
+            try:
+                return self._queue.popleft()
+            except IndexError:
+                return None
 
     def get_all(self) -> list[T]:
         items = []
-        while self._queue:
-            items.append(self._queue.popleft())
+        with self._item_available:
+            while self._queue:
+                items.append(self._queue.popleft())
         return items
-
-    def prepend(self, item: T) -> None:
-        self._queue.appendleft(item)
-        self._item_available.notify()
 
     def get_end(self) -> T:
         with self._item_available:
-            while not self._item_available:
+            while not self._queue:
                 self._item_available.wait()
             return self._queue.pop()
 
     def __len__(self) -> int:
-        return len(self._queue)
-
+        with self._item_available:
+            return len(self._queue)
 

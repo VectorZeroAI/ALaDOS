@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import threading
 from typing import TypeVar, Generic
 from collections import deque
 import asyncio
@@ -12,19 +13,30 @@ class Uqueue(Generic[T]):
     """
     def __init__(self):
         self._queue: deque[T] = deque()
+        self._item_available = threading.Condition()
         
     def put(self, item: T) -> None:
-        """ Thread-safe, callable from anywhere """
+        """ Normal put of a queue """
         self._queue.append(item)
+        self._item_available.notify()
     
     async def async_get(self) -> T:
         """ Awaitable, non-blocking to the event loop """
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._queue.popleft)
+        return await loop.run_in_executor(None, self.get)
     
     def get(self) -> T:
-        """ Escape hatch for non-async contexts """
-        return self._queue.popleft()
+        """ Waits for the item and gives you the item """
+        with self._item_available:
+            while not self._item_available:
+                self._item_available.wait()
+            return self._queue.popleft()
+
+    def put_priotity(self, item: T) -> None:
+        """ Puts at the start of the queue, e.g. as next item """
+        self._queue.append(item)
+        self._item_available.notify()
+
 
     def get_nowait(self) -> T|None:
         """ Returns an item if available, or None if no items. """
@@ -39,8 +51,15 @@ class Uqueue(Generic[T]):
             items.append(self._queue.popleft())
         return items
 
-    def put_left(self, item: T) -> None:
+    def prepend(self, item: T) -> None:
         self._queue.appendleft(item)
+        self._item_available.notify()
+
+    def get_end(self) -> T:
+        with self._item_available:
+            while not self._item_available:
+                self._item_available.wait()
+            return self._queue.pop()
 
     def __len__(self) -> int:
         return len(self._queue)

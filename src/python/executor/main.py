@@ -3,12 +3,10 @@ from enum import Enum, auto
 import re
 import threading
 import tomllib
-import traceback
 from types import FunctionType
-from typing import Literal, Protocol, Sequence, Union
+from typing import Literal, Sequence, Union
 from dataclasses import dataclass
 
-from psycopg.types.json import Jsonb
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
@@ -172,6 +170,8 @@ class ApiCallsState:
 @dataclass(slots=True)
 class ExecuteState:
     tool_calls: ToolCallsBlock
+    instr: InstrJson
+    error_count: int = 0
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
 
 @dataclass(slots=True)
@@ -222,18 +222,40 @@ Transitions:
 
     """
 
+    def call_llm(str_instr: str, instr: InstrJson):
+        nonlocal state
+
+        while True:
+            try:
+                checkpoint()
+                llm_output = api_calls_block(apis, checkpoint, str_instr)
+                if llm_output is str:
+                    return llm_output
+                else:
+                    continue
+            except ContextLimitExceededError as e:
+                log_json({
+                    'type': 'core',
+                    'status': 'error',
+                    'message': str(e),
+                    'state': str(state.tag)
+                })
+                state = ContextShortState(instr['slave_addr'])
+            except Exception as e:
+                log_json({
+                    'type': 'core', 
+                    'status': 'fatal',
+                    'message': str(e),
+                    'state': state
+                })
+                state = ErrorState()
+
+
+
+
     conn: Conn = conn_factory()
 
     state: State = GetSlaveState()
-
-    slave_addr: int = -1 # NOTE : This is quite impossible but like, I dont want to use ignore again, so here you go type checker.
-    error_count: int = 0
-    original_tool_calls_amount: int = 0
-    instr: InstrJson
-    str_instr: str = ""
-    results: list[str] = []
-
-    metadata_c: _ExecToolMetaData
     
 
     while True:
@@ -243,9 +265,10 @@ Transitions:
                 state = ContextGetState(slave_addr)
 
             case ContextGetState():
+                curr = state
                 try:
                     with conn.transaction():
-                        instr = slave_addr_to_instr(slave_addr, conn)
+                        instr = slave_addr_to_instr(curr.slave_addr, conn)
                 except Exception as e:
                     log_json({
                         'type': 'core',
@@ -263,32 +286,9 @@ Transitions:
                 state = ApiCallsState(str_instr, instr)
 
             case ApiCallsState():
+                curr = state
                 try:
-                    while True:
-                        try:
-                            checkpoint()
-                            llm_output = api_calls_block(apis, checkpoint, state.str_instr)
-                            if llm_output is str:
-                                break
-                            else:
-                                continue
-                        except ContextLimitExceededError as e:
-                            log_json({
-                                'type': 'core',
-                                'status': 'error',
-                                'message': str(e),
-                                'state': state
-                            })
-                            state = ContextShortState(state.instr['slave_addr'])
-                        except Exception as e:
-                            log_json({
-                                'type': 'core', 
-                                'status': 'fatal',
-                                'message': str(e),
-                                'state': state
-                            })
-                            state = ErrorState()
-
+                    llm_output = call_llm(curr.str_instr, curr.instr)
                 except Exception as e:
                     log_json({
                         'type': 'core',
@@ -299,33 +299,36 @@ Transitions:
                     state = ErrorState()
                     continue
 
-                state = ExecuteState()
-
-
-            case ExecuteState():
                 try:
-                    tool_calls = llm_to_json(llm_out)
-                except ValueError:
+                    tool_calls = llm_to_json(llm_output)
+                except ValueError as e:
                     log_json({
                         'type': 'core',
                         'status': 'error',
                         'message': str(e),
-                        'state': state
+                        'state': str(state.tag)
                     })
-                    tool_calls = fix_llm_response(instr, llm_out)
+                    tool_calls = fix_llm_response(curr.instr, llm_output)
 
+                state = ExecuteState(tool_calls, curr.instr)
+
+
+            case ExecuteState():
+                curr = state
                 metadata_c: _ExecToolMetaData = {
                         'conn': conn,
-                        'master_id': instr['master_addr'],
+                        'master_id': curr.instr['master_addr'],
                         '_embedder_queue': Uqueue[ReferenceTo](),
-                        'slave_id': slave_addr,
+                        'slave_id': curr.instr['slave_addr'],
                         'context_limit': config.get('context_limit', 40000)
                         }
+
+                results = []
                 
-                original_tool_calls_amount = len(tool_calls)
+                original_tool_calls_amount = len(curr.tool_calls)
 
                 with conn.transaction():
-                    for i, call in enumerate(tool_calls):
+                    for i, call in enumerate(curr.tool_calls):
                         checkpoint()
                         try:
                             with conn.transaction():
@@ -345,9 +348,9 @@ Transitions:
                                 'state': state,
                                 'action': 'attempting recovery'
                             })
-                            error_count += 1
+                            curr.error_count += 1
 
-                            if error_count > original_tool_calls_amount:
+                            if curr.error_count > original_tool_calls_amount:
                                 log_json({
                                     'type': 'core',
                                     'subtype': 'tool', 
@@ -359,11 +362,11 @@ Transitions:
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
                             Your task is to figure out what went wrong there, and create a working tool call.
-                            Here is what it attempted to do "{instr['instruction']}".
+                            Here is what it attempted to do "{curr.instr['instruction']}".
                             The following is the tool call format instructions and all the valid tools:
                             """ + "\n".join(HEADERS_REGISTRY['general'])
 
-                            n_llm_out = llm_call(prompt)
+                            n_llm_out = call_llm(prompt, curr.instr)
                             try:
                                 n_tool_calls = llm_to_json(n_llm_out)
                             except ValueError:
@@ -373,9 +376,11 @@ Transitions:
                                     'message': str(e),
                                     'state': state
                                 })
-                                n_tool_calls = fix_llm_response(instr, n_llm_out)
+                                n_tool_calls = fix_llm_response(curr.instr, n_llm_out)
                             for j, ntc in enumerate(n_tool_calls, 1):
-                                tool_calls.insert(i+j, ntc) # NOTE : This inserts the new tool calls in, wich is way better then repeating all the mashienery of execution.
+                                curr.tool_calls.insert(i+j, ntc)
+                         # NOTE : This inserts the new tool calls in,
+                         # wich is way better then repeating all the mashienery of execution.
 
 
                 result_str = "\n".join(results)
@@ -384,7 +389,7 @@ Transitions:
 
                 conn.execute("""
                 SELECT new_result(%s, %s);
-                             """, (result_str, instr["result_addr"]))
+                             """, (result_str, curr.instr["result_addr"]))
 
                 items = metadata_c['_embedder_queue'].get_all()
                 for i in items:

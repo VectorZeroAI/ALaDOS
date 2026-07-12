@@ -280,11 +280,11 @@ Transitions:
     set_next_state(GetSlaveState())
 
     while True:
-        state: State = state_queue.get_blocking()
+        state: State = state_queue.get()
 
         match state:
             case GetSlaveState():
-                slave_addr = queue.get_blocking()
+                slave_addr = queue.get()
                 set_next_state(ContextGetState(slave_addr))
 
             case ContextGetState():

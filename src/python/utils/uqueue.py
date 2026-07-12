@@ -17,12 +17,12 @@ class Uqueue(Generic[T]):
         """ Thread-safe, callable from anywhere """
         self._queue.put(item)
     
-    async def get(self) -> T:
+    async def async_get(self) -> T:
         """ Awaitable, non-blocking to the event loop """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._queue.get)
     
-    def get_blocking(self) -> T:
+    def get(self) -> T:
         """ Escape hatch for non-async contexts """
         return self._queue.get()
 

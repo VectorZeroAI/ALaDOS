@@ -53,7 +53,7 @@ def embedder_thread():
 
 
     while True:
-        item_addr = embedder_queue.get_blocking()
+        item_addr = embedder_queue.get()
 
         desc_and_type = conn.execute("""
     SELECT vp.description, vp.type FROM vector_ops vp WHERE vp.addr = %s

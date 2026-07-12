@@ -150,6 +150,7 @@ class Cs(Enum):
     CONTEXT_SHORTENING = auto()
     PARADOX = auto()
     ERROR = auto()
+    FINISH = auto()
 
 
 @dataclass(slots=True)
@@ -165,6 +166,7 @@ class ContextGetState:
 class ApiCallsState:
     str_instr: str
     instr: InstrJson
+    finish: bool = False
     tag: Literal[Cs.API_CALLS] = Cs.API_CALLS
 
 @dataclass(slots=True)
@@ -172,23 +174,36 @@ class ExecuteState:
     tool_calls: ToolCallsBlock
     instr: InstrJson
     error_count: int = 0
+    finish: bool = False
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
 
 @dataclass(slots=True)
 class ContextShortState:
     slave_addr: ReferenceTo
+    error: ContextLimitExceededError
+    instr: InstrJson
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
 
 @dataclass(slots=True)
 class ParadoxState:
     paradox_e: ParadoxDetected
+    instr: InstrJson
     tag: Literal[Cs.PARADOX] = Cs.PARADOX
 
 @dataclass(slots=True)
 class ErrorState:
+    slave_addr: ReferenceTo
     tag: Literal[Cs.ERROR] = Cs.ERROR
-    
-State = Union[GetSlaveState, ContextGetState, ApiCallsState, ExecuteState, ContextShortState, ParadoxState, ErrorState]
+
+@dataclass(slots=True)
+class FinishState:
+    results: list[str]
+    metadata_c: _ExecToolMetaData
+    instr: InstrJson
+    tag: Literal[Cs.FINISH] = Cs.FINISH
+
+
+State = Union[GetSlaveState, ContextGetState, ApiCallsState, ExecuteState, ContextShortState, ParadoxState, ErrorState, FinishState]
 
 @interruptable(executor_interrupt_queue, global_interrupt_queue)
 def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> None:
@@ -222,7 +237,7 @@ Transitions:
 
     """
 
-    def call_llm(str_instr: str, instr: InstrJson):
+    def call_llm(str_instr: str, instr: InstrJson) -> tuple[str, State|None]:
         nonlocal state
 
         while True:
@@ -230,7 +245,7 @@ Transitions:
                 checkpoint()
                 llm_output = api_calls_block(apis, checkpoint, str_instr)
                 if llm_output is str:
-                    return llm_output
+                    return (llm_output, None)
                 else:
                     continue
             except ContextLimitExceededError as e:
@@ -240,7 +255,8 @@ Transitions:
                     'message': str(e),
                     'state': str(state.tag)
                 })
-                state = ContextShortState(instr['slave_addr'])
+                return ('', ContextShortState(instr['slave_addr'], e, instr))
+
             except Exception as e:
                 log_json({
                     'type': 'core', 
@@ -248,21 +264,28 @@ Transitions:
                     'message': str(e),
                     'state': state
                 })
-                state = ErrorState()
-
-
-
+                return ('', ErrorState())
 
     conn: Conn = conn_factory()
 
-    state: State = GetSlaveState()
-    
+    state_queue = Uqueue[State]()
+
+    def set_next_state(state: State) -> None:
+        state_queue.put(state)
+
+    def set_error_state(state: ErrorState) -> None:
+        state_queue.get_all()
+        state_queue.put(state)
+
+    set_next_state(GetSlaveState())
 
     while True:
+        state: State = state_queue.get_blocking()
+
         match state:
             case GetSlaveState():
                 slave_addr = queue.get_blocking()
-                state = ContextGetState(slave_addr)
+                set_next_state(ContextGetState(slave_addr))
 
             case ContextGetState():
                 curr = state
@@ -276,19 +299,23 @@ Transitions:
                         'message': str(e),
                         'state': str(state)
                     })
+                    
 
-                    state = ErrorState()
+                    set_error_state(ErrorState(curr.slave_addr))
                     continue
 
 
                 str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
 
-                state = ApiCallsState(str_instr, instr)
+                set_next_state(ApiCallsState(str_instr, instr, finish=True))
 
             case ApiCallsState():
                 curr = state
                 try:
-                    llm_output = call_llm(curr.str_instr, curr.instr)
+                    llm_output, next_state = call_llm(curr.str_instr, curr.instr)
+                    if next_state:
+                        set_next_state(next_state)
+                        continue
                 except Exception as e:
                     log_json({
                         'type': 'core',
@@ -296,7 +323,7 @@ Transitions:
                         'message': str(e),
                         'state': state
                     })
-                    state = ErrorState()
+                    set_error_state(ErrorState(curr.instr['slave_addr']))
                     continue
 
                 try:
@@ -310,7 +337,7 @@ Transitions:
                     })
                     tool_calls = fix_llm_response(curr.instr, llm_output)
 
-                state = ExecuteState(tool_calls, curr.instr)
+                set_next_state(ExecuteState(tool_calls, curr.instr, finish=curr.finish))
 
 
             case ExecuteState():
@@ -336,7 +363,7 @@ Transitions:
 
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
-                            state = ParadoxState(paradox_e)
+                            set_next_state(ParadoxState(paradox_e, curr.instr))
                             continue
 
                         except Exception as e:
@@ -357,7 +384,7 @@ Transitions:
                                     'status': 'fatal',
                                     'message': 'Recursive tool call errors detected!'
                                 })
-                                state = ErrorState()
+                                set_error_state(ErrorState(curr.instr['slave_addr']))
                                 continue
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
@@ -366,7 +393,10 @@ Transitions:
                             The following is the tool call format instructions and all the valid tools:
                             """ + "\n".join(HEADERS_REGISTRY['general'])
 
-                            n_llm_out = call_llm(prompt, curr.instr)
+                            n_llm_out, n_state = call_llm(prompt, curr.instr)
+                            if n_state:
+                                state = n_state
+                                continue
                             try:
                                 n_tool_calls = llm_to_json(n_llm_out)
                             except ValueError:
@@ -382,8 +412,14 @@ Transitions:
                          # NOTE : This inserts the new tool calls in,
                          # wich is way better then repeating all the mashienery of execution.
 
+                if curr.finish:
+                    set_next_state(FinishState(results, metadata_c, curr.instr))
 
-                result_str = "\n".join(results)
+
+            case FinishState():
+                curr = state
+
+                result_str = "\n".join(curr.results)
 
                 checkpoint()
 
@@ -391,28 +427,27 @@ Transitions:
                 SELECT new_result(%s, %s);
                              """, (result_str, curr.instr["result_addr"]))
 
-                items = metadata_c['_embedder_queue'].get_all()
+                items = curr.metadata_c['_embedder_queue'].get_all()
                 for i in items:
                     embedder_queue.put(i)
 
+                set_next_state(GetSlaveState())
+
             case ContextShortState():
-                llm_output = llm_call(prepare_context_shortening_prompt(e, conn, instr))
-                tool_calls = llm_to_json(llm_output)
-                execute_tool_calls(tool_calls)
-                try:
-                    instr = slave_addr_to_instr(slave_addr, conn)
-                    str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
-                except Exception as e:
-                    print(f"CONTEXT RESOLUTION FAILED {e}. Making the slave failed and moving on.")
-                    conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
-                                 """, (slave_addr,))
+                curr = state
+                set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr))
+                set_next_state(ContextGetState(curr.instr['slave_addr']))
+
+                continue
 
             case ParadoxState():
                 # TODO : When reusable master templates are implemented
                 # Turn this into a reusable master template
                 # With all the required logic for a robust paradox resolver.
-                items = list(state.paradox_e.items)
+
+                curr = state
+
+                items = list(curr.paradox_e.items)
                 n_items =  []
                 for i in reversed(items):
                     if isinstance(i, str):
@@ -430,23 +465,19 @@ Transitions:
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
                 ITEMS: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
-                PARADOX: {state.paradox_e.paradox} PARADOX END.
+                PARADOX: {curr.paradox_e.paradox} PARADOX END.
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """
-                llm_response = llm_call(prompt)
 
-                tool_calls_block = llm_to_json(llm_response)
-                with conn.transaction():
-                    nresults = execute_tool_calls(tool_calls_block)
-                results.extend(nresults)
-
+                set_next_state(ApiCallsState(prompt, curr.instr))
                 continue
 
             case ErrorState():
+                curr = state
                 with conn.transaction():
                     conn.execute("""
             UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
-                                 """, (slave_addr,))
+                                 """, (curr.slave_addr,))
 
 
 

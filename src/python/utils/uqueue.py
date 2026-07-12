@@ -54,6 +54,7 @@ class Uqueue(Generic[T]):
         return items
 
     def get_end(self) -> T:
+        """ Get the last item """
         with self._item_available:
             while not self._queue:
                 self._item_available.wait()
@@ -63,3 +64,6 @@ class Uqueue(Generic[T]):
         with self._item_available:
             return len(self._queue)
 
+    def clear(self) -> None:
+        """ Clears the queue without returning anything """
+        self.get_all()

@@ -28,7 +28,8 @@ config_method = "local" if config_file_emb.get("api") is None else config_file_e
 
 embedder = SentenceTransformer("msmarco-distilbert-base-tas-b")
 
-apis = load_apis_from_text(config_file_emb_f.read_text())
+if config_file_emb_f.exists():
+    apis = load_apis_from_text(config_file_emb_f.read_text())
 
 def setup():
     """ Set up the embeder threads """

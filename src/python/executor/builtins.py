@@ -44,7 +44,7 @@ def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
 
 
 @register_tool("K.create", ['general', 'context'])
-def k_create(content: str, description: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
@@ -72,11 +72,11 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
 
 
 @register_tool("K.edit", ['general', 'context'])
-def k_edit(addr: int|None = None,
-           name: str|None = None,
-           description_change: search_and_replace_block = None,
-           content_change: search_and_replace_block = None,
-           _meta: _ExecToolMetaData = None
+def k_edit(description_change: search_and_replace_block,
+           content_change: search_and_replace_block,
+           _meta: _ExecToolMetaData,
+           addr: int|None = None,
+           name: str|None = None
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 
@@ -133,9 +133,9 @@ def k_edit(addr: int|None = None,
 
 
 @register_tool("K.read", ['general', 'context'])
-def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def k_read(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None) -> ActionConfirmation:
     """ Reads a knowledge item by address or by name. One of those must be provided. """
-    conn = _meta.con'
+    conn = _meta.conn
     if addr is not None:
         result = conn.execute_fetchval("""
         SELECT content FROM knowledge WHERE addr = %s
@@ -152,7 +152,7 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
 
 
 @register_tool("tool.execute", ['general'])
-def execute_tool_builtin_func(addr: int|None = None, name: str|None = None, timeout: int = 10, kwargs: dict|None=None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def execute_tool_builtin_func(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by address or name.
     One of addr or name must not be None. 
@@ -187,7 +187,7 @@ def execute_tool_builtin_func(addr: int|None = None, name: str|None = None, time
 
 
 @register_tool("tool.create", ['context'])
-def create_tool(description: str, header: str, body: str, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
     """
     Creates a python tool, to be executed with tool.execute .
     Description is a short description used for searching and identifing the tool.
@@ -218,12 +218,13 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
 
 
 @register_tool("tool.edit", ['general', 'context'])
-def edit_tool(name: str|None = None,
-              addr: int|None = None,
+def edit_tool(_meta: _ExecToolMetaData,
+              name: str|None = None,
+              addr: int|None = None, 
               header_change: search_and_replace_block|None = None,
               body_change: search_and_replace_block|None = None,
               new_description: str|None = None,
-              _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+              ) -> ActionConfirmation:
     """
     Edit a tool.
     You must provide either header_change or body_change or new_description.
@@ -324,12 +325,13 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
 
 @register_tool("goal.add_slave", ['general', 'task'])
 def add_slave(instruction: str,
+              _meta: _ExecToolMetaData,
               slave_type: SlaveScope = 'general',
               required_results_names: list[str]|None=None,
               required_results_addrs: list[int]|None=None,
               slave_name: str|None=None,
-              result_name: str|None=None,
-              _meta: _ExecToolMetaData=None) -> ActionConfirmation:
+              result_name: str|None=None
+              ) -> ActionConfirmation:
     """
     Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
@@ -504,7 +506,7 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
 
 
 @register_tool("context.window.change_size", ['context'])
-def context_window_size_change(left: int = 0, right: int = 0, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: int = 0) -> ActionConfirmation:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
@@ -598,7 +600,7 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
 
 
 @register_tool("context.unload_item", ["context"])
-def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def unload_item(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None) -> ActionConfirmation:
     """
     addr or name must be given.
     """
@@ -623,7 +625,7 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
 
 
 @register_tool("web.search_fulltext", ['general', 'communication'])
-def web_searcher_function_fulltext(query: str, websites_amount: int = 3, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> ActionConfirmation:
     """
     Websearch function that returns fulltext of top websites_amount webpages texts. Needs analysis through a second slave for actual anaswer. 
     """
@@ -668,7 +670,11 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
 
 
 @register_tool("web.get", ['general', 'communication'])
-def web_request(url: str, timeout: int = 10, return_type: Literal['extracted', 'raw'] = 'extracted', headers: Sequence[Mapping[str, str]] = [], _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def web_request(url: str,
+                _meta: _ExecToolMetaData,
+                timeout: int = 10,
+                return_type: Literal['extracted', 'raw'] = 'extracted',
+                headers: Sequence[Mapping[str, str]] = []) -> ActionConfirmation:
     """
     The GET http request onto the url.
     return_type specifies what you wish to get from that url.
@@ -684,11 +690,12 @@ def web_request(url: str, timeout: int = 10, return_type: Literal['extracted', '
 
 @register_tool('web.post', ['communication'])
 def web_post(url: str,
+             _meta: _ExecToolMetaData,
              timeout: int = 10,
              return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
              headers: Sequence[Mapping[str, str]] = [],
-             payload: str = "",
-             _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+             payload: str = ""
+             ) -> ActionConfirmation:
     """
     The POST http request onto a url.
     return type specifies what you wish to get from that url. 
@@ -709,10 +716,10 @@ def web_post(url: str,
 
 @register_tool("goal.add_master", ['task'])
 def create_master(instruction: str,
+                  _meta: _ExecToolMetaData,
                   required_names: Sequence[str]|None = None,
                   required_addrs: Sequence[int]|None = None,
-                  result_name: str|None = None,
-                  _meta: _ExecToolMetaData = None
+                  result_name: str|None = None
                   ) -> ActionConfirmation:
     """
     Creates a master goal, with the given instruction, depending on given results, outputting a given results name.
@@ -732,7 +739,7 @@ def create_master(instruction: str,
     return f"Created master with instruction '{instruction}'."
 
 @register_tool("claim_item", ['general', 'context'])
-def claim_item(item_addr: int|None = None, item_name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def claim_item(_meta: _ExecToolMetaData, item_addr: int|None = None, item_name: str|None = None) -> ActionConfirmation:
     """
     Before editing an item, you must claim it with this function.
     You can only suply item_name OR item_addr, not both, not none.

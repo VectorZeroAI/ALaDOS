@@ -70,4 +70,4 @@ def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!
-from . import builtins as __owuergnsorjgnborn  # noqa
+from . import builtins as __owuergnsorjgnborn  # noqa # pyright: ignore

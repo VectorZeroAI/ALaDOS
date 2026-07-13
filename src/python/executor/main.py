@@ -182,13 +182,12 @@ Transitions:
 
             case ExecuteState():
                 curr = state
-                metadata_c: _ExecToolMetaData = {
-                        'conn': conn,
-                        'master_id': curr.instr.master_addr,
-                        '_embedder_queue': Uqueue[ReferenceTo](),
-                        'slave_id': curr.instr.slave_addr,
-                        'context_limit': config.get('context_limit', 40000)
-                        }
+                metadata_c = _ExecToolMetaData(
+                        curr.instr.master_addr,
+                        conn,
+                        curr.instr.slave_addr,
+                        config.get('context_limit', 40000)
+                    )
 
                 results = []
                 
@@ -267,7 +266,7 @@ Transitions:
                 SELECT new_result(%s, %s);
                              """, (result_str, curr.instr.result_addr))
 
-                items = curr.metadata_c['_embedder_queue'].get_all()
+                items = curr.metadata_c._embedder_queue.get_all()
                 for i in items:
                     embedder_queue.put(i)
 

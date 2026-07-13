@@ -3,6 +3,7 @@ import threading
 import tomllib
 from types import FunctionType
 from typing import Sequence
+import traceback
 
 from ..utils.config_handlers import load_apis_from_text
 
@@ -92,12 +93,13 @@ Transitions:
                 })
                 return ('', ContextShortState(instr.slave_addr, e, instr))
             except Exception as e:
-                print(f"FATAL ERROR {e}")
+                print(f"FATAL ERROR {e}, TRACEBACK: {traceback.format_exception(e)}")
                 log_json({
                     'type': 'core', 
                     'status': 'fatal',
                     'message': str(e),
-                    'state': state
+                    'state': str(state.tag),
+                    'traceback': traceback.format_exception(e)
                 })
                 return ('', ErrorState(instr.slave_addr))
 
@@ -161,7 +163,7 @@ Transitions:
                         'type': 'core',
                         'status': 'fatal',
                         'message': str(e),
-                        'state': state
+                        'state': str(state.tag)
                     })
                     set_error_state(ErrorState(curr.instr.slave_addr))
                     continue
@@ -211,7 +213,7 @@ Transitions:
                                 'subtype': 'tool',
                                 'status': 'error',
                                 'message': str(e),
-                                'state': state,
+                                'state': str(state.tag),
                                 'action': 'attempting recovery'
                             })
                             curr.error_count += 1
@@ -221,7 +223,8 @@ Transitions:
                                     'type': 'core',
                                     'subtype': 'tool', 
                                     'status': 'fatal',
-                                    'message': 'Recursive tool call errors detected!'
+                                    'message': 'Recursive tool call errors detected!',
+                                    'state': str(state.tag)
                                 })
                                 set_error_state(ErrorState(curr.instr.slave_addr))
                                 continue
@@ -243,7 +246,7 @@ Transitions:
                                     'type': 'core',
                                     'status': 'error',
                                     'message': str(e),
-                                    'state': state
+                                    'state': str(state.tag)
                                 })
                                 n_tool_calls = fix_llm_response(curr.instr, n_llm_out)
                             for j, ntc in enumerate(n_tool_calls, 1):
@@ -320,7 +323,7 @@ Transitions:
                 curr = state
                 with conn.transaction():
                     conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND s.addr = s.result_addr;
                                  """, (curr.slave_addr,))
                 set_next_state(GetSlaveState())
 

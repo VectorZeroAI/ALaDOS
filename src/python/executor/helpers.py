@@ -4,7 +4,7 @@ import re
 
 from ..utils.conn_factory import Conn
 from .exceptions import ContextLimitExceededError
-from .types import Instr, ToolCallsBlock
+from .types import Instr, ToolCallsBlock, ToolCall
 from .execute_tool import HEADERS_REGISTRY
 from ..utils.logger import log_json
 
@@ -79,16 +79,18 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     })
     match slave.scope:
         case '_webui':
-            tool_calls: ToolCallsBlock = [{
-                    "tool": "user.send_message", 
-                    "args": {"text": llm_without_think}
-                }]
+            tool_calls: ToolCallsBlock = [
+                ToolCall("user.send_message",
+                         {"text": llm_without_think}
+                     )
+            ]
 
         case _:
-            tool_calls: ToolCallsBlock = [{
-                    "tool": "result.write", 
-                    "args": {"text": llm_without_think}
-                }]
+            tool_calls: ToolCallsBlock = [
+                ToolCall("result.write",
+                         {"text": llm_without_think}
+                     )
+            ]
 
     log_json({
         'type': 'llm_response',

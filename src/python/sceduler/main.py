@@ -44,7 +44,12 @@ def slave_addr_to_instr(slave_addr: int, conn: Conn) -> Instr:
         "scope": context_prefetch[4]
         })
 
-    instruction = Instr(context_prefetch[3], context_prefetch[0], context_prefetch[1], context, slave_addr, context_prefetch[4])
+    instruction = Instr(result_addr=context_prefetch[3],
+                        instruction=context_prefetch[0],
+                        master_addr=context_prefetch[1],
+                        context=context,
+                        slave_addr=slave_addr,
+                        scope=context_prefetch[4])
     return instruction
 
 def new_slave_listener_thread():

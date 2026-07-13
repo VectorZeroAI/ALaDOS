@@ -44,10 +44,11 @@ class Instr:
     slave_addr: int
     scope: SlaveScope_
 
-class ToolCall(TypedDict, total=False):
+@dataclass(slots=True)
+class ToolCall:
     """ A single tool call, directly executable """
     tool: str
-    args: Optional[dict[str, JsonSerializable]]
+    args: dict[str, JsonSerializable] = field(default_factory=dict[str, JsonSerializable])
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 

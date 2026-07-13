@@ -6,7 +6,6 @@ from ..executor.types import ToolCallsBlock
 from pydantic import TypeAdapter, ValidationError
 import json
 import re
-from pathlib import Path
 
 def extract_json_block(text: str) -> str:
     """

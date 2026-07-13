@@ -4,6 +4,7 @@ import tomllib
 from types import FunctionType
 from typing import Sequence
 
+
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
@@ -20,7 +21,17 @@ from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
 from .queue import embedder_queue, executor_interrupt_queue, executor_queue
-from .types import Api, InstrJson, _ExecToolMetaData
+from .types import (Api, InstrJson,
+                    _ExecToolMetaData,
+                    ApiCallsState,
+                    ContextGetState,
+                    ContextShortState,
+                    GetSlaveState,
+                    ErrorState,
+                    ExecuteState,
+                    FinishState,
+                    ParadoxState, 
+                    State)
 from .helpers import prepare_context_shortening_prompt, fix_llm_response
 
 config_dir = config_dir_resolver()
@@ -44,6 +55,7 @@ Architecture of states:
     7. CONTEXT_SHORTENING
     8. FINISH (Write the result)
 
+<<<<<<< HEAD
 Transitions:
     1 -> 2 -> 3 -> 4 -> 8
     3 -> 7 -> 4 -> 3
@@ -78,7 +90,6 @@ Transitions:
                     'state': str(state.tag)
                 })
                 return ('', ContextShortState(instr['slave_addr'], e, instr))
-
             except Exception as e:
                 print(f"FATAL ERROR {e}")
                 log_json({

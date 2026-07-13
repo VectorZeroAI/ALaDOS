@@ -35,7 +35,7 @@ class Api:
     max_tokens: int = 8000
 
 @dataclass(slots=True)
-class InstrJson:
+class Instr:
     """ An atomic instruction json representation """
     result_addr: int
     instruction: str
@@ -82,14 +82,14 @@ class ContextGetState:
 @dataclass(slots=True)
 class ApiCallsState:
     str_instr: str
-    instr: InstrJson
+    instr: Instr
     finish: bool = False
     tag: Literal[Cs.API_CALLS] = Cs.API_CALLS
 
 @dataclass(slots=True)
 class ExecuteState:
     tool_calls: ToolCallsBlock
-    instr: InstrJson
+    instr: Instr
     error_count: int = 0
     finish: bool = False
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
@@ -98,13 +98,13 @@ class ExecuteState:
 class ContextShortState:
     slave_addr: ReferenceTo
     error: ContextLimitExceededError
-    instr: InstrJson
+    instr: Instr
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
 
 @dataclass(slots=True)
 class ParadoxState:
     paradox_e: ParadoxDetected
-    instr: InstrJson
+    instr: Instr
     tag: Literal[Cs.PARADOX] = Cs.PARADOX
 
 @dataclass(slots=True)
@@ -116,7 +116,7 @@ class ErrorState:
 class FinishState:
     results: list[str]
     metadata_c: _ExecToolMetaData
-    instr: InstrJson
+    instr: Instr
     tag: Literal[Cs.FINISH] = Cs.FINISH
 
 State = Union[GetSlaveState, ContextGetState, ApiCallsState, ExecuteState, ContextShortState, ParadoxState, ErrorState, FinishState]

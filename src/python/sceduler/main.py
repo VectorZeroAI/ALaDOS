@@ -14,13 +14,13 @@ import threading
 from pydantic import TypeAdapter
 
 from ..executor.queue import executor_queue
-from ..executor.types import InstrJson
+from ..executor.types import Instr
 from ..utils.conn_factory import Conn, conn_factory
 from .goal_stack.context import resolve_context
 
-instr_json_validator = TypeAdapter(InstrJson)
+instr_json_validator = TypeAdapter(Instr)
 
-def slave_addr_to_instr(slave_addr: int, conn: Conn) -> InstrJson:
+def slave_addr_to_instr(slave_addr: int, conn: Conn) -> Instr:
     """ resolves a slave addr to an instruction object, including context resolution. """
 
     context_prefetch = conn.execute("""
@@ -44,7 +44,7 @@ def slave_addr_to_instr(slave_addr: int, conn: Conn) -> InstrJson:
         "scope": context_prefetch[4]
         })
 
-    instruction = InstrJson(context_prefetch[3], context_prefetch[0], context_prefetch[1], context, slave_addr, context_prefetch[4])
+    instruction = Instr(context_prefetch[3], context_prefetch[0], context_prefetch[1], context, slave_addr, context_prefetch[4])
     return instruction
 
 def new_slave_listener_thread():

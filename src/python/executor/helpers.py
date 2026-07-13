@@ -4,13 +4,13 @@ import re
 
 from ..utils.conn_factory import Conn
 from .exceptions import ContextLimitExceededError
-from .types import InstrJson, ToolCallsBlock
+from .types import Instr, ToolCallsBlock
 from .execute_tool import HEADERS_REGISTRY
 from ..utils.logger import log_json
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
                                       conn: Conn,
-                                      instr: InstrJson) -> str:
+                                      instr: Instr) -> str:
     """ Prepares the special prompt that would make the LLM get it all done correctly. """
 
     window_data = conn.execute("""
@@ -69,7 +69,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
     return context
 
-def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
+def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
     log_json({
         'type': 'llm_response',

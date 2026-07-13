@@ -22,7 +22,7 @@ from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
 from .queue import embedder_queue, executor_interrupt_queue, executor_queue
-from .types import (Api, InstrJson,
+from .types import (Api, Instr,
                     _ExecToolMetaData,
                     ApiCallsState,
                     ContextGetState,
@@ -73,7 +73,7 @@ Transitions:
 
     """
 
-    def call_llm(str_instr: str, instr: InstrJson) -> tuple[str, State|None]:
+    def call_llm(str_instr: str, instr: Instr) -> tuple[str, State|None]:
         while True:
             try:
                 checkpoint()

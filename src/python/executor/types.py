@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Literal, Optional, Sequence, TypeAlias, TypedDict, get_args, Union
+from typing import Literal, Sequence, TypeAlias, get_args, Union
 from enum import Enum, auto
 from dataclasses import dataclass, field
 

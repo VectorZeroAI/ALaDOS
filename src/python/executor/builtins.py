@@ -763,7 +763,7 @@ def claim_item(_meta: _ExecToolMetaData, item_addr: int|None = None, item_name: 
 
 
 @register_tool("release_item", ['general', 'context'])
-def release_item(item_addr: int|None = None, item_name: str|None = None, _meta: _ExecToolMetaData = None) -> ActionConfirmation:
+def release_item(_meta: _ExecToolMetaData, item_addr: int|None = None, item_name: str|None = None) -> ActionConfirmation:
     """
     Function to release the file, allowing others to edit the file, after you no longer need the item. Make sure to release the items you claimed when you no longer need them.
     """

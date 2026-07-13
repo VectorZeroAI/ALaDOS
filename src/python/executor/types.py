@@ -34,7 +34,8 @@ class Api:
     claude: bool = False
     max_tokens: int = 8000
 
-class InstrJson(TypedDict):
+@dataclass(slots=True)
+class InstrJson:
     """ An atomic instruction json representation """
     result_addr: int
     instruction: str

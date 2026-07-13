@@ -4,7 +4,7 @@ import tomllib
 from types import FunctionType
 from typing import Sequence
 
-from ..utils.config_handlers import load_apis, load_apis_from_text
+from ..utils.config_handlers import load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
@@ -90,7 +90,7 @@ Transitions:
                     'message': str(e),
                     'state': str(state.tag)
                 })
-                return ('', ContextShortState(instr['slave_addr'], e, instr))
+                return ('', ContextShortState(instr.slave_addr, e, instr))
             except Exception as e:
                 print(f"FATAL ERROR {e}")
                 log_json({
@@ -99,7 +99,7 @@ Transitions:
                     'message': str(e),
                     'state': state
                 })
-                return ('', ErrorState(instr['slave_addr']))
+                return ('', ErrorState(instr.slave_addr))
 
     conn: Conn = conn_factory()
 
@@ -143,7 +143,7 @@ Transitions:
                     continue
 
 
-                str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+                str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
                 set_next_state(ApiCallsState(str_instr, instr, finish=True))
 
@@ -163,7 +163,7 @@ Transitions:
                         'message': str(e),
                         'state': state
                     })
-                    set_error_state(ErrorState(curr.instr['slave_addr']))
+                    set_error_state(ErrorState(curr.instr.slave_addr))
                     continue
 
                 try:
@@ -184,9 +184,9 @@ Transitions:
                 curr = state
                 metadata_c: _ExecToolMetaData = {
                         'conn': conn,
-                        'master_id': curr.instr['master_addr'],
+                        'master_id': curr.instr.master_addr,
                         '_embedder_queue': Uqueue[ReferenceTo](),
-                        'slave_id': curr.instr['slave_addr'],
+                        'slave_id': curr.instr.slave_addr,
                         'context_limit': config.get('context_limit', 40000)
                         }
 
@@ -224,12 +224,12 @@ Transitions:
                                     'status': 'fatal',
                                     'message': 'Recursive tool call errors detected!'
                                 })
-                                set_error_state(ErrorState(curr.instr['slave_addr']))
+                                set_error_state(ErrorState(curr.instr.slave_addr))
                                 continue
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
                             Your task is to figure out what went wrong there, and create a working tool call.
-                            Here is what it attempted to do "{curr.instr['instruction']}".
+                            Here is what it attempted to do "{curr.instr.instruction}".
                             The following is the tool call format instructions and all the valid tools:
                             """ + "\n".join(HEADERS_REGISTRY['general'])
 
@@ -265,7 +265,7 @@ Transitions:
 
                 conn.execute("""
                 SELECT new_result(%s, %s);
-                             """, (result_str, curr.instr["result_addr"]))
+                             """, (result_str, curr.instr.result_addr))
 
                 items = curr.metadata_c['_embedder_queue'].get_all()
                 for i in items:
@@ -276,7 +276,7 @@ Transitions:
             case ContextShortState():
                 curr = state
                 set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr))
-                add_state(ContextGetState(curr.instr['slave_addr']))
+                add_state(ContextGetState(curr.instr.slave_addr))
                 """
                 This means that first it will execute the entire chain of the context shortening tool calls and API calls,
                 and then it will execute the normal path again from ContextGetState.
@@ -314,7 +314,7 @@ Transitions:
                     """
 
                 set_next_state(ApiCallsState(prompt, curr.instr))
-                add_state(ContextGetState(curr.instr['slave_addr']))
+                add_state(ContextGetState(curr.instr.slave_addr))
                 continue
 
             case ErrorState():

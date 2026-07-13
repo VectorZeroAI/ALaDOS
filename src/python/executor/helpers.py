@@ -19,7 +19,7 @@ FROM slaves s
     INNER JOIN masters m ON s.master_addr = m.addr
     INNER JOIN master_context mc ON mc.addr = m.addr
 WHERE s.addr = %s
-                          """, (instr['slave_addr'],)).fetchone()
+                          """, (instr.slave_addr,)).fetchone()
     assert window_data is not None
 
     viewing_window_shortened = conn.execute("""
@@ -47,7 +47,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
     loaded_items_addr = conn.execute("""SELECT ml.item_addr, vp.description
                                      FROM master_load ml 
                                         LEFT JOIN vector_ops vp ON ml.item_addr = vp.addr 
-                                     WHERE master_addr = %s""", (instr['master_addr'],)).fetchall()
+                                     WHERE master_addr = %s""", (instr.master_addr,)).fetchall()
 
     loaded_items_list_str = []
     for i in loaded_items_addr:
@@ -77,7 +77,7 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
         'reason': 'did not find any tool calls.',
         'llm_without_think': llm_without_think
     })
-    match slave['scope']:
+    match slave.scope:
         case '_webui':
             tool_calls: ToolCallsBlock = [{
                     "tool": "user.send_message", 

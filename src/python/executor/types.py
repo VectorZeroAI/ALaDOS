@@ -57,9 +57,9 @@ class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
     master_id: int
     conn: Conn 
-    _embedder_queue: Uqueue
     slave_id: int
     context_limit: int
+    _embedder_queue: Uqueue = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):
     GET_SLAVE = auto()

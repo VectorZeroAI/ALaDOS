@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import threading
 from typing import Literal, Optional, Sequence, TypeAlias, TypedDict, get_args, Union
 from enum import Enum, auto
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import JsonValue
 
@@ -21,15 +22,17 @@ SlaveScope_: TypeAlias = Literal[*get_args(SlaveScope), '_webui'] # pyright: ign
 
 SlaveScopesList: TypeAlias = Sequence[SlaveScope]
 
-class Api(TypedDict, total=False):
+@dataclass(slots=True)
+class Api:
     """ An api endpoint representation """
     url: str
     key: str
     model: str
-    claude: Optional[bool]
-    max_tokens: Optional[int]
-    rate_limited_until: float
-    consecutive_ratelimits: int
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    rate_limited_until: Optional[float] = 0.0
+    consecutive_ratelimits: Optional[int] = 0
+    claude: Optional[bool] = False
+    max_tokens: Optional[int] = 8000
 
 class InstrJson(TypedDict):
     """ An atomic instruction json representation """

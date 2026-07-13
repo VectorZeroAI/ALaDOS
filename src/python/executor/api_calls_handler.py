@@ -22,16 +22,16 @@ def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str)
     The api calls block. Returns None if no API worked. Returns llm_result str if one API worked.
     """
     checkpoint()
-    api_specs_sorted = sorted(api_specs, key=lambda x: x['rate_limited_until'])
+    api_specs_sorted = sorted(api_specs, key=lambda x: x.rate_limited_until)
     checkpoint()
-    print(f"API CALLS BLOCK, current ratelimits are: {[r['rate_limited_until'] - time.time() for r in api_specs_sorted]}")
+    print(f"API CALLS BLOCK, current ratelimits are: {[r.rate_limited_until - time.time() for r in api_specs_sorted]}")
 
     if len(prompt) > config.get("context_limit", 40000):
         raise ContextLimitExceededError(prompt)
 
     for api_spec in api_specs_sorted:
         checkpoint()
-        time.sleep(max(api_spec['rate_limited_until'] - time.time(), 0))
+        time.sleep(max(api_spec.rate_limited_until - time.time(), 0))
         checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
@@ -39,35 +39,35 @@ def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str)
             checkpoint()
         except httpx.HTTPStatusError as e:
             print(e, e.response, e.response.status_code)
-            if e.response.status_code == 429:
+            if e.response.status_code in (429, 402):
                 if e.response.headers.get('Retry-After') is not None:
                     try:
                         sleep_seconds = float(e.response.headers.get('Retry-After'))
                     except ValueError:
                         sleep_seconds = 5
                     checkpoint()
-                    with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.time() + min(sleep_seconds, 60)
-                        api_spec['consecutive_ratelimits'] += 1
+                    with api_spec.lock:
+                        api_spec.rate_limited_until = time.time() + min(sleep_seconds, 60)
+                        api_spec.consecutive_ratelimits += 1
                     continue
-                if api_spec['consecutive_ratelimits'] == 0:
+                if api_spec.consecutive_ratelimits == 0:
                     checkpoint()
-                    with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.time() + 5
-                        api_spec['consecutive_ratelimits'] += 1
+                    with api_spec.lock:
+                        api_spec.rate_limited_until = time.time() + 5
+                        api_spec.consecutive_ratelimits += 1
                     continue
                 else:
                     checkpoint()
-                    with api_spec['lock']:
-                        api_spec['rate_limited_until'] = time.time() + (5 * api_spec['consecutive_ratelimits'])
-                        api_spec['consecutive_ratelimits'] += 1
+                    with api_spec.lock:
+                        api_spec.rate_limited_until = time.time() + (5 * api_spec.consecutive_ratelimits)
+                        api_spec.consecutive_ratelimits += 1
                     continue
             elif e.response.status_code == 413:
                 raise ContextLimitExceededError(prompt)
         else:
-            with api_spec['lock']:
-                api_spec['consecutive_ratelimits'] = 0
-                api_spec['rate_limited_until'] = 0
+            with api_spec.lock:
+                api_spec.consecutive_ratelimits = 0
+                api_spec.rate_limited_until = 0
             checkpoint()
             break
     else:
@@ -108,28 +108,28 @@ def _llm_call_openai(api: Api, prompt: str) -> str:
     """
     with httpx.Client(timeout=60) as client:
         response = client.post(
-                url=api["url"],
-                headers={"Authorization": f"Bearer {api["key"]}"},
+                url=api.url,
+                headers={"Authorization": f"Bearer {api.key}"},
                 json={
-                    "model": api["model"],
+                    "model": api.model,
                     "messages": [
                             {
                                 "role": "system", 
                                 "content": prompt
                             }
                         ],
-                    "max_completion_tokens": api.get('max_tokens', 4096),
-                    "max_tokens": api.get('max_tokens', 4096)
+                    "max_completion_tokens": api.max_tokens,
+                    "max_tokens": api.max_tokens
                     }
                 )
         response.raise_for_status()
         try:
             return response.json()["choices"][0]["message"]["content"]
         except KeyError:
-            print(response.json())
+            raise RuntimeError(f"The API did not return expected schema. Gotten: {response.json()} EXPECTED: ['choices'][0]['message']['content']")
 
 def llm_call(api: Api, prompt: str) -> str:
-    if api.get('claude'):
+    if api.claude:
         return _llm_call_claude(api, prompt)
     else:
         return _llm_call_openai(api, prompt)

@@ -4,7 +4,7 @@ import tomllib
 from types import FunctionType
 from typing import Sequence
 
-from ..utils.config_handlers import load_apis
+from ..utils.config_handlers import load_apis, load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
@@ -335,7 +335,7 @@ def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
 def startup() -> None:
     """ The startup function that starts up the whole executor system """
     
-    apis = load_apis(config_file)
+    apis = load_apis_from_text(config_file.read_text())
 
     for _ in range(config["cores_number"]):
         threading.Thread(

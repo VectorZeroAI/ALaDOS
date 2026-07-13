@@ -27,7 +27,7 @@ def test_conn():
         port=5432,
         dbname="alados_test"
     )
-    conn.autocommit = False
+    conn.autocommit = False # FIXME : This is no longer the same as true conn factory, so this needs to be fixed to stay in check with conn_factory.
     yield conn
     conn.close()
 

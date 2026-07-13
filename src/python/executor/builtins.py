@@ -53,7 +53,7 @@ def k_create(content: str, description: str, name: str|None = None, _meta: _Exec
     """
     conn = _meta['conn']
 
-    addr = conn.execute("SELECT new_addr();").fetchone()[0] # pyright: ignore
+    addr = conn.execute_fetchval("SELECT new_addr();")
 
     conn.execute("""
     INSERT INTO knowledge (addr, content) VALUES (%s, %s);
@@ -85,14 +85,14 @@ def k_edit(addr: int|None = None,
     """
     conn = _meta['conn']
     if addr is None:
-        addr = conn.execute("""
+        addr = conn.execute_fetchval("""
         SELECT resolve_name(%s);
-                     """, (name,)).fetchone()[0]
+                     """, (name,))
 
     try:
-        flag_ownership = conn.execute("""
+        flag_ownership = conn.execute_fetchval("""
         SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                      """, (addr, _meta['master_id'])).fetchone()[0]
+                                      """, (addr, _meta['master_id']))
     except TypeError:
         flag_ownership = False
 
@@ -100,9 +100,9 @@ def k_edit(addr: int|None = None,
         raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
 
     if content_change is not None:
-        old_k = conn.execute("""
+        old_k = conn.execute_fetchval("""
         SELECT content FROM knowledge WHERE addr = %s;
-                             """, (addr,)).fetchone()[0]
+                             """, (addr,))
         assert isinstance(old_k, str)
         search, replace = _sr_block_parser(content_change)
         new_k = old_k.replace(search, replace)
@@ -111,9 +111,9 @@ def k_edit(addr: int|None = None,
                      """, (new_k, addr))
 
     if description_change is not None:
-        old_d = conn.execute("""
+        old_d = conn.execute_fetchval("""
         SELECT description FROM vector_ops WHERE addr = %s;
-                             """, (addr,)).fetchone()[0]
+                             """, (addr,))
         assert isinstance(old_d, str)
         search, replace = _sr_block_parser(description_change)
         new_d = old_d.replace(search, replace)
@@ -134,13 +134,13 @@ def k_read(addr: int|None = None, name: str|None = None, _meta: _ExecToolMetaDat
     """ Reads a knowledge item by address or by name. One of those must be provided. """
     conn = _meta['conn']
     if addr is not None:
-        result = conn.execute("""
+        result = conn.execute_fetchval("""
         SELECT content FROM knowledge WHERE addr = %s
-                     """, (addr,)).fetchone()[0]
+                     """, (addr,))
     elif name is not None:
-        result = conn.execute("""
+        result = conn.execute_fetchval("""
         SELECT k.content FROM knowledge k JOIN names n ON k.addr = n.addr WHERE n.name = %s
-                     """, (name,)).fetchone()[0]
+                     """, (name,))
     else:
         raise TypeError("ADDR OR NAME MUST BE PROVIDED")
 
@@ -159,15 +159,15 @@ def execute_tool_builtin_func(addr: int|None = None, name: str|None = None, time
     """
     conn = _meta['conn']
     if name is not None:
-        v_addr = conn.execute("""
+        v_addr = conn.execute_fetchval("""
         SELECT resolve_name(%s);
-                              """, (name,)).fetchone()[0]
+                              """, (name,))
     else:
         v_addr = addr
 
-    body = conn.execute("""
+    body = conn.execute_fetchval("""
     SELECT body FROM executables WHERE addr = %s;
-                        """, (v_addr,)).fetchone()[0]
+                        """, (v_addr,))
     env = os.environ.copy()
     env["KWARGS"] = json.dumps(kwargs)
     
@@ -194,9 +194,9 @@ def create_tool(description: str, header: str, body: str, name: str|None = None,
     Include estimated runtime, because execution longer then 10 seconds will time out without finishing unless timeout is specified to be longer.
     """
     conn = _meta['conn']
-    addr = conn.execute("""
+    addr = conn.execute_fetchval("""
     SELECT new_addr();
-                        """).fetchone()[0]
+                        """)
     conn.execute("""
     INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
                  """, (header, body, addr,))
@@ -247,16 +247,16 @@ def edit_tool(name: str|None = None,
 
     if addr is None:
         try:
-            addr = conn.execute("""
+            addr = conn.execute_fetchval("""
             SELECT resolve_name(%s);
-                                """, (name,)).fetchone()[0] # pyright: ignore
+                                """, (name,))
         except Exception as e:
             raise Exception("Name most likely does not exist.") from e
 
     try:
-        flag_ownership = conn.execute("""
+        flag_ownership = conn.execute_fetchval("""
         SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                  """, (addr, _meta['master_id'])).fetchone()[0] # pyright: ignore
+                                  """, (addr, _meta['master_id']))
     except TypeError:
         flag_ownership = False
 
@@ -271,9 +271,9 @@ def edit_tool(name: str|None = None,
         _meta['_embedder_queue'].put(addr)
 
     if body_change is not None:
-        old_body = conn.execute("""
+        old_body = conn.execute_fetchval("""
         SELECT body FROM executables WHERE addr = %s;
-                                """, (addr,)).fetchone()[0] # pyright: ignore
+                                """, (addr,))
         assert isinstance(old_body, str)
 
         search, replacement = _sr_block_parser(body_change)
@@ -284,9 +284,9 @@ def edit_tool(name: str|None = None,
         UPDATE executables SET body = %s WHERE addr = %s;
                      """, (new_body, addr))
     if header_change is not None:
-        old_header = conn.execute("""
+        old_header = conn.execute_fetchval("""
         SELECT header FROM executables WHERE addr = %s;
-                                  """, (addr,)).fetchone()[0] # pyright: ignore
+                                  """, (addr,))
         assert isinstance(old_header, str)
 
         search, replacement = _sr_block_parser(header_change)
@@ -307,9 +307,9 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta['conn']
     if addr is None:
-        addr = conn.execute("""
+        addr = conn.execute_fetchval("""
         SELECT resolve_name(%s);
-                            """, (name,)).fetchone()[0]
+                            """, (name,))
     
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
@@ -347,9 +347,9 @@ def add_slave(instruction: str,
             if i == "self":
                 required_results_addrs.append(_meta['slave_id'])
                 continue
-            required_results_addrs.append(conn.execute("""
+            required_results_addrs.append(conn.execute_fetchval("""
             SELECT resolve_name(%s);
-                  """, (i,)).fetchone()[0])
+                  """, (i,)))
 
     if slave_type == "planner":
         return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever
@@ -468,9 +468,9 @@ def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmati
     conn = _meta['conn']
 
     try:
-        addr_type = conn.execute("""
+        addr_type = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s;
-                                 """, (addr,)).fetchone()[0]
+                                 """, (addr,))
     except TypeError as e:
         raise psycopg.DataError(f"Couldnt resolve addr {addr} to type, due to the following error: {e}, as result of fetch is not subscriptable.")
     if addr_type == "knowledge":
@@ -605,9 +605,9 @@ def unload_item(addr: int|None = None, name: str|None = None, _meta: _ExecToolMe
     conn = _meta['conn']
 
     if not addr:
-        addr = conn.execute("""
+        addr = conn.execute_fetchval("""
     SELECT resolve_name(%s);
-                            """, (name,)).fetchone()[0]
+                            """, (name,))
 
     conn.execute("""
     DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
@@ -743,7 +743,7 @@ def claim_item(item_addr: int|None = None, item_name: str|None = None, _meta: _E
         raise TypeError("Both mutually exclusive identifiers supplied.")
 
     if item_addr is None:
-        item_addr = conn.execute("SELECT resolve_name(%s);", (item_name,)).fetchone()[0] # pyright: ignore
+        item_addr = conn.execute_fetchval("SELECT resolve_name(%s);", (item_name,))
 
     conn.execute("""
     INSERT INTO ownership(addr, owner) VALUES(%s, %s)
@@ -766,7 +766,7 @@ def release_item(item_addr: int|None = None, item_name: str|None = None, _meta: 
 
     
     if item_addr is None:
-        item_addr = conn.execute("SELECT resolve_name(%s);", (item_name,)).fetchone()[0] # pyright: ignore
+        item_addr = conn.execute_fetchval("SELECT resolve_name(%s);", (item_name,))
 
     conn.execute("""
     DELETE FROM ownership WHERE addr = %s AND owner = %s;

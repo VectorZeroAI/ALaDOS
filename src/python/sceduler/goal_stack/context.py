@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-
-from .types import SlaveObj, WindowData, LoadsData
-from ...utils.conn_factory import conn_factory
-from pydantic import TypeAdapter, ValidationError
 from typing import Any
-import psycopg
-from ...executor.execute_tool import HEADERS_REGISTRY
 
+import psycopg
+from pydantic import TypeAdapter, ValidationError
+
+from ...executor.execute_tool import HEADERS_REGISTRY
+from ...utils.conn_factory import conn_factory, Conn
+from .types import LoadsData, SlaveObj, WindowData
 
 
 def resolve_context(slave_obj: SlaveObj):
@@ -76,7 +76,7 @@ def resolve_context(slave_obj: SlaveObj):
                           ])
 
 
-def resolve_claimed_items(slave_obj: SlaveObj, conn: psycopg.Connection) -> str:
+def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
     """
     Resolved the claimed items to remind the AI of them, so it doesnt forget it has them claimed.
     """
@@ -95,7 +95,7 @@ def resolve_claimed_items(slave_obj: SlaveObj, conn: psycopg.Connection) -> str:
     
 
 
-def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
+def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
@@ -121,7 +121,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: psycopg.Connection):
     return req_results_str
     
 
-def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
+def _resolve_knowledge_item(addr: int, conn: Conn) -> str:
     """ The function for resolving knowledge item to a clean AI friendly string """
     item = conn.execute("""
         SELECT names.name, knowledge.content
@@ -136,7 +136,7 @@ def _resolve_knowledge_item(addr: int, conn: psycopg.Connection) -> str:
     result = "\n".join(("", result, item[1], "", "", ""))
     return result
 
-def _executables_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+def _executables_item_resolve(addr: int, conn: Conn) -> str:
     item = conn.execute("""
         SELECT names.name, executables.header, executables.body
             FROM executables LEFT JOIN names ON names.addr = %s WHERE executables.addr = %s;
@@ -155,9 +155,9 @@ def resolve_loads(loads_data: LoadsData) -> str:
 
     result_str: list[str] = []
     for addr in loads_data['items_addrs']:
-        table = conn.execute("""
+        table = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s 
-                     """, (addr,)).fetchone()[0]
+                     """, (addr,))
 
         match table:
             case 'knowledge':
@@ -178,7 +178,7 @@ def resolve_loads(loads_data: LoadsData) -> str:
 
     return "".join(result_str)
 
-def _result_item_resolve(addr: int, conn: psycopg.Connection):
+def _result_item_resolve(addr: int, conn: Conn):
     item = conn.execute("""
     SELECT n.name, 
         r.content_str,
@@ -194,7 +194,7 @@ def _result_item_resolve(addr: int, conn: psycopg.Connection):
     result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
     return result
 
-def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+def _slaves_item_resolve(addr: int, conn: Conn) -> str:
     fetch = conn.execute("""
         SELECT names.name,
             slaves.master_addr,
@@ -219,7 +219,7 @@ def _slaves_item_resolve(addr: int, conn: psycopg.Connection) -> str:
                         "", "", ""))
     return result
 
-def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+def _masters_item_resolve(addr: int, conn: Conn) -> str:
     slaves_fetch = conn.execute("""
         SELECT s.instruction,
             s.result_addr,
@@ -253,7 +253,7 @@ def _masters_item_resolve(addr: int, conn: psycopg.Connection) -> str:
     result_str = "\n".join([result_str, *slave_str_list])
     return result_str
 
-def _logs_item_resolve(addr: int, conn: psycopg.Connection) -> str:
+def _logs_item_resolve(addr: int, conn: Conn) -> str:
     item = conn.execute("""
         SELECT names.name, logs.content, logs.created_at
             FROM logs LEFT JOIN names ON names.addr = logs.addr WHERE logs.addr = %s;

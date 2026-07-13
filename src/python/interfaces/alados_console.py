@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import sys
-import psycopg
-from ..utils.conn_factory import conn_factory
 import threading
 
-def add_master(instruction: list[str], conn: psycopg.Connection):
+from ..utils.conn_factory import Conn, conn_factory
+
+
+def add_master(instruction: list[str], conn: Conn):
     conn.execute("""
                  SELECT new_master(
-                     instruction := %s
+                     p_instruction := (%s)::TEXT
                                   )
                  """, (" ".join(instruction),))
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from types import FunctionType
 from typing import Callable, get_args
 from ..executor.types import ToolCall
 import inspect
@@ -65,7 +66,7 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
         return func
     return decorator
 
-def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> None:
+def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _meta = _meta) # pyright: ignore
 
 # register all the tools

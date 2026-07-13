@@ -22,6 +22,7 @@ import os
 import sys
 import pytest
 import psycopg
+from python.utils.conn_factory import Conn
 
 # ---------------------------------------------------------------------------
 # Make src/ importable
@@ -56,7 +57,7 @@ def patch_conn_factory(monkeypatch):
     from python.utils import conn_factory as cf_module
 
     def fake_conn_factory():
-        conn = psycopg.connect(**TEST_DSN)
+        conn = psycopg.connect(**TEST_DSN) # FIXME : Since conn factory update conn factory now returns Conn and patches new methods, and this no longer works.
         conn.autocommit = True
         return conn
 
@@ -129,62 +130,62 @@ def clean_db(db: psycopg.Connection):
 # Seed helpers
 # ---------------------------------------------------------------------------
 
-def new_addr(conn: psycopg.Connection) -> int:
-    return conn.execute("SELECT new_addr()").fetchone()[0]
+def new_addr(conn: Conn) -> int:
+    return conn.execute_fetchval("SELECT new_addr()")
 
 
 _ZERO_EMB = "[" + ",".join(["0"] * 384) + "]"
 
 
-def insert_knowledge(conn: psycopg.Connection, name: str, content: str,
+def insert_knowledge(conn: Conn, name: str, content: str,
                      description: str, position: int = 10) -> int:
-    addr = conn.execute(
+    addr = conn.execute_fetchval(
         "INSERT INTO knowledge (content, description, position, emb) VALUES (%s,%s,%s,%s::vector) RETURNING addr",
         (content, description, position, _ZERO_EMB)
-    ).fetchone()[0]
+    )
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 
 
-def insert_executable(conn: psycopg.Connection, name: str, header: str,
+def insert_executable(conn: Conn, name: str, header: str,
                        body: str, description: str, position: int = 20) -> int:
-    addr = conn.execute(
+    addr = conn.execute_fetchval(
         "INSERT INTO executables (header, body, description, position, emb) VALUES (%s,%s,%s,%s,%s::vector) RETURNING addr",
         (header, body, description, position, _ZERO_EMB)
-    ).fetchone()[0]
+    )
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 
 
-def insert_master(conn: psycopg.Connection) -> int:
-    return conn.execute(
+def insert_master(conn: Conn) -> int:
+    return conn.execute_fetchval(
         "INSERT INTO masters DEFAULT VALUES RETURNING addr"
-    ).fetchone()[0]
+    )
 
 
-def insert_result(conn: psycopg.Connection, content: str = "", ready: bool = False) -> int:
-    return conn.execute(
+def insert_result(conn: Conn, content: str = "", ready: bool = False) -> int:
+    return conn.execute_fetchval(
         "INSERT INTO results (content_str, ready) VALUES (%s,%s) RETURNING addr",
         (content, ready)
-    ).fetchone()[0]
+    )
 
 
-def insert_slave(conn: psycopg.Connection, master_addr: int, name: str,
+def insert_slave(conn: Conn, master_addr: int, name: str,
                  instruction: str, result_addr: int,
                  result_name: str, requires: list[int] | None = None) -> int:
     requires = requires or []
-    return conn.execute(
+    return conn.execute_fetchval(
         "SELECT new_slave(%s,%s,%s,%s,%s,%s)",
         (master_addr, instruction, name, requires, result_addr, result_name)
-    ).fetchone()[0]
+    )
 
 
-def insert_log(conn: psycopg.Connection, name: str, action: str,
+def insert_log(conn: Conn, name: str, action: str,
                created_by: str) -> int:
-    addr = conn.execute(
+    addr = conn.execute_fetchval(
         "INSERT INTO logs (action, created_by) VALUES (%s,%s) RETURNING addr",
         (action, created_by)
-    ).fetchone()[0]
+    )
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (addr, name))
     return addr
 

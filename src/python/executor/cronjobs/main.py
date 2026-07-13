@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-import inspect
-
-import asyncio
-from typing import Callable, TypedDict
-import time
-import psycopg
-from ...utils.conn_factory import conn_factory
 import threading
+import time
+from typing import TypedDict
+
+import psycopg
+
+from ...utils.conn_factory import Conn, conn_factory
 from .cronjob_registry import execute_cronjob
 
+
 class SysState(TypedDict):
-    conn: psycopg.Connection
+    conn: Conn 
 
 def setup():
     threading.Thread(target=cronjob_executor, daemon=True).start()
@@ -25,7 +25,7 @@ def cronjob_executor():
 
     cronjob_changed = threading.Event()
 
-    def cronjob_changes_listener(conn: psycopg.Connection):
+    def cronjob_changes_listener(conn: Conn):
         for n in conn.notifies():
             cronjob_changed.set()
 

@@ -8,6 +8,8 @@ from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
 
+import re
+
 def serialize(addr: ReferenceTo) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
     return serialise(addr)
@@ -22,7 +24,7 @@ def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
 
     conn = conn_factory()
 
-    return conn.execute("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (jsonb_parsed, name)).fetchone()[0]
+    return conn.execute_fetchval("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (jsonb_parsed, name))
 
 
 def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
@@ -39,9 +41,9 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 
     conn = conn_factory()
 
-    rmt_addr = conn.execute("""
+    rmt_addr = conn.execute_fetchval("""
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
-                            """).fetchone()[0]
+                            """)
     
     slaves = conn.execute("""
     SELECT instruction, addr, scope, result_addr FROM slaves WHERE master_addr = %s;
@@ -88,7 +90,7 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 
 
     for s in slaves:
-        new_addr = conn.execute("SELECT new_addr();").fetchone()[0]
+        new_addr = conn.execute_fetchval("SELECT new_addr();")
         for d in deps:
             if d[0] == s[SLAVE_ADDR]:
                 d[0] = new_addr
@@ -125,7 +127,7 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
              s[SLAVE_ADDR],
              s[SLAVE_INSTR],
              s[SLAVE_SCOPE],
-             conn.execute("SELECT new_addr();").fetchone()[0]
+             conn.execute_fetchval("SELECT new_addr();")
          )
     )
 
@@ -150,8 +152,8 @@ def create_from_range(
 
     if isinstance(start_node_id, str):
         try:
-            start_node_id = conn.execute("SELECT resolve_name(%s);", (start_node_id,)).fetchone()[0]
-            end_node_id = conn.execute("SELECT resolve_name(%s);", (end_node_id,)).fetchone()[0]
+            start_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (start_node_id,))
+            end_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (end_node_id,))
         except TypeError as e:
             raise ValueError(f"NAME COULD NOT BE RESOLVED, MOST LIKELY. ERROR: {e}")
 
@@ -201,7 +203,7 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
     with conn.transaction():
         if isinstance(node_id, str):
             try:
-                node_id = conn.execute("SELECT resolve_name(%s);", (node_id)).fetchone()[0]
+                node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (node_id))
             except TypeError:
                 raise NameError("PROVIDED node_id string does not exist as a name!")
 
@@ -212,9 +214,9 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
         reqired_by = [r[0] for r in reqired_by]
 
         if concatenate:
-            requirements = conn.execute("""
+            requirements = conn.execute_fetchval("""
             SELECT deps FROM rmt_slaves WHERE addr = %s;
-                                        """, (node_id,)).fetchone()[0]
+                                        """, (node_id,))
             if requirements is None:
                 requirements = []
 
@@ -284,12 +286,112 @@ def activate_as_master(rmt_addr: ReferenceTo,
                 raise DataError("Provided name was not able to be resolved.")
             depends_on[i] = name
 
+    master_addr = conn.execute_fetchval("""
+        SELECT new_master( p_instruction := 'NONE', req_addrs := %s); 
+                               """, (depends_on,)
+                               )
+
+
+    master_result_addr = conn.execute_fetchval("""
+        SELECT result_addr FROM masters WHERE addr = %s;
+                                      """, (master_addr,))
+
     conn.execute("""
-    SELECT activate_rmt_as_master(
-            p_rmt_addr := %s,
-            p_depends_on := %s,
-            p_required_by := %s,
-            p_inputs := %s
-        );
-                 """, (rmt_addr, depends_on, required_by, Jsonb(inputs)))
-    
+        INSERT INTO names(name, addr) VALUES ('_rmt_activation'::TEXT||nextval('global_rmt_activation_serial')::TEXT, %s)
+                 """, (master_addr,))
+
+    curr = conn.cursor()
+    curr.executemany("""
+    INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
+                    """, [(i, master_result_addr) for i in required_by])
+        
+    rmt_template = conn.execute("""
+    SELECT addr,
+        master_addr,
+        instruction,
+        result_addr,
+        scope, deps
+    FROM rmt_slaves
+    WHERE template_addr = %s
+    """, [rmt_addr,]).fetchall()
+
+    """
+    And now its time to translate the deps. So, I need to update the entire thing.
+    I will do it naively, cause the thing is,
+        if performance of this thing will be bad enough to care,
+        I will rewrite into plpgsql, and get some speed there.
+    As long as this is not the case, I will just continue with the O(n * n) approach.
+    """
+
+    rmt_template = [{
+        "addr": t[0],
+        "master_addr": t[1],
+        "instruction": t[2],
+        "result_addr": t[3],
+        "scope": t[4],
+        "deps": t[5]
+        } for t in rmt_template]
+
+    for i in rmt_template:
+        old_addr = i['result_addr']
+
+        i['addr']= conn.execute_fetchval("SELECT new_addr()")
+        i['result_addr']= conn.execute_fetchval("SELECT new_addr()")
+
+        conn.execute("INSERT INTO results(addr) VALUES(%s)", [i['result_addr'],])
+
+        for j in rmt_template:
+            if j['deps'] is None:
+                continue
+            for indx, k in enumerate(j['deps']):
+                if k == old_addr:
+                    j['deps'][indx] = i['result_addr']
+
+    """
+    In this part here we replace all the placeholders in format of ${{key}} 
+    with their value under the key in p_inputs. 
+    """
+
+    all_keys = set()
+    key_regex_pattern = r'\$\{\{([a-zA-Z0-9_]+)\}\}'
+
+    for i in rmt_template:
+        all_keys.update(re.findall(key_regex_pattern, i['instruction']))
+
+    missing_keys = [key for key in all_keys if key not in inputs]
+    redundant_keys = [key for key in inputs if key not in all_keys]
+
+    if missing_keys and redundant_keys:
+        raise ValueError(f'Keys {missing_keys} are missing from inputs. Additionally, the following redundant keys were found: {redundant_keys}')
+
+    if missing_keys:
+        raise ValueError(f'Keys {missing_keys} are missing from inputs.')
+
+#    if redunant_keys:
+#        (f'Input keys {redundant_keys} found in inputs but not found in the template. Double check if this is the right template.')
+# NOTE : Propably log the thing, but logging should be implemented later.
+# TODO: ADD logging
+
+    def replace_match(match):
+        key = match.group(1)
+        return str(inputs[key])
+
+
+    for i in rmt_template:
+        i['instruction'] = re.sub(key_regex_pattern, replace_match, i['instruction'])
+
+    for i in rmt_template:
+        conn.execute("""SELECT new_slave(
+            p_master_addr := %s,
+            p_instruction := %s,
+            p_requires := %s,
+            p_result_addr := %s,
+            p_slave_scope := %s
+        )""", [
+            master_addr,
+            i['instruction'],
+            i['deps'],
+            i['result_addr'],
+            i['scope']
+        ]
+    )

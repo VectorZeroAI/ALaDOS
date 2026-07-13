@@ -156,7 +156,6 @@ def test_k_read_by_name(meta):
 
 
 def test_execute_tool(meta, mock_subprocess):
-    conn = meta['conn']
     tool_name = unique_name("test_tool")
     create_tool(description="desc", header="test header", body="print('hello')", name=tool_name, _meta=meta)
     res = execute_tool_builtin_func(name=tool_name, kwargs={"x": 1}, _meta=meta)
@@ -303,7 +302,7 @@ def test_context_window_size_change(meta):
     """, (addr, meta['master_id']))
     res = context_window_size_change(left=2, right=3, _meta=meta)
     assert "Changed context window size" in res
-    l, r = conn.execute("SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta['master_id'],)).fetchone()
+    l, r = conn.execute("SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta.master_id,)).fetchone()
     assert l == 7
     assert r == 8
 

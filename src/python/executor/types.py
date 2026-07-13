@@ -52,7 +52,8 @@ class ToolCall:
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 
-class _ExecToolMetaData(TypedDict):
+@dataclass(slots=True)
+class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
     master_id: int
     conn: Conn 

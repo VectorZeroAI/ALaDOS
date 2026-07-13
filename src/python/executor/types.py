@@ -29,10 +29,10 @@ class Api:
     key: str
     model: str
     lock: threading.Lock = field(default_factory=threading.Lock)
-    rate_limited_until: Optional[float] = 0.0
-    consecutive_ratelimits: Optional[int] = 0
-    claude: Optional[bool] = False
-    max_tokens: Optional[int] = 8000
+    rate_limited_until: float = 0.0
+    consecutive_ratelimits: int = 0
+    claude: bool = False
+    max_tokens: int = 8000
 
 class InstrJson(TypedDict):
     """ An atomic instruction json representation """

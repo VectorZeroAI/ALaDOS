@@ -19,7 +19,7 @@ class RmtNode:
 class RmtNodeIncomplete:
     index: int = field()
     instruction: str = field(default='')
-    deps: list[str] = field(default=[])
+    deps: list[str] = field(default_factory=list)
     scope: SlaveScope_ = field(default='general')
     id: str = field(default=str(uuid4()))
 

@@ -320,7 +320,7 @@ BEGIN
         FROM slave_req
         WHERE req_addr = (SELECT result_addr FROM slaves WHERE addr = p_start_node)
 
-        UNION
+        UNION ALL
 
         -- LEG 1: 
         -- Base case, just go forward through the graph.
@@ -330,7 +330,7 @@ BEGIN
             JOIN slaves s ON s.addr = forward_walk.nodes
         WHERE sr.req_addr = s.result_addr
 
-        UNION
+        UNION ALL
         
         -- LEG 2:
         -- Case 2: result required by master
@@ -348,7 +348,7 @@ BEGIN
             WHERE slave_addr = s2.addr
         )
 
-        UNION
+        UNION ALL
         
         -- LEG 3:
         -- Case 3: No more slaves, in the master, try to jump through master result
@@ -392,7 +392,7 @@ BEGIN
             JOIN slaves s ON sr.req_addr = s.result_addr
         WHERE sr.slave_addr = p_start_node
 
-        UNION
+        UNION ALL
 
         -- RECURSE, uses backward_walk.nodes as those are the previous results
         -- just gets the requirements of a node.

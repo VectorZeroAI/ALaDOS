@@ -68,9 +68,8 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
         for token in tokens_valid:
             token_counter = token_counter + 1
-            item: RmtNodeIncomplete = {} # pyright: ignore
 
-            item.index = token_counter
+            item = RmtNodeIncomplete(token_counter)
 
             token = token.strip("(").strip(")")
 
@@ -127,7 +126,7 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
     # Validation of the final results block.
 
-    result = [i for i in intermidiate_result.values()]
+    result = [RmtNode(i.instruction, i.id, i.deps, i.index, i.scope) for i in intermidiate_result.values()]
 
     if has_cycle(result):
         errors.append("Cycle detected! Dunno where.")
@@ -137,8 +136,7 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
     dedup: dict[int|str, RmtNode] = {}
 
-    for i in intermidiate_result.values():
-        assert isinstance(i, RmtNode)
+    for i in result:
         dedup[i.id] = i
 
     result = []

@@ -158,11 +158,11 @@ def create_from_range(
         except TypeError as e:
             raise ValueError(f"NAME COULD NOT BE RESOLVED, MOST LIKELY. ERROR: {e}")
 
-    forwards_nodes = conn.execute("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,)).fetchall()
-    backwards_nodes = conn.execute("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,)).fetchall()
+    forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
+    backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
 
-    forwards_nodes = [r[0] for r in forwards_nodes]
-    backwards_nodes = [r[0] for r in backwards_nodes]
+    forwards_nodes = [r for r in forwards_nodes]
+    backwards_nodes = [r for r in backwards_nodes]
 
     forwards_nodes = set(forwards_nodes)
     backwards_nodes = set(backwards_nodes)
@@ -195,7 +195,7 @@ def create_from_range(
     for d in deps:
         slaves_deps[d[1]].append(d[0])
 
-    slaves = [[s[0], s[1]] for s in slaves]
+    slaves = [[i for i in s] for s in slaves]
 
     result: ReturnParsedRmtExpression = []
 

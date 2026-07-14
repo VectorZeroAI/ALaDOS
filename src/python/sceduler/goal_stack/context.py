@@ -6,7 +6,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from ...executor.execute_tool import HEADERS_REGISTRY
 from ...utils.conn_factory import conn_factory, Conn
-from .types import LoadsData, SlaveObj, WindowData
+from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 
 def resolve_context(slave_obj: SlaveObj):
@@ -19,15 +19,15 @@ def resolve_context(slave_obj: SlaveObj):
         
         if not (window_data[0] is None and window_data[1] is None):
 
-            window_data_python: WindowData = {
-                    "master_addr": slave_obj.master_addr,
-                    "window_position": {
-                        "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
-                        "ref_table": "executables" if window_data[0] is not None else "knowledge"
-                        },
-                    "window_size_l": window_data[3],
-                    "window_size_r": window_data[2]
-                    }
+            window_data_python = WindowData(
+                slave_obj.master_addr,
+                Anchor(
+                    window_data[0] if window_data[0] is not None else window_data[1],
+                    "executables" if window_data[0] is not None else "knowledge"
+                ),
+                window_data[3],
+                window_data[2]
+            )
             window_data_validator = TypeAdapter(WindowData)
             try:
                 window_data_valid = window_data_validator.validate_python(window_data_python)
@@ -43,13 +43,13 @@ def resolve_context(slave_obj: SlaveObj):
 
     load_data = conn.execute("""
     SELECT item_addr FROM master_load WHERE master_addr = %s;
-                             """, (slave_obj['master_addr'],)).fetchall()
+                             """, (slave_obj.master_addr,)).fetchall()
 
     if len(load_data) != 0:
 
-        loads_data_python: LoadsData = {
-                "items_addrs": [addr[0] for addr in load_data],
-            }
+        loads_data_python = LoadsData(
+            [addr[0] for addr in load_data]
+        )
         loads_data_validator = TypeAdapter(LoadsData)
         try:
             loads_data_valid = loads_data_validator.validate_python(loads_data_python)
@@ -154,7 +154,7 @@ def resolve_loads(loads_data: LoadsData) -> str:
     conn = conn_factory()
 
     result_str: list[str] = []
-    for addr in loads_data['items_addrs']:
+    for addr in loads_data.items_addrs:
         table = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s 
                      """, (addr,))
@@ -271,10 +271,10 @@ def resolve_window(window_data: WindowData) -> str:
     conn = conn_factory()
     anchor_pos = conn.execute("""
     SELECT position FROM vector_ops WHERE addr = %s 
-                 """, (window_data["window_position"]["ref_addr"], )).fetchone()
+                 """, (window_data.window_position.ref_addr, )).fetchone()
 
     if anchor_pos is None:
-        return f"DOES NOT EXIST@{window_data["window_position"]}"
+        return f"DOES NOT EXIST@{window_data.window_position}"
 
     anchor_pos = int(anchor_pos[0])
 
@@ -291,7 +291,7 @@ def resolve_window(window_data: WindowData) -> str:
     SELECT description, addr, position
     FROM ordered o, anchor a
     WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
-                             """, (window_data["window_position"]["ref_addr"], window_data["window_size_l"], window_data["window_size_r"])).fetchall()
+                             """, (window_data.window_position.ref_addr, window_data.window_size_l, window_data.window_size_r)).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 

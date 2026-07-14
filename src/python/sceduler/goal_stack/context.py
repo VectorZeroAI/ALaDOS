@@ -157,7 +157,7 @@ def resolve_loads(loads_data: LoadsData) -> str:
     for addr in loads_data.items_addrs:
         table = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s 
-                     """, (addr,))
+            """, (addr,)) # FIXME : Refactor the addrs_tables view into a materialised view, else performance will screw you!
 
         match table:
             case 'knowledge':

@@ -164,13 +164,15 @@ RETURNS TRIGGER AS $$
 
             SELECT mc.master_result INTO v_content FROM master_context mc WHERE mc.addr = v_master_addr;
 
-            SELECT v_content||r.content_str INTO v_content
+            SELECT v_content||string_agg(r.content_str) INTO v_content
             FROM slave_req sr
                 RIGHT JOIN slaves s ON sr.slave_addr = s.addr
                 JOIN results r ON s.result_addr = r.addr
-            WHERE sr.req_addr = NULL
-                AND s.master_addr = v_master_addr;
-                AND r.content_str NOT LIKE '%Added a master result.%'
+            WHERE NOT EXISTS (
+                    SELECT 1 FROM slave_req WHERE req_addr = r.addr
+                )
+                AND s.master_addr = v_master_addr
+                AND r.content_str NOT LIKE '%Added a master result.%';
             -- NOTE : This querry checks the contents of the result for having wrote to master_result,
             -- and if no, concatenates to v_content. 
 

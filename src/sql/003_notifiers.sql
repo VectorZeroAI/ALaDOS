@@ -164,7 +164,7 @@ RETURNS TRIGGER AS $$
 
             SELECT mc.master_result INTO v_content FROM master_context mc WHERE mc.addr = v_master_addr;
 
-            SELECT v_content||string_agg(r.content_str) INTO v_content
+            SELECT v_content||COALESCE(string_agg(r.content_str, ''), '\n') INTO v_content
             FROM slave_req sr
                 RIGHT JOIN slaves s ON sr.slave_addr = s.addr
                 JOIN results r ON s.result_addr = r.addr

@@ -4,6 +4,7 @@
 Test suite for the RMT (Reusable Master Template) subsystem.
 Run with: pytest -s test_rmt.py
 Requires a running PostgreSQL database with the full ALaDOS schema applied.
+All RMT functions (including serialize) accept an optional `conn` parameter.
 """
 import pytest
 import psycopg
@@ -29,31 +30,17 @@ from python.rmt.main import (
 DB_NAME = "alados_test"
 DB_CONN_STRING = f"dbname={DB_NAME}"
 
-def get_conn():
-    """Return a raw psycopg connection with autocommit."""
-    conn = psycopg.connect(DB_CONN_STRING)
-    conn.autocommit = True
-    return conn
-
 @pytest.fixture(scope="function")
 def db_conn():
-    """
-    Yield a connection wrapped with row_factory=dict_row for easier assertions.
-    The connection is rolled back after each test to keep the DB clean.
-    """
+    """Return a connection wrapped with dict_row, inside a transaction that is rolled back after the test."""
     conn = psycopg.connect(DB_CONN_STRING, row_factory=dict_row)
-    conn.autocommit = False          # we'll use a transaction inside each test
+    conn.autocommit = False
     with conn.transaction():
         yield conn
-        # rollback is automatic when the with-block exits,
-        # so no changes are persisted.
 
 @pytest.fixture(scope="function")
 def clean_db(db_conn):
-    """
-    Truncate all relevant tables in correct order before each test.
-    We rely on the transactional rollback, so this is just an extra safety.
-    """
+    """Truncate all relevant tables and reset sequences before each test (still inside the transaction)."""
     tables = [
         "master_req", "slave_req", "master_load", "master_context",
         "rmt_slaves", "reusable_master_templates",
@@ -82,7 +69,7 @@ class TestDSLParser:
         assert len(result) == 2
         assert result[0].id == "1"
         assert result[0].instruction == "do A"
-        assert result[0].deps == []          # START has no dependencies
+        assert result[0].deps == []
         assert result[1].id == "2"
         assert result[1].instruction == "do B"
         assert result[1].deps == ["1"]
@@ -93,17 +80,11 @@ class TestDSLParser:
         START -> (id='3', instruction='third') -> (id='2')
         """
         result = parse(expr)
-
         assert len(result) == 3
-
         ids = {node.id for node in result}
-
         assert len(ids) == 3
-
         node = result[0]
-
         assert node.instruction == "first"
-
         assert node.deps == []
 
     def test_multiline_branching(self):
@@ -113,7 +94,6 @@ class TestDSLParser:
                """
         result = parse(expr)
         assert len(result) == 3
-        # node1 should have deps=[]
         node1 = next(n for n in result if n.id == "1")
         assert node1.deps == []
         node2 = next(n for n in result if n.id == "2")
@@ -122,7 +102,7 @@ class TestDSLParser:
         assert node3.deps == ["1"]
 
     def test_missing_instruction(self):
-        expr = "START -> (id='1') -> (id='2') -> END"   # first token has no instruction
+        expr = "START -> (id='1') -> (id='2') -> END"
         with pytest.raises(SyntaxError):
             parse(expr)
 
@@ -132,30 +112,21 @@ class TestDSLParser:
             parse(expr)
 
     def test_cycle_detection(self):
-        expr = "START -> (id='1', instruction='A') -> (id='2', instruction='B', deps=['1']) -> START"
-        # This creates a cycle? Actually the second token references id='1' as dependency,
-        # but that alone doesn't make a cycle. A real cycle would be a -> b -> a.
-        # The DSL syntax doesn't explicitly support defining deps inside the token;
-        # deps are inferred from order. So a cycle can't be expressed easily.
-        # We'll test cycle detection via manually inserted data later.
-        pass   # DSL cannot express cycles, skip.
+        # DSL can't express cycles, placeholder
+        pass
 
 # -------------------------------------------------------------------
 # Serialize / Round-trip Tests
 # -------------------------------------------------------------------
 class TestSerializationRoundTrip:
     def test_roundtrip_linear(self, clean_db):
-        # Create a small RMT from DSL and then serialize it back
         dsl = "START -> (id='1', instruction='task1') -> (id='2', instruction='task2') -> END"
-        addr = create_from_serial(dsl, name="test_rmt")
-        serialized = serialize(addr)
-        # The serialized form may not be identical because of generated addresses,
-        # but parsing it should yield the same structure.
+        addr = create_from_serial(dsl, name="test_rmt", conn=clean_db)
+        serialized = serialize(addr, conn=clean_db)   # <-- serialize now takes conn
         reparsed = parse(serialized)
         assert len(reparsed) == 2
         instructions = {n.instruction for n in reparsed}
         assert instructions == {"task1", "task2"}
-        # Check that dependencies are correct: node2 depends on node1
         n1 = next(n for n in reparsed if n.instruction == "task1")
         n2 = next(n for n in reparsed if n.instruction == "task2")
         assert n1.deps == []
@@ -167,13 +138,11 @@ class TestSerializationRoundTrip:
 class TestCreateFromSerial:
     def test_create_linear(self, clean_db):
         dsl = "START -> (id='1', instruction='do a') -> (id='2', instruction='do b') -> END"
-        addr = create_from_serial(dsl)
-        # Verify the reusable_master_templates entry exists
+        addr = create_from_serial(dsl, conn=clean_db)
         row = clean_db.execute(
             "SELECT addr FROM reusable_master_templates WHERE addr = %s", [addr]
         ).fetchone()
         assert row is not None
-        # Verify slave entries
         slaves = clean_db.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s ORDER BY instruction", [addr]
         ).fetchall()
@@ -181,23 +150,18 @@ class TestCreateFromSerial:
         s1 = next(s for s in slaves if s["instruction"] == "do a")
         s2 = next(s for s in slaves if s["instruction"] == "do b")
         assert s1["deps"] is None or len(s1["deps"]) == 0
-        # s2's deps should contain s1's addr
         assert len(s2["deps"]) == 1
         assert s2["deps"][0] == s1["addr"]
 
     def test_create_with_reference(self, clean_db):
         dsl = "START -> (id='1', instruction='task') -> (id='1') -> END"
-        addr = create_from_serial(dsl)
-        slaves = clean_db.execute(
-            "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s", [addr]
-        ).fetchall()
-        # Only one unique slave should exist
-        assert len(slaves) == 1
-        assert slaves[0]["instruction"] == "task"
+        # self-reference is illegal → SyntaxError
+        with pytest.raises(SyntaxError):
+            create_from_serial(dsl, conn=clean_db)
 
     def test_create_with_name(self, clean_db):
         dsl = "START -> (id='1', instruction='run') -> END"
-        addr = create_from_serial(dsl, name="cool_template")
+        addr = create_from_serial(dsl, name="cool_template", conn=clean_db)
         name_row = clean_db.execute(
             "SELECT name FROM names WHERE addr = %s", [addr]
         ).fetchone()
@@ -208,25 +172,19 @@ class TestCreateFromSerial:
 # -------------------------------------------------------------------
 class TestCreateFromMaster:
     def test_basic_master(self, clean_db):
-        # Create a master with two sequential slaves
         conn = clean_db
         conn.execute("SELECT new_master('top task', NULL, NULL, 'master_result')")
-        # No direct access to master addr, retrieve via result name
         master_addr = conn.execute(
             "SELECT addr FROM masters WHERE result_addr = (SELECT resolve_name('master_result'))"
         ).fetchone()["addr"]
-        # Add two slaves: slave1 -> slave2
         conn.execute("""
             SELECT new_slave(%s, 'step 1', 'slave1', NULL, NULL, 'r1', NULL, 'general')
         """, [master_addr])
-        # slave2 depends on result of slave1
         r1_addr = conn.execute("SELECT resolve_name('r1')").fetchone()["resolve_name"]
         conn.execute("""
             SELECT new_slave(%s, 'step 2', 'slave2', ARRAY[%s], NULL, 'r2', NULL, 'general')
         """, [master_addr, r1_addr])
-        # Create RMT from this master
-        rmt_addr = create_from_master(master_addr, name="from_master")
-        # Verify RMT slaves
+        rmt_addr = create_from_master(master_addr, name="from_master", conn=clean_db)
         slaves = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s ORDER BY instruction",
             [rmt_addr]
@@ -235,24 +193,22 @@ class TestCreateFromMaster:
         s1 = next(s for s in slaves if s["instruction"] == "step 1")
         s2 = next(s for s in slaves if s["instruction"] == "step 2")
         assert s1["deps"] is None or len(s1["deps"]) == 0
-        # s2 should depend on s1's addr (the new addr in rmt_slaves)
         assert len(s2["deps"]) == 1
         assert s2["deps"][0] == s1["addr"]
 
     def test_planner_removal(self, clean_db):
-        # Add a master, then manually insert a planner slave and a normal one.
         conn = clean_db
         conn.execute("SELECT new_master('complex task')")
-        master_addr = conn.execute("SELECT addr FROM masters WHERE result_addr = (SELECT addr FROM results WHERE metadata->>'type' = 'master' ORDER BY addr DESC LIMIT 1)").fetchone()["addr"]
-        # Simulate a planner slave (name starts with 'planner_')
+        master_addr = conn.execute(
+            "SELECT addr FROM masters WHERE result_addr = (SELECT addr FROM results WHERE metadata->>'type' = 'master' ORDER BY addr DESC LIMIT 1)"
+        ).fetchone()["addr"]
         conn.execute("""
             SELECT new_slave(%s, 'plan stuff', 'planner_123', NULL, NULL, NULL, NULL, 'task')
         """, [master_addr])
-        # Normal slave
         conn.execute("""
             SELECT new_slave(%s, 'execute stuff', 'worker', NULL, NULL, NULL, NULL, 'general')
         """, [master_addr])
-        rmt_addr = create_from_master(master_addr)
+        rmt_addr = create_from_master(master_addr, conn=clean_db)   # no name → no name insert
         slaves = conn.execute(
             "SELECT instruction FROM rmt_slaves WHERE template_addr = %s", [rmt_addr]
         ).fetchall()
@@ -266,32 +222,23 @@ class TestCreateFromMaster:
 class TestCreateFromRange:
     def test_basic_range(self, clean_db):
         conn = clean_db
-        # Build a master with a chain: slaveA -> slaveB -> slaveC
         conn.execute("SELECT new_master('range test', NULL, NULL, 'm_res')")
         master_addr = conn.execute(
             "SELECT addr FROM masters WHERE result_addr = (SELECT resolve_name('m_res'))"
         ).fetchone()["addr"]
-
-        # slaveA (no deps) => result rA
         conn.execute("SELECT new_slave(%s, 'A', 'sA', NULL, NULL, 'rA')", [master_addr])
         rA = conn.execute("SELECT resolve_name('rA')").fetchone()["resolve_name"]
-        # slaveB depends on rA => result rB
         conn.execute("SELECT new_slave(%s, 'B', 'sB', ARRAY[%s], NULL, 'rB')", [master_addr, rA])
         rB = conn.execute("SELECT resolve_name('rB')").fetchone()["resolve_name"]
-        # slaveC depends on rB
         conn.execute("SELECT new_slave(%s, 'C', 'sC', ARRAY[%s], NULL, 'rC')", [master_addr, rB])
-
-        # Get slave addrs by name
         sA_addr = conn.execute("SELECT resolve_name('sA')").fetchone()["resolve_name"]
         sC_addr = conn.execute("SELECT resolve_name('sC')").fetchone()["resolve_name"]
-
-        rmt_addr = create_from_range(sA_addr, sC_addr, name="range_test")
+        rmt_addr = create_from_range(sA_addr, sC_addr, name="range_test", conn=clean_db)
         slaves = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s ORDER BY instruction",
             [rmt_addr]
         ).fetchall()
         assert len(slaves) == 3
-        # Verify dependencies inside RMT: B depends on A, C depends on B
         a = next(s for s in slaves if s["instruction"] == "A")
         b = next(s for s in slaves if s["instruction"] == "B")
         c = next(s for s in slaves if s["instruction"] == "C")
@@ -308,12 +255,8 @@ class TestCreateFromRange:
         conn.execute("SELECT new_slave(%s, 'Y', 'sY', NULL, NULL, 'rY')", [master_addr])
         sX = conn.execute("SELECT resolve_name('sX')").fetchone()["resolve_name"]
         sY = conn.execute("SELECT resolve_name('sY')").fetchone()["resolve_name"]
-        # They have no connection; the intersection of forward/backward walks will be empty.
-        # create_from_range should not create any RMT (or raise an error?). The function
-        # would attempt to pass an empty array to ANY(%s) and may fail.
-        # We'll test that it raises a psycopg.DataError or similar.
         with pytest.raises(Exception):
-            create_from_range(sX, sY)
+            create_from_range(sX, sY, conn=clean_db)
 
 # -------------------------------------------------------------------
 # delete_node Tests
@@ -321,16 +264,13 @@ class TestCreateFromRange:
 class TestDeleteNode:
     def test_delete_without_concatenation(self, clean_db):
         dsl = "START -> (id='1', instruction='A') -> (id='2', instruction='B') -> (id='3', instruction='C') -> END"
-        addr = create_from_serial(dsl)
-        # Delete node 2 (the middle one) without concatenation
+        addr = create_from_serial(dsl, conn=clean_db)
         conn = clean_db
-        # Retrieve node2's addr inside rmt_slaves
         node2 = conn.execute(
             "SELECT addr FROM rmt_slaves WHERE template_addr = %s AND instruction = 'B'",
             [addr]
         ).fetchone()["addr"]
-        delete_node(node2, concatenate=False)
-        # Verify that node B is gone, and node C's deps no longer contain B's addr.
+        delete_node(node2, concatenate=False, conn=clean_db)
         remaining = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s",
             [addr]
@@ -338,13 +278,11 @@ class TestDeleteNode:
         instructions = {r["instruction"] for r in remaining}
         assert instructions == {"A", "C"}
         nodeC = next(r for r in remaining if r["instruction"] == "C")
-        # Node C should have no dependency on B now, but it originally depended on B.
-        # Without concatenation, C should have its deps array emptied (since B was removed).
         assert nodeC["deps"] is None or len(nodeC["deps"]) == 0
 
     def test_delete_with_concatenation(self, clean_db):
         dsl = "START -> (id='1', instruction='A') -> (id='2', instruction='B') -> (id='3', instruction='C') -> END"
-        addr = create_from_serial(dsl)
+        addr = create_from_serial(dsl, conn=clean_db)
         conn = clean_db
         nodeB_addr = conn.execute(
             "SELECT addr FROM rmt_slaves WHERE template_addr = %s AND instruction = 'B'",
@@ -354,12 +292,11 @@ class TestDeleteNode:
             "SELECT addr FROM rmt_slaves WHERE template_addr = %s AND instruction = 'A'",
             [addr]
         ).fetchone()["addr"]
-        delete_node(nodeB_addr, concatenate=True)
+        delete_node(nodeB_addr, concatenate=True, conn=clean_db)
         remaining = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s",
             [addr]
         ).fetchall()
-        # C should now depend on A (concatenated)
         nodeC = next(r for r in remaining if r["instruction"] == "C")
         assert nodeC["deps"] == [nodeA_addr]
 
@@ -369,16 +306,13 @@ class TestDeleteNode:
 class TestActivateAsMaster:
     def test_activation_basic(self, clean_db):
         dsl = "START -> (id='1', instruction='step1') -> (id='2', instruction='step2') -> END"
-        rmt_addr = create_from_serial(dsl, name="basic_template")
-        activate_as_master(rmt_addr, inputs={})   # no placeholders
-
+        rmt_addr = create_from_serial(dsl, name="basic_template", conn=clean_db)
+        activate_as_master(rmt_addr, inputs={}, conn=clean_db)
         conn = clean_db
-        # A master should have been created with the instruction 'NONE'
         master = conn.execute(
             "SELECT * FROM masters WHERE instruction = 'NONE'"
         ).fetchone()
         assert master is not None
-        # Two slaves should be attached
         slaves = conn.execute(
             "SELECT instruction, scope FROM slaves WHERE master_addr = %s ORDER BY instruction",
             [master["addr"]]
@@ -389,9 +323,8 @@ class TestActivateAsMaster:
 
     def test_activation_with_placeholders(self, clean_db):
         dsl = "START -> (id='1', instruction='Add \"CODE ${{color}}\" to the master result') -> END"
-        rmt_addr = create_from_serial(dsl)
-        activate_as_master(rmt_addr, inputs={"color": "GREEN"})
-
+        rmt_addr = create_from_serial(dsl, conn=clean_db)
+        activate_as_master(rmt_addr, inputs={"color": "GREEN"}, conn=clean_db)
         conn = clean_db
         slave = conn.execute(
             "SELECT instruction FROM slaves WHERE master_addr = (SELECT addr FROM masters WHERE instruction = 'NONE' LIMIT 1)"
@@ -401,16 +334,12 @@ class TestActivateAsMaster:
         assert "${{color}}" not in slave["instruction"]
 
     def test_activation_with_external_deps(self, clean_db):
-        # First create an external result that we will use as a dependency.
         conn = clean_db
         conn.execute("INSERT INTO results (addr, ready, content_str) VALUES (new_addr(), TRUE, 'pre-existing')")
         ext_result = conn.execute("SELECT currval('global_next_id')").fetchone()["currval"]
-        # Create RMT
         dsl = "START -> (id='1', instruction='use external') -> END"
-        rmt_addr = create_from_serial(dsl)
-        # Activate with depends_on (backward facing edges) – meaning the master itself depends on ext_result
-        activate_as_master(rmt_addr, depends_on=[ext_result])
-        # The master should have a master_req entry
+        rmt_addr = create_from_serial(dsl, conn=clean_db)
+        activate_as_master(rmt_addr, depends_on=[ext_result], conn=clean_db)
         master = conn.execute(
             "SELECT m.addr FROM masters m JOIN master_req mr ON m.addr = mr.master_addr WHERE mr.req_addr = %s",
             [ext_result]
@@ -421,11 +350,7 @@ class TestActivateAsMaster:
 # Missing / Not Implemented Yet
 # -------------------------------------------------------------------
 def test_insert_node_not_implemented():
-    """
-    insert_node is currently a stub; ensure it doesn't raise an error on import.
-    """
     from python.rmt.main import insert_node
-    # We don't test functionality as it's not implemented.
     assert callable(insert_node)
 
 # -------------------------------------------------------------------
@@ -440,4 +365,3 @@ def test_parse_scope():
     expr = "START -> (id='1', instruction='do', scope='task') -> END"
     result = parse(expr)
     assert result[0].scope == "task"
-

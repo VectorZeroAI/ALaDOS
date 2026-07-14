@@ -14,13 +14,13 @@ def resolve_context(slave_obj: SlaveObj):
 
     window_data: Any = conn.execute("""
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
-                 """, (slave_obj['master_addr'],)).fetchone()
+                 """, (slave_obj.master_addr,)).fetchone()
     if window_data is not None:
         
         if not (window_data[0] is None and window_data[1] is None):
 
             window_data_python: WindowData = {
-                    "master_addr": slave_obj['master_addr'],
+                    "master_addr": slave_obj.master_addr,
                     "window_position": {
                         "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
                         "ref_table": "executables" if window_data[0] is not None else "knowledge"
@@ -65,13 +65,13 @@ def resolve_context(slave_obj: SlaveObj):
 
     claimed_items = resolve_claimed_items(slave_obj, conn)
 
-    TOOL_HEADERS = HEADERS_REGISTRY[slave_obj['scope']]
+    TOOL_HEADERS = HEADERS_REGISTRY[slave_obj.scope]
 
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",
                           f"Previous steps results are: [{results_context}]",
                           f"Tool headers are: {TOOL_HEADERS}",
-                          f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."
+                          f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
                           f"Currently claimed items are: [{claimed_items}], please release those items when you no longer require them."
                           ])
 
@@ -83,7 +83,7 @@ def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
 
     addrs_fetch = conn.execute("""
     SELECT addr FROM ownership WHERE owner = %s;
-                 """, (slave_obj['master_addr'],)).fetchall()
+                 """, (slave_obj.master_addr,)).fetchall()
 
     addrs = [a[0] for a in addrs_fetch]
 
@@ -99,7 +99,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
-                             """, (slave_obj["addr"], )).fetchall()
+                             """, (slave_obj.addr, )).fetchall()
     
     list_req_results_addrs = [addr[0] for addr in req_results_addrs]
     if len(list_req_results_addrs) < 1:

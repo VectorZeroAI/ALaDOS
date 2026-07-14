@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 from typing import TypeAlias, TypedDict, List, Optional
 
 from ...executor.types import SlaveScope
@@ -8,7 +9,8 @@ from ...types import ReferenceTo, ValidTables
 SlaveAddr: TypeAlias = int
 MasterAddr: TypeAlias = int
 
-class SlaveObj(TypedDict):
+@dataclass(slots=True)
+class SlaveObj:
     """ The slave python or pydantic object """
     addr: SlaveAddr
     instruction: str

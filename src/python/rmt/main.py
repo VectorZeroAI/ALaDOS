@@ -3,6 +3,7 @@
 from typing import Sequence
 
 from psycopg.errors import DataError
+from python.rmt.types import ReturnParsedRmtExpression, RmtNodeReturn
 from ..utils.conn_factory import conn_factory
 from ..types import ReferenceTo
 from .dsl import parse, serialise
@@ -169,13 +170,46 @@ def create_from_range(
     intersection: set[int] = forwards_nodes & backwards_nodes # NOTE : This weird sign here is doing the intersection detection work.
 
     """
-    Okay, so we have the steps now, so what we do is we copy slaves from slaves and slave_req into rmt_slaves, as well as init the rmt template in its respective table.
+    Okay, so we have the steps now,
+    so what we do is we copy slaves from slaves and slave_req into rmt_slaves,
+    as well as init the rmt template in its respective table.
     """
 
-    raise NotImplementedError("CREATE FROM RANGE NOT FULLY IMPLEMENTED YET!")
+    slaves = conn.execute("""
+    SELECT instruction, scope, addr FROM slaves WHERE addr = ANY(%s)
+        """, [a for a in intersection])
 
+    deps = conn.execute("""
+    SELECT s.addr, sr.slave_addr
+    FROM slave_req sr
+        JOIN slaves s ON sr.req_addr = s.result_addr
+    WHERE sr.slave_addr = ANY(%s)
+                        """, [a for a in intersection])
     
+    #slaves_deps: dict[int, list[str]] = {}
+    slaves_deps = {}
 
+    for d in deps:
+        slaves_deps[d[1]] = []
+
+    for d in deps:
+        slaves_deps[d[1]].append(d[0])
+
+    slaves = [[s[0], s[1]] for s in slaves]
+
+    result: ReturnParsedRmtExpression = []
+
+    for s in slaves:
+        result.append(RmtNodeReturn(
+            s[0],
+            s[2],
+            slaves_deps[s[2]],
+            s[1]
+        ))
+
+    result_jsonb: Jsonb = Jsonb(result)
+
+    return conn.execute_fetchval(" SELECT save_rmt(%s) ", (result_jsonb, name))
 
 
 def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:

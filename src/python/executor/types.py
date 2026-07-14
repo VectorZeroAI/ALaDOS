@@ -15,8 +15,6 @@ from .exceptions import ParadoxDetected, ContextLimitExceededError
 
 JsonSerializable: TypeAlias = JsonValue
 
-Addr: TypeAlias = int
-
 SlaveScope: TypeAlias = Literal['all', 'general', 'context', 'task', 'communication']
 SlaveScope_: TypeAlias = Literal[*get_args(SlaveScope), '_webui'] # pyright: ignore
 

@@ -1,34 +1,33 @@
 #!/usr/bin/env python3
 
+from dataclasses import asdict
 from typing import Sequence
 
 from psycopg.errors import DataError
 from python.rmt.types import ReturnParsedRmtExpression, RmtNodeReturn
-from ..utils.conn_factory import conn_factory
+from ..utils.conn_factory import conn_factory, Conn
 from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
 
 import re
 
-def serialize(addr: ReferenceTo) -> str:
+def serialize(addr: ReferenceTo, conn: Conn = conn_factory()) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
-    return serialise(addr)
+    return serialise(addr, conn)
 
 
-def create_from_serial(expression: str, name: str|None = None) -> ReferenceTo:
+def create_from_serial(expression: str, name: str|None = None, conn: Conn = conn_factory()) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
 
     parsed = parse(expression)
 
-    jsonb_parsed = Jsonb(parsed)
-
-    conn = conn_factory()
+    jsonb_parsed = Jsonb([asdict(p) for p in parsed])
 
     return conn.execute_fetchval("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (jsonb_parsed, name))
 
 
-def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> ReferenceTo:
+def create_from_master(master_addr: ReferenceTo, name: str|None = None, conn: Conn = conn_factory()) -> ReferenceTo:
     """
     Creates a workflow from a master goal.
     Fully automatically, except it doesnt place variables anywhere.
@@ -39,8 +38,6 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
     SLAVE_SCOPE = 2
     SLAVE_RES_ADDR = 3
     SLAVE_DEPS = 4
-
-    conn = conn_factory()
 
     rmt_addr = conn.execute_fetchval("""
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
@@ -133,9 +130,10 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
     )
 
 
-    conn.execute("""
-    INSERT INTO names(name, addr) VALUES(%s, %s)
-                 """, (name, rmt_addr))
+    if name is not None:
+        conn.execute("""
+        INSERT INTO names(name, addr) VALUES(%s, %s)
+                     """, (name, rmt_addr))
 
     return rmt_addr
 
@@ -145,7 +143,8 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None) -> Refer
 def create_from_range(
         start_node_id: str|int,
         end_node_id: str|int,
-        name: str|None = None
+        name: str|None = None,
+        conn: Conn = conn_factory()
         ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
 
@@ -207,12 +206,12 @@ def create_from_range(
             s[1]
         ))
 
-    result_jsonb: Jsonb = Jsonb(result)
+    result_jsonb: Jsonb = Jsonb([asdict(r)] for r in result)
 
     return conn.execute_fetchval(" SELECT save_rmt(%s) ", (result_jsonb, name))
 
 
-def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
+def delete_node(node_id: ReferenceTo|str, concatenate: bool = True, conn: Conn = conn_factory()) -> None:
     """
     Deletes a node from an rmt, via the addr or name.
     
@@ -277,11 +276,14 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True) -> None:
 
 
 
-def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, depends_on: Sequence[int|str] = []) -> None:
+def insert_node(rmt_addr: ReferenceTo,
+                instruction: str,
+                name: str|None = None,
+                depends_on: Sequence[int|str] = [],
+                conn: Conn = conn_factory()
+                ) -> None:
     """ Inserts a node into the rmt DAG. """
     
-    conn = conn_factory()
-
     pass
 
 

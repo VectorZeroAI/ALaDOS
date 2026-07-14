@@ -12,6 +12,7 @@ Tracks which tasks are already being executed, and executes all the other tasks.
 import threading
 
 from pydantic import TypeAdapter
+from python.sceduler.goal_stack.types import SlaveObj
 
 from ..executor.queue import executor_queue
 from ..executor.types import Instr
@@ -36,20 +37,26 @@ def slave_addr_to_instr(slave_addr: int, conn: Conn) -> Instr:
 
     assert context_prefetch is not None
 
-    context = resolve_context({
-        "addr": slave_addr,
-        "instruction": context_prefetch[0],
-        "master_addr": context_prefetch[1],
-        "result_name": context_prefetch[2],
-        "scope": context_prefetch[4]
-        })
+    context = resolve_context(
+        SlaveObj(
+            slave_addr,
+            context_prefetch[0],
+            context_prefetch[1],
+            context_prefetch[2],
+            context_prefetch[4]
+        ),
+        conn
+    )
 
-    instruction = Instr(result_addr=context_prefetch[3],
-                        instruction=context_prefetch[0],
-                        master_addr=context_prefetch[1],
-                        context=context,
-                        slave_addr=slave_addr,
-                        scope=context_prefetch[4])
+    instruction = Instr(
+        result_addr=context_prefetch[3],
+        instruction=context_prefetch[0],
+        master_addr=context_prefetch[1],
+        context=context,
+        slave_addr=slave_addr,
+        scope=context_prefetch[4]
+    )
+
     return instruction
 
 def new_slave_listener_thread():

@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 from typing import Any
 
-import psycopg
 from pydantic import TypeAdapter, ValidationError
 
 from ...executor.execute_tool import HEADERS_REGISTRY
-from ...utils.conn_factory import conn_factory, Conn
+from ...utils.conn_factory import Conn
 from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 
-def resolve_context(slave_obj: SlaveObj):
-    conn = conn_factory()
+def resolve_context(slave_obj: SlaveObj, conn: Conn):
 
     window_data: Any = conn.execute("""
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
@@ -35,7 +33,7 @@ def resolve_context(slave_obj: SlaveObj):
                 print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
                 raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
 
-            window_context = resolve_window(window_data_valid)
+            window_context = resolve_window(window_data_valid, conn)
         else:
             window_context = "VIEW WINDOW DOES NOT YET EXIST"
     else:
@@ -57,7 +55,7 @@ def resolve_context(slave_obj: SlaveObj):
             print(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
             raise RuntimeError(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
 
-        load_context = resolve_loads(loads_data_valid)
+        load_context = resolve_loads(loads_data_valid, conn)
     else:
         load_context = "NO ITEMS LOADED YET"
 
@@ -70,7 +68,7 @@ def resolve_context(slave_obj: SlaveObj):
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",
                           f"Previous steps results are: [{results_context}]",
-                          f"Tool headers are: {TOOL_HEADERS}",
+                          f"Tool headers are: [{TOOL_HEADERS}]",
                           f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
                           f"Currently claimed items are: [{claimed_items}], please release those items when you no longer require them."
                           ])
@@ -92,7 +90,7 @@ def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
     
 
 
-    
+
 
 
 def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
@@ -149,9 +147,8 @@ def _executables_item_resolve(addr: int, conn: Conn) -> str:
 
     return result
 
-def resolve_loads(loads_data: LoadsData) -> str:
+def resolve_loads(loads_data: LoadsData, conn: Conn) -> str:
     """ Resolves loads raw data to context string """
-    conn = conn_factory()
 
     result_str: list[str] = []
     for addr in loads_data.items_addrs:
@@ -266,9 +263,8 @@ def _logs_item_resolve(addr: int, conn: Conn) -> str:
     result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
     return result
 
-def resolve_window(window_data: WindowData) -> str:
+def resolve_window(window_data: WindowData, conn: Conn) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
-    conn = conn_factory()
     anchor_pos = conn.execute("""
     SELECT position FROM vector_ops WHERE addr = %s 
                  """, (window_data.window_position.ref_addr, )).fetchone()

@@ -4,13 +4,13 @@ import re
 
 from ..utils.conn_factory import Conn
 from .exceptions import ContextLimitExceededError
-from .types import InstrJson, ToolCallsBlock
+from .types import Instr, ToolCallsBlock, ToolCall
 from .execute_tool import HEADERS_REGISTRY
 from ..utils.logger import log_json
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
                                       conn: Conn,
-                                      instr: InstrJson) -> str:
+                                      instr: Instr) -> str:
     """ Prepares the special prompt that would make the LLM get it all done correctly. """
 
     window_data = conn.execute("""
@@ -19,7 +19,7 @@ FROM slaves s
     INNER JOIN masters m ON s.master_addr = m.addr
     INNER JOIN master_context mc ON mc.addr = m.addr
 WHERE s.addr = %s
-                          """, (instr['slave_addr'],)).fetchone()
+                          """, (instr.slave_addr,)).fetchone()
     assert window_data is not None
 
     viewing_window_shortened = conn.execute("""
@@ -47,7 +47,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
     loaded_items_addr = conn.execute("""SELECT ml.item_addr, vp.description
                                      FROM master_load ml 
                                         LEFT JOIN vector_ops vp ON ml.item_addr = vp.addr 
-                                     WHERE master_addr = %s""", (instr['master_addr'],)).fetchall()
+                                     WHERE master_addr = %s""", (instr.master_addr,)).fetchall()
 
     loaded_items_list_str = []
     for i in loaded_items_addr:
@@ -69,7 +69,7 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
     return context
 
-def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
+def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     llm_without_think = re.sub(r'<think>.*?</think>', '', llm_response, re.DOTALL)
     log_json({
         'type': 'llm_response',
@@ -77,18 +77,20 @@ def fix_llm_response(slave: InstrJson, llm_response: str) -> ToolCallsBlock:
         'reason': 'did not find any tool calls.',
         'llm_without_think': llm_without_think
     })
-    match slave['scope']:
+    match slave.scope:
         case '_webui':
-            tool_calls: ToolCallsBlock = [{
-                    "tool": "user.send_message", 
-                    "args": {"text": llm_without_think}
-                }]
+            tool_calls: ToolCallsBlock = [
+                ToolCall("user.send_message",
+                         {"text": llm_without_think}
+                     )
+            ]
 
         case _:
-            tool_calls: ToolCallsBlock = [{
-                    "tool": "result.write", 
-                    "args": {"text": llm_without_think}
-                }]
+            tool_calls: ToolCallsBlock = [
+                ToolCall("result.write",
+                         {"text": llm_without_think}
+                     )
+            ]
 
     log_json({
         'type': 'llm_response',

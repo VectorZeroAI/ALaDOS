@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-from types import FunctionType
 from typing import Callable, get_args
 from ..executor.types import ToolCall
 import inspect
 import re
-from .types import _ExecToolMetaData, SlaveScope, SlaveScope_, SlaveScopesList
+from .types import _ExecToolMetaData, SlaveScope_, SlaveScopesList
 
 TOOL_REGISTRY = {}
 HEADERS_REGISTRY = {}
@@ -67,8 +66,8 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
     return decorator
 
 def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
-    return TOOL_REGISTRY[call["tool"]](**call.get("args", {}), _meta = _meta) # pyright: ignore
+    return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!
-from . import builtins
+from . import builtins as __owuergnsorjgnborn  # noqa # pyright: ignore

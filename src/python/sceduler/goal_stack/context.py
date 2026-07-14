@@ -1,33 +1,31 @@
 #!/usr/bin/env python3
 from typing import Any
 
-import psycopg
 from pydantic import TypeAdapter, ValidationError
 
 from ...executor.execute_tool import HEADERS_REGISTRY
-from ...utils.conn_factory import conn_factory, Conn
-from .types import LoadsData, SlaveObj, WindowData
+from ...utils.conn_factory import Conn
+from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 
-def resolve_context(slave_obj: SlaveObj):
-    conn = conn_factory()
+def resolve_context(slave_obj: SlaveObj, conn: Conn):
 
     window_data: Any = conn.execute("""
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
-                 """, (slave_obj['master_addr'],)).fetchone()
+                 """, (slave_obj.master_addr,)).fetchone()
     if window_data is not None:
         
         if not (window_data[0] is None and window_data[1] is None):
 
-            window_data_python: WindowData = {
-                    "master_addr": slave_obj['master_addr'],
-                    "window_position": {
-                        "ref_addr": window_data[0] if window_data[0] is not None else window_data[1],
-                        "ref_table": "executables" if window_data[0] is not None else "knowledge"
-                        },
-                    "window_size_l": window_data[3],
-                    "window_size_r": window_data[2]
-                    }
+            window_data_python = WindowData(
+                slave_obj.master_addr,
+                Anchor(
+                    window_data[0] if window_data[0] is not None else window_data[1],
+                    "executables" if window_data[0] is not None else "knowledge"
+                ),
+                window_data[3],
+                window_data[2]
+            )
             window_data_validator = TypeAdapter(WindowData)
             try:
                 window_data_valid = window_data_validator.validate_python(window_data_python)
@@ -35,7 +33,7 @@ def resolve_context(slave_obj: SlaveObj):
                 print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
                 raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
 
-            window_context = resolve_window(window_data_valid)
+            window_context = resolve_window(window_data_valid, conn)
         else:
             window_context = "VIEW WINDOW DOES NOT YET EXIST"
     else:
@@ -43,13 +41,13 @@ def resolve_context(slave_obj: SlaveObj):
 
     load_data = conn.execute("""
     SELECT item_addr FROM master_load WHERE master_addr = %s;
-                             """, (slave_obj['master_addr'],)).fetchall()
+                             """, (slave_obj.master_addr,)).fetchall()
 
     if len(load_data) != 0:
 
-        loads_data_python: LoadsData = {
-                "items_addrs": [addr[0] for addr in load_data],
-            }
+        loads_data_python = LoadsData(
+            [addr[0] for addr in load_data]
+        )
         loads_data_validator = TypeAdapter(LoadsData)
         try:
             loads_data_valid = loads_data_validator.validate_python(loads_data_python)
@@ -57,7 +55,7 @@ def resolve_context(slave_obj: SlaveObj):
             print(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
             raise RuntimeError(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
 
-        load_context = resolve_loads(loads_data_valid)
+        load_context = resolve_loads(loads_data_valid, conn)
     else:
         load_context = "NO ITEMS LOADED YET"
 
@@ -65,13 +63,13 @@ def resolve_context(slave_obj: SlaveObj):
 
     claimed_items = resolve_claimed_items(slave_obj, conn)
 
-    TOOL_HEADERS = HEADERS_REGISTRY[slave_obj['scope']]
+    TOOL_HEADERS = HEADERS_REGISTRY[slave_obj.scope]
 
     return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
                           f"Currently loaded items are: [{load_context}]",
                           f"Previous steps results are: [{results_context}]",
-                          f"Tool headers are: {TOOL_HEADERS}",
-                          f"Your current type is '{slave_obj['scope']}'. Other slave types will have other tools available."
+                          f"Tool headers are: [{TOOL_HEADERS}]",
+                          f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
                           f"Currently claimed items are: [{claimed_items}], please release those items when you no longer require them."
                           ])
 
@@ -83,7 +81,7 @@ def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
 
     addrs_fetch = conn.execute("""
     SELECT addr FROM ownership WHERE owner = %s;
-                 """, (slave_obj['master_addr'],)).fetchall()
+                 """, (slave_obj.master_addr,)).fetchall()
 
     addrs = [a[0] for a in addrs_fetch]
 
@@ -92,14 +90,14 @@ def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
     
 
 
-    
+
 
 
 def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
     """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
-                             """, (slave_obj["addr"], )).fetchall()
+                             """, (slave_obj.addr, )).fetchall()
     
     list_req_results_addrs = [addr[0] for addr in req_results_addrs]
     if len(list_req_results_addrs) < 1:
@@ -149,15 +147,14 @@ def _executables_item_resolve(addr: int, conn: Conn) -> str:
 
     return result
 
-def resolve_loads(loads_data: LoadsData) -> str:
+def resolve_loads(loads_data: LoadsData, conn: Conn) -> str:
     """ Resolves loads raw data to context string """
-    conn = conn_factory()
 
     result_str: list[str] = []
-    for addr in loads_data['items_addrs']:
+    for addr in loads_data.items_addrs:
         table = conn.execute_fetchval("""
         SELECT type FROM addrs_tables WHERE addr = %s 
-                     """, (addr,))
+            """, (addr,)) # FIXME : Refactor the addrs_tables view into a materialised view, else performance will screw you!
 
         match table:
             case 'knowledge':
@@ -266,15 +263,14 @@ def _logs_item_resolve(addr: int, conn: Conn) -> str:
     result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
     return result
 
-def resolve_window(window_data: WindowData) -> str:
+def resolve_window(window_data: WindowData, conn: Conn) -> str:
     """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
-    conn = conn_factory()
     anchor_pos = conn.execute("""
     SELECT position FROM vector_ops WHERE addr = %s 
-                 """, (window_data["window_position"]["ref_addr"], )).fetchone()
+                 """, (window_data.window_position.ref_addr, )).fetchone()
 
     if anchor_pos is None:
-        return f"DOES NOT EXIST@{window_data["window_position"]}"
+        return f"DOES NOT EXIST@{window_data.window_position}"
 
     anchor_pos = int(anchor_pos[0])
 
@@ -291,7 +287,7 @@ def resolve_window(window_data: WindowData) -> str:
     SELECT description, addr, position
     FROM ordered o, anchor a
     WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
-                             """, (window_data["window_position"]["ref_addr"], window_data["window_size_l"], window_data["window_size_r"])).fetchall()
+                             """, (window_data.window_position.ref_addr, window_data.window_size_l, window_data.window_size_r)).fetchall()
 
     descriptions, addrs, positions = zip(*context_fetch)
 

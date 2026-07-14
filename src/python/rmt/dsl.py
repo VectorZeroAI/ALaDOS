@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-from types import prepare_class
-from typing import Any, Generator, TypeAlias, TypedDict
+from typing import Any, Generator
 from collections import deque, defaultdict
 import uuid
 
@@ -18,7 +17,7 @@ START -> (task='task_text', id='lol1', scope='general') -> (task='task_text', sc
 START -> (task='task_text_3') -> (id='lol1')
 """
 
-from .types import ReturnParsedRmtExpression, ParsedRmtExpression, RmtNodeIncomplete, RmtNode
+from .types import ReturnParsedRmtExpression, ParsedRmtExpression, RmtNodeIncomplete, RmtNode, RmtNodeReturn
 
 def parse(expression: str) -> ReturnParsedRmtExpression:
     """
@@ -71,7 +70,7 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
             token_counter = token_counter + 1
             item: RmtNodeIncomplete = {} # pyright: ignore
 
-            item['index'] = token_counter
+            item.index = token_counter
 
             token = token.strip("(").strip(")")
 
@@ -89,21 +88,21 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
 
                 match key:
                     case 'instruction':
-                        item['instruction'] = val.strip().strip("'")
+                        item.instruction = val.strip().strip("'")
                     case 'id':
-                        item['id'] = val.strip().strip("'")
+                        item.id = val.strip().strip("'")
                     case 'scope':
-                        item['scope'] = val.strip().strip("'")
+                        item.scope = val.strip().strip("'")
                     case _:
                         errors.append(f"Invalid key found. Key: {key}, key_val pair: {key_val}, token: {token}")
                         continue
 
-            item['id'] = item.get('id', str(uuid.uuid4()))
-            if item.get('instruction') is None:
+            # NOTE : item id default is handleted by dataclass default.
+            if not item.instruction:
                 ref_item_index: int = 0
                 for i in intermidiate_result.values():
-                    if i['id'] == item['id']:
-                        ref_item_index = i['index']
+                    if i.id == item.id:
+                        ref_item_index = i.index
                         break
                 else:
                     errors.append(f"invalid object parsed. Object {item}")
@@ -111,16 +110,10 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
                 
                 # At this point, its a referense, as confirmed by the for loop check thingy.
 
-                intermidiate_result[item['index']] = intermidiate_result[ref_item_index]
+                intermidiate_result[item.index] = intermidiate_result[ref_item_index]
                 continue
 
-
-            item['deps'] = item.get('deps', [])
-
-            if item.get('scope') is None:
-                item['scope'] = "general"
-
-            intermidiate_result[item['index']] = item
+            intermidiate_result[item.index] = item
             continue
 
         for index in range(len(tokens_valid) - 1):
@@ -130,7 +123,7 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
             token_1 = intermidiate_result[index]
             token_2 = intermidiate_result[index + 1]
 
-            token_2['deps'].append(token_1['id'])
+            token_2.deps.append(token_1.id)
 
     # Validation of the final results block.
 
@@ -145,7 +138,8 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
     dedup: dict[int|str, RmtNode] = {}
 
     for i in intermidiate_result.values():
-        dedup[i['id']] = i
+        assert isinstance(i, RmtNode)
+        dedup[i.id] = i
 
     result = []
 
@@ -155,14 +149,14 @@ def parse(expression: str) -> ReturnParsedRmtExpression:
     return_result: ReturnParsedRmtExpression = []
 
     for i in result:
-        return_result.append({'id': i['id'], 'deps': i['deps'], 'instruction': i['instruction'], 'scope': i['scope']})
+        return_result.append(RmtNodeReturn(i.instruction, i.id, i.deps, i.scope))
 
     return return_result
 
 
 def has_cycle(nodes: list[RmtNode]) -> bool:
-    unique = {node['id']: node for node in nodes}
-    graph = {nid: node['deps'] for nid, node in unique.items()}
+    unique = {node.id: node for node in nodes}
+    graph = {nid: node.deps for nid, node in unique.items()}
     
     # Build reverse adjacency: which nodes depend on a given node
     dependents = defaultdict(list)
@@ -309,64 +303,6 @@ def serialise(addr: int) -> str:
     for i in steps_where_no_deps():
         recursive_worker([], i)
 
-#     result: list[list[dict]] = []
-#     previous: list[dict] = []
-#     next: list[dict] = []
-#
-#     flag_done = False
-# 
-#     # First pass, e.g. those with no deps.
-# 
-#     for st in steps:
-#         if st['deps'] is None:
-#             result.append([st])
-#             previous.append(st)
-#             st["seen"] = True
-# 
-#     for st in previous:
-#         steps.remove(st)
-# 
-# 
-#     # Loop recursive resolution
-#     while not flag_done:
-#         next = []
-#         visited = []
-# 
-#         for i, pr_st in enumerate(previous):
-# 
-#             if pr_st in visited:
-#                 continue
-#             else:
-#                 visited.append(pr_st)
-# 
-#             for st in steps:
-# 
-#                 if pr_st['addr'] in st['deps']:
-#                     if not pr_st['seen']:
-#                         next.append(st)
-#                         result[i].append(st) # Into line i, where pr_st is, of the result append st.
-#                         st['seen'] = True
-#                     else:
-#                         result.append([pr_st, st])
-#                         pr_st['dupl'] = True
-# 
-#         for line in result:
-#             for step in line:
-#                 try:
-#                     steps.remove(step)
-#                 except ValueError:
-#                     pass
-# 
-# 
-#         previous = next
-# 
-#         if len(steps) < 1:
-#             flag_done = True
-
-        
-        
-
-    
     """
     At this point, the data structure is as following: 
     results list, wich holds per line lists of the nodes. 

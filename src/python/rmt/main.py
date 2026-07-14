@@ -253,14 +253,6 @@ def insert_node(rmt_addr: ReferenceTo, instruction: str, name: str|None = None, 
 
 
 
-# def activate_inline(rmt_addr: ReferenceTo,
-#                     depends_on: Sequence[int|str] = [],
-#                     required_by: Sequence[int|str] = [],
-#                     inputs: Sequence[dict[str, str]] = []) -> None:
-#     """ Inline inserts the workflow into the DAG. """
-#     pass
-
-
 def activate_as_master(rmt_addr: ReferenceTo,
                        depends_on: Sequence[int|str] = [],
                        required_by: Sequence[int|str] = [],

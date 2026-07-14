@@ -161,16 +161,8 @@ RETURNS TRIGGER AS $$
                 AND r.ready = FALSE
         ) THEN
             PERFORM new_result(
-                p_content := (SELECT mc.master_result
-                    FROM results r
-                        JOIN slaves s ON s.result_addr = r.addr
-                        JOIN master_context mc ON mc.addr = s.master_addr
-                    WHERE mc.addr = v_master_addr),
-                p_addr := (SELECT m.result_addr
-                    FROM results r
-                        JOIN slaves s ON s.result_addr = r.addr
-                        JOIN masters m ON m.addr = s.master_addr
-                    WHERE m.addr = v_master_addr)
+                p_content := (SELECT mc.master_result FROM master_context mc WHERE mc.addr = v_master_addr),
+                p_addr :=  (SELECT m.result_addr FROM masters m WHERE m.addr = v_master_addr)
             );
         END IF;
         RETURN NEW;

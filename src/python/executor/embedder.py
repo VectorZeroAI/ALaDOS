@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import threading
 
+from ..utils.config_handlers import load_apis, load_apis_from_text
+
 from ..utils.conn_factory import conn_factory
 from ..utils.config_dir_resolver import config_dir_resolver
 import tomllib
 from .queue import embedder_queue
 import httpx
 from .types import Api
-from pydantic import TypeAdapter
 from sentence_transformers import SentenceTransformer
 from pgvector.psycopg import register_vector
 
@@ -25,9 +26,10 @@ except FileNotFoundError:
 config_method = "local" if config_file_emb.get("api") is None else config_file_emb.get("api")
 # config_file_emb api is a list of api objects, defined like this [[api]] in the file itself
 
-api_validator = TypeAdapter(Api)
-
 embedder = SentenceTransformer("msmarco-distilbert-base-tas-b")
+
+if config_file_emb_f.exists():
+    apis = load_apis_from_text(config_file_emb_f.read_text())
 
 def setup():
     """ Set up the embeder threads """
@@ -65,13 +67,11 @@ def embedder_thread():
         if config_method == "local":
             emb = _local_emb_call(desc_and_type[0])
         else:
-            for i in config_method: # pyright: ignore
-                api_object = api_validator.validate_python(i)
-
+            for api in apis:
                 try:
-                    emb = _call_jina_embedding(api_object, desc_and_type[0]) # pyright: ignore
+                    emb = _call_jina_embedding(api, desc_and_type[0]) # pyright: ignore
                 except Exception as e:
-                    print(f"api embedding over this method {api_object} encoutered this error: {e}. Trying the next method.")
+                    print(f"api embedding over this method {api} encoutered this error: {e}. Trying the next method.")
                     continue
                 break
             else: # This means all methods didnt work.
@@ -85,14 +85,14 @@ def embedder_thread():
 def _call_jina_embedding(api: Api, text: str):
     with httpx.Client(timeout=15) as client:
         response = client.post(
-            url=api['url'],
+            url=api.url,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {api['key']}"
+                "Authorization": f"Bearer {api.key}"
                 },
             json={
                 "input": [text],
-                "model": api['model'],
+                "model": api.model,
                 "dimensions": 768,
                 "task": "text-matching",
                 "normalized": True

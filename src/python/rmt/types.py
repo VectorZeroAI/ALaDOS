@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
+from dataclasses import dataclass, field
 
-from typing import TypedDict, TypeAlias
+from typing import TypeAlias
+from uuid import uuid4
 from ..executor.types import SlaveScope_
 
 Name: TypeAlias = str
 
-class RmtNode(TypedDict):
+@dataclass(slots=True)
+class RmtNode:
     instruction: str
     id: str
     deps: list[str]
     index: int
     scope: SlaveScope_
 
-class RmtNodeIncomplete(RmtNode, total=False):
-    pass
+@dataclass(slots=True)
+class RmtNodeIncomplete:
+    index: int = field()
+    instruction: str = field(default='')
+    deps: list[str] = field(default=[])
+    scope: SlaveScope_ = field(default='general')
+    id: str = field(default=str(uuid4()))
 
-class RmtNodeReturn(TypedDict):
+@dataclass(slots=True)
+class RmtNodeReturn:
     instruction: str
     id: str
     deps: list[str]

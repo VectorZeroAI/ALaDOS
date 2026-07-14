@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 from typing import TypeAlias, TypedDict, List, Optional
 
 from ...executor.types import SlaveScope
@@ -8,7 +9,8 @@ from ...types import ReferenceTo, ValidTables
 SlaveAddr: TypeAlias = int
 MasterAddr: TypeAlias = int
 
-class SlaveObj(TypedDict):
+@dataclass(slots=True)
+class SlaveObj:
     """ The slave python or pydantic object """
     addr: SlaveAddr
     instruction: str
@@ -16,38 +18,45 @@ class SlaveObj(TypedDict):
     result_name: Optional[str]
     scope: SlaveScope
 
-class Anchor(TypedDict):
+@dataclass(slots=True)
+class Anchor:
     ref_addr: ReferenceTo
     ref_table: ValidTables
 
-class WindowData(TypedDict):
+@dataclass(slots=True)
+class WindowData:
     master_addr: MasterAddr
     window_position: Anchor
     window_size_r: int
     window_size_l: int
 
-class LoadsData(TypedDict):
+@dataclass(slots=True)
+class LoadsData:
     items_addrs: List[ReferenceTo]
 
-class KnowledgeItem(TypedDict):
+@dataclass(slots=True)
+class KnowledgeItem:
     addr: ReferenceTo
     name: Optional[str]
     content: str
 
-class ExecutablesItem(TypedDict):
+@dataclass(slots=True)
+class ExecutablesItem:
     addr: ReferenceTo
     name: Optional[str]
     header: str
     body: str
 
-class LogsItem(TypedDict):
+@dataclass(slots=True)
+class LogsItem:
     addr: ReferenceTo
     name: Optional[str]
     created_at: int
     action: str
     created_by: int
 
-class MasterAsItem(TypedDict):
+@dataclass(slots=True)
+class MasterAsItem:
     addr: ReferenceTo
     name: Optional[str]
     instruction: str
@@ -55,7 +64,8 @@ class MasterAsItem(TypedDict):
     result_name: Optional[str]
     # NOTE : may later be expanded to include all of context and loads that a master goal has as well.
 
-class SlaveAsItem(TypedDict):
+@dataclass(slots=True)
+class SlaveAsItem:
     addr: ReferenceTo
     name: Optional[str]
     master_addr: ReferenceTo
@@ -63,7 +73,8 @@ class SlaveAsItem(TypedDict):
     result_addr: ReferenceTo
     result_name: Optional[str]
 
-class ResultItem(TypedDict):
+@dataclass(slots=True)
+class ResultItem:
     addr: ReferenceTo
     name: Optional[str]
     content_str: str

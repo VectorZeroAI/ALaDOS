@@ -3,7 +3,9 @@ import threading
 import tomllib
 from types import FunctionType
 from typing import Sequence
+import traceback
 
+from ..utils.config_handlers import load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
@@ -21,7 +23,7 @@ from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
 from .queue import embedder_queue, executor_interrupt_queue, executor_queue
-from .types import (Api, InstrJson,
+from .types import (Api, Instr,
                     _ExecToolMetaData,
                     ApiCallsState,
                     ContextGetState,
@@ -72,7 +74,7 @@ Transitions:
 
     """
 
-    def call_llm(str_instr: str, instr: InstrJson) -> tuple[str, State|None]:
+    def call_llm(str_instr: str, instr: Instr) -> tuple[str, State|None]:
         while True:
             try:
                 checkpoint()
@@ -89,16 +91,17 @@ Transitions:
                     'message': str(e),
                     'state': str(state.tag)
                 })
-                return ('', ContextShortState(instr['slave_addr'], e, instr))
+                return ('', ContextShortState(instr.slave_addr, e, instr))
             except Exception as e:
-                print(f"FATAL ERROR {e}")
+                print(f"FATAL ERROR {e}, TRACEBACK: {traceback.format_exception(e)}")
                 log_json({
                     'type': 'core', 
                     'status': 'fatal',
                     'message': str(e),
-                    'state': state
+                    'state': str(state.tag),
+                    'traceback': traceback.format_exception(e)
                 })
-                return ('', ErrorState(instr['slave_addr']))
+                return ('', ErrorState(instr.slave_addr))
 
     conn: Conn = conn_factory()
 
@@ -142,7 +145,7 @@ Transitions:
                     continue
 
 
-                str_instr = " ".join([f"CONTEXT: {instr["context"]} CONTEXT END", f"INSTRUCTION: {instr["instruction"]} INSTRUCTION END"])
+                str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
                 set_next_state(ApiCallsState(str_instr, instr, finish=True))
 
@@ -160,9 +163,9 @@ Transitions:
                         'type': 'core',
                         'status': 'fatal',
                         'message': str(e),
-                        'state': state
+                        'state': str(state.tag)
                     })
-                    set_error_state(ErrorState(curr.instr['slave_addr']))
+                    set_error_state(ErrorState(curr.instr.slave_addr))
                     continue
 
                 try:
@@ -181,13 +184,12 @@ Transitions:
 
             case ExecuteState():
                 curr = state
-                metadata_c: _ExecToolMetaData = {
-                        'conn': conn,
-                        'master_id': curr.instr['master_addr'],
-                        '_embedder_queue': Uqueue[ReferenceTo](),
-                        'slave_id': curr.instr['slave_addr'],
-                        'context_limit': config.get('context_limit', 40000)
-                        }
+                metadata_c = _ExecToolMetaData(
+                        curr.instr.master_addr,
+                        conn,
+                        curr.instr.slave_addr,
+                        config.get('context_limit', 40000)
+                    )
 
                 results = []
                 
@@ -211,7 +213,7 @@ Transitions:
                                 'subtype': 'tool',
                                 'status': 'error',
                                 'message': str(e),
-                                'state': state,
+                                'state': str(state.tag),
                                 'action': 'attempting recovery'
                             })
                             curr.error_count += 1
@@ -221,14 +223,15 @@ Transitions:
                                     'type': 'core',
                                     'subtype': 'tool', 
                                     'status': 'fatal',
-                                    'message': 'Recursive tool call errors detected!'
+                                    'message': 'Recursive tool call errors detected!',
+                                    'state': str(state.tag)
                                 })
-                                set_error_state(ErrorState(curr.instr['slave_addr']))
+                                set_error_state(ErrorState(curr.instr.slave_addr))
                                 continue
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
                             Your task is to figure out what went wrong there, and create a working tool call.
-                            Here is what it attempted to do "{curr.instr['instruction']}".
+                            Here is what it attempted to do "{curr.instr.instruction}".
                             The following is the tool call format instructions and all the valid tools:
                             """ + "\n".join(HEADERS_REGISTRY['general'])
 
@@ -243,7 +246,7 @@ Transitions:
                                     'type': 'core',
                                     'status': 'error',
                                     'message': str(e),
-                                    'state': state
+                                    'state': str(state.tag)
                                 })
                                 n_tool_calls = fix_llm_response(curr.instr, n_llm_out)
                             for j, ntc in enumerate(n_tool_calls, 1):
@@ -264,9 +267,9 @@ Transitions:
 
                 conn.execute("""
                 SELECT new_result(%s, %s);
-                             """, (result_str, curr.instr["result_addr"]))
+                             """, (result_str, curr.instr.result_addr))
 
-                items = curr.metadata_c['_embedder_queue'].get_all()
+                items = curr.metadata_c._embedder_queue.get_all()
                 for i in items:
                     embedder_queue.put(i)
 
@@ -275,7 +278,7 @@ Transitions:
             case ContextShortState():
                 curr = state
                 set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr))
-                add_state(ContextGetState(curr.instr['slave_addr']))
+                add_state(ContextGetState(curr.instr.slave_addr))
                 """
                 This means that first it will execute the entire chain of the context shortening tool calls and API calls,
                 and then it will execute the normal path again from ContextGetState.
@@ -313,14 +316,14 @@ Transitions:
                     """
 
                 set_next_state(ApiCallsState(prompt, curr.instr))
-                add_state(ContextGetState(curr.instr['slave_addr']))
+                add_state(ContextGetState(curr.instr.slave_addr))
                 continue
 
             case ErrorState():
                 curr = state
                 with conn.transaction():
                     conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND addr = s.result_addr;
+            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND s.addr = s.result_addr;
                                  """, (curr.slave_addr,))
                 set_next_state(GetSlaveState())
 
@@ -333,15 +336,8 @@ def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
 
 def startup() -> None:
     """ The startup function that starts up the whole executor system """
-
-
-    apis = []
-    for i in config['apis']:
-        i['rate_limit'] = 2
-        i['lock'] = threading.Lock()
-        i['consecutive_ratelimits'] = 0
-        i['rate_limited_until'] = 0.0
-        apis.append(i)
+    
+    apis = load_apis_from_text(config_file.read_text())
 
     for _ in range(config["cores_number"]):
         threading.Thread(

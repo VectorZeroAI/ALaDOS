@@ -12,12 +12,12 @@ from psycopg.types.json import Jsonb
 
 import re
 
-def serialize(addr: ReferenceTo, conn: Conn = conn_factory()) -> str:
+def serialize(addr: ReferenceTo, conn: Conn) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """
     return serialise(addr, conn)
 
 
-def create_from_serial(expression: str, name: str|None = None, conn: Conn = conn_factory()) -> ReferenceTo:
+def create_from_serial(expression: str, conn: Conn, name: str|None = None) -> ReferenceTo:
     """ Creates a workflow from a serial expression of one. Basically DSL for workflows. """
 
     parsed = parse(expression)
@@ -27,7 +27,7 @@ def create_from_serial(expression: str, name: str|None = None, conn: Conn = conn
     return conn.execute_fetchval("SELECT save_rmt(p_parsed_rmt := %s, p_name := %s)", (jsonb_parsed, name))
 
 
-def create_from_master(master_addr: ReferenceTo, name: str|None = None, conn: Conn = conn_factory()) -> ReferenceTo:
+def create_from_master(master_addr: ReferenceTo, conn: Conn, name: str|None = None) -> ReferenceTo:
     """
     Creates a workflow from a master goal.
     Fully automatically, except it doesnt place variables anywhere.
@@ -142,13 +142,11 @@ def create_from_master(master_addr: ReferenceTo, name: str|None = None, conn: Co
 
 def create_from_range(
         start_node_id: str|int,
+        conn: Conn,
         end_node_id: str|int,
-        name: str|None = None,
-        conn: Conn = conn_factory()
+        name: str|None = None
         ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
-
-    conn = conn_factory()
 
     if isinstance(start_node_id, str):
         try:
@@ -159,14 +157,22 @@ def create_from_range(
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
     backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
+    print(f"forwards_nodes: {forwards_nodes}")
+    print(f"backwards nodes: {backwards_nodes}")
 
     forwards_nodes = [r for r in forwards_nodes]
     backwards_nodes = [r for r in backwards_nodes]
+
+    print(f"forwards_nodes as list: {forwards_nodes}")
+    print(f"backwards nodes as list: {backwards_nodes}")
 
     forwards_nodes = set(forwards_nodes)
     backwards_nodes = set(backwards_nodes)
 
     intersection: set[int] = forwards_nodes & backwards_nodes # NOTE : This weird sign here is doing the intersection detection work.
+    print("intersection addresses:", intersection )
+    print("intersection as list: ", [ a for a in intersection])
+
 
     """
     Okay, so we have the steps now,
@@ -175,15 +181,15 @@ def create_from_range(
     """
 
     slaves = conn.execute("""
-    SELECT instruction, scope, addr FROM slaves WHERE addr = ANY(%s)
-        """, [a for a in intersection])
+    SELECT instruction, scope, addr FROM slaves WHERE addr = ANY(%s::BIGINT[])
+        """, ([a for a in intersection],))
 
     deps = conn.execute("""
     SELECT s.addr, sr.slave_addr
     FROM slave_req sr
         JOIN slaves s ON sr.req_addr = s.result_addr
-    WHERE sr.slave_addr = ANY(%s)
-                        """, [a for a in intersection])
+    WHERE sr.slave_addr = ANY(%s::BIGINT[])
+                        """, ([a for a in intersection], ))
     
     #slaves_deps: dict[int, list[str]] = {}
     slaves_deps = {}
@@ -208,10 +214,10 @@ def create_from_range(
 
     result_jsonb: Jsonb = Jsonb([asdict(r)] for r in result)
 
-    return conn.execute_fetchval(" SELECT save_rmt(%s) ", (result_jsonb, name))
+    return conn.execute_fetchval("SELECT save_rmt(%s, %s);", (result_jsonb, name))
 
 
-def delete_node(node_id: ReferenceTo|str, concatenate: bool = True, conn: Conn = conn_factory()) -> None:
+def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) -> None:
     """
     Deletes a node from an rmt, via the addr or name.
     
@@ -231,7 +237,7 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True, conn: Conn =
 
     """
     
-    conn = conn_factory()
+    Conn
 
     with conn.transaction():
         if isinstance(node_id, str):
@@ -278,9 +284,9 @@ def delete_node(node_id: ReferenceTo|str, concatenate: bool = True, conn: Conn =
 
 def insert_node(rmt_addr: ReferenceTo,
                 instruction: str,
+                conn: Conn,
                 name: str|None = None,
-                depends_on: Sequence[int|str] = [],
-                conn: Conn = conn_factory()
+                depends_on: Sequence[int|str] = []
                 ) -> None:
     """ Inserts a node into the rmt DAG. """
     
@@ -290,6 +296,7 @@ def insert_node(rmt_addr: ReferenceTo,
 
 
 def activate_as_master(rmt_addr: ReferenceTo,
+                       conn: Conn,
                        depends_on: Sequence[int|str] = [],
                        required_by: Sequence[int|str] = [],
                        inputs: dict[str, str] = {}) -> None:
@@ -301,7 +308,6 @@ def activate_as_master(rmt_addr: ReferenceTo,
         required_by are the forward facing edges, e.g. they have to be inverse applied.
         inputs are for later when insertable variables come into place.
     """
-    conn = conn_factory()
 
     depends_on = list(depends_on)
 
@@ -323,10 +329,6 @@ def activate_as_master(rmt_addr: ReferenceTo,
     master_result_addr = conn.execute_fetchval("""
         SELECT result_addr FROM masters WHERE addr = %s;
                                       """, (master_addr,))
-
-    conn.execute("""
-        INSERT INTO names(name, addr) VALUES ('_rmt_activation'::TEXT||nextval('global_rmt_activation_serial')::TEXT, %s)
-                 """, (master_addr,))
 
     curr = conn.cursor()
     curr.executemany("""
@@ -423,3 +425,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
             i['scope']
         ]
     )
+
+    conn.execute("""
+    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+                 """, (master_addr,))

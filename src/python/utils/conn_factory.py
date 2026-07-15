@@ -14,7 +14,13 @@ class Conn(psycopg.Connection):
 def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = []) -> Any:
     tuple_row = self.execute(querry, params).fetchone()
     if tuple_row:
-        return tuple_row[0]
+        try:
+            return tuple_row[0]
+        except KeyError as e:
+            try:
+                return list(tuple_row)[0]
+            except Exception as e2:
+                raise RuntimeError(f"returned tuple row doesnt have any items, returned shape {tuple_row}, tuple_row[0] failed with KeyError {e}.",f"REcovery failed due to {e2}, idea of recovery was to extract the through list() on the result and then [0].")
     else:
         raise RuntimeError("Database returned no answer to the querry!")
 

@@ -252,6 +252,7 @@ def serialise(addr: int, conn: Conn = conn_factory()) -> str:
 
 
         if out_deg == 0:
+            path.append(next_node)
             result.append(path)
             return
 

@@ -315,3 +315,20 @@ ALTER TABLE rmt_slaves
             ON DELETE CASCADE
             ON UPDATE CASCADE,
     ADD COLUMN IF NOT EXISTS deps BIGINT[];
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'rmt_slaves_addr_fkey'
+          AND conrelid = 'rmt_slaves'::regclass
+    ) THEN
+        ALTER TABLE rmt_slaves
+            ADD CONSTRAINT rmt_slaves_addr_fkey
+            FOREIGN KEY (addr) REFERENCES addrs(addr)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;

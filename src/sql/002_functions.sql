@@ -322,57 +322,59 @@ BEGIN
 
         UNION ALL
 
-        -- LEG 1: 
-        -- Base case, just go forward through the graph.
 
-        SELECT slave_addr
-        FROM slave_req sr
-            JOIN slaves s ON s.addr = forward_walk.nodes
-        WHERE sr.req_addr = s.result_addr
+        SELECT next_addr
+        FROM forward_walk fw
+        JOIN slaves s ON s.addr=fw.nodes
+        LEFT JOIN LATERAL (
+            -- LEG 1: 
+            -- Base case, just go forward through the graph.
 
-        UNION ALL
-        
-        -- LEG 2:
-        -- Case 2: result required by master
-        -- goes through master, of course only if master really required the result,
-        -- and just goes through to the first nodes of the master.
+            SELECT slave_addr AS next_addr
+            FROM slave_req sr
+            WHERE sr.req_addr = s.result_addr
 
-        SELECT s2.addr
-        FROM slaves s
-            JOIN forward_walk ON s.addr = forward_walk.nodes
-            JOIN master_req mr ON mr.req_addr = s.result_addr
-            JOIN slaves s2 ON s2.master_addr = mr.master_addr
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM slave_req
-            WHERE slave_addr = s2.addr
-        )
+            UNION ALL
+            
+            -- LEG 2:
+            -- Case 2: result required by master
+            -- goes through master, of course only if master really required the result,
+            -- and just goes through to the first nodes of the master.
 
-        UNION ALL
-        
-        -- LEG 3:
-        -- Case 3: No more slaves, in the master, try to jump through master result
-        -- Checks if no more slaves present in the graph, and if yes,
-        -- then it goes to masters result, and then checks through master result, and looks if anyone requires it.
-        -- if yes, for slave case, it just gives the slave, and for master case,
-        -- it goes into the master and selects the starting slaves of the master, and returns them,
-        -- All in a single querry. 
+            SELECT s2.addr AS next_addr
+            FROM master_req mr
+                JOIN slaves s2 ON s2.master_addr = mr.master_addr
+            WHERE mr.req_addr = s.result_addr
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM slave_req
+                    WHERE slave_addr = s2.addr
+                )
 
-        SELECT COALESCE(sr.slave_addr, s2.addr)
-        FROM slaves s
-            JOIN forward_walk ON forward_walk.nodes = s.addr
-            JOIN masters m ON s.master_addr = m.addr
-            LEFT JOIN slave_req sr ON m.result_addr = sr.req_addr
-            LEFT JOIN master_req mr ON m.result_addr = mr.req_addr
-            JOIN slaves s2 ON mr.master_addr = s2.master_addr
-        WHERE NOT EXISTS (
-            SELECT 1 FROM slave_req WHERE req_addr = s.result_addr
-        ) AND NOT EXISTS (
-            SELECT 1
-            FROM slave_req sr2
-                JOIN s2 ON s2.addr = sr2.slave_addr
-        )
+            UNION ALL
+            
+            -- LEG 3:
+            -- Case 3: No more slaves, in the master, try to jump through master result
+            -- Checks if no more slaves present in the graph, and if yes,
+            -- then it goes to masters result, and then checks through master result, and looks if anyone requires it.
+            -- if yes, for slave case, it just gives the slave, and for master case,
+            -- it goes into the master and selects the starting slaves of the master, and returns them,
+            -- All in a single querry. 
 
+            SELECT COALESCE(sr.slave_addr, s2.addr) AS next_addr
+            FROM masters m
+                LEFT JOIN slave_req sr ON m.result_addr = sr.req_addr
+                LEFT JOIN master_req mr ON m.result_addr = mr.req_addr
+                JOIN slaves s2 ON mr.master_addr = s2.master_addr
+            WHERE m.addr = s.master_addr
+                AND NOT EXISTS (
+                    SELECT 1 FROM slave_req WHERE req_addr = s.result_addr
+                ) AND NOT EXISTS (
+                    SELECT 1
+                    FROM slave_req sr2
+                        JOIN slaves s3 ON s3.addr = sr2.slave_addr
+                )
+        ) legs ON TRUE
     ) SELECT array_agg(nodes) INTO v_nodes_list FROM forward_walk;
 
     RETURN v_nodes_list;
@@ -387,63 +389,63 @@ DECLARE
 BEGIN
     WITH RECURSIVE backward_walk(nodes) AS (
         -- ANCHOR
-        SELECT s.addr
-        FROM slave_req sr
-            JOIN slaves s ON sr.req_addr = s.result_addr
-        WHERE sr.slave_addr = p_start_node
+        SELECT s_a.addr
+        FROM slave_req sr_a
+            JOIN slaves s_a ON sr_a.req_addr = s_a.result_addr
+        WHERE sr_a.slave_addr = p_start_node
 
         UNION ALL
 
-        -- RECURSE, uses backward_walk.nodes as those are the previous results
-        -- just gets the requirements of a node.
-        SELECT s.addr
-        FROM slave_req sr
-            JOIN slaves s ON s.result_addr = sr.req_addr
-        WHERE sr.slave_addr = backward_walk.nodes
 
-        UNION ALL
-        
+        SELECT next_node
+        FROM backward_walk
+            JOIN slaves s_b ON s_b.addr = backward_walk.nodes
+            JOIN slave_req sr_b ON sr_b.slave_addr = backward_walk.nodes
+        LEFT JOIN LATERAL (
+            -- RECURSE, uses backward_walk.nodes as those are the previous results
+            -- just gets the requirements of a node.
+            SELECT s.addr AS next_node
+            FROM slaves s
+            WHERE s.result_addr = sr_b.req_addr
 
-        -- LEG 2, EDGE CASE "req_addr is a master_result"
-        -- Only executed for those that arent slave results.
-        -- Goes to the master, and grabs its slaves.
-        -- Grabs only the slaves of the master that are not required anywhere,
-        -- for it to then naturally continue downwards
+            UNION ALL
 
-        SELECT s.addr
-        FROM slave_req sr
-            INNER JOIN masters m ON m.result_addr = sr.req_addr
-            INNER JOIN slaves s ON s.master_addr = m.addr
-        WHERE sr.slave_addr = backward_walk.nodes
-            AND NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s.result_addr)
+            -- LEG 2, EDGE CASE "req_addr is a master_result"
+            -- Only executed for those that arent slave results.
+            -- Goes to the master, and grabs its slaves.
+            -- Grabs only the slaves of the master that are not required anywhere,
+            -- for it to then naturally continue downwards
 
-        UNION ALL
+            SELECT s1.addr AS next_node
+            FROM masters m
+                INNER JOIN slaves s1 ON s1.master_addr = m.addr
+            WHERE NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s1.result_addr)
+                AND m.result_addr = sr_b.req_addr
 
-        -- LEG 3, the edge case of "No requirements left of slaves"
-        -- Executed only for slaves that have no requirements.
-        -- Has 2 cases inside of it melded together for performance.
-        -- sub case 1: master_req is a master_result
-        -- sub case 2: master_req is a slave_result
-        -- in both cases it just left joins the crap in, that means it keeps the result address
-        -- while getting new info.
-        -- In sub case 2 this leg just does the same unraveling as LEG 2 does.
-        -- COALESCE because only one of those is true for one row, e.g. for one cause, e.g. for one result. 
-        -- The only unhandled case is if a result came out of the fucking sky, e.g. from external sources,
-        -- And that would be ignored, because thats what its supposed to do.
-        -- NOTE : All required results with unclear origin are ignored. 
+            UNION ALL
 
-        SELECT COALESCE(s2.addr, s3.addr)
-        FROM slaves s1
-            INNER JOIN backward_walk ON s1.addr = backward_walk.nodes
-            INNER JOIN master_req mr ON mr.master_addr = s1.master_addr
-            LEFT JOIN slaves s2 ON mr.req_addr = s2.result_addr
-            LEFT JOIN masters m ON mr.req_addr = m.result_addr
-            JOIN slaves s3 ON s.master_addr = m.addr
-        WHERE COALESCE(s2.addr, s3.addr) IS NOT NULL
-            AND NOT EXISTS(
-                SELECT req_addr FROM slave_req WHERE slave_addr = backward_walk.nodes
-            )
-            AND NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s3.result_addr)
+            -- LEG 3, the edge case of "No requirements left of slaves"
+            -- Executed only for slaves that have no requirements.
+            -- Has 2 cases inside of it melded together for performance.
+            -- sub case 1: master_req is a master_result
+            -- sub case 2: master_req is a slave_result
+            -- in both cases it just left joins the crap in, that means it keeps the result address
+            -- while getting new info.
+            -- In sub case 2 this leg just does the same unraveling as LEG 2 does.
+            -- COALESCE because only one of those is true for one row, e.g. for one cause, e.g. for one result. 
+            -- The only unhandled case is if a result came out of the fucking sky, e.g. from external sources,
+            -- And that would be ignored, because thats what its supposed to do.
+            -- NOTE : All required results with unclear origin are ignored. 
+
+            SELECT COALESCE(s2.addr, s3.addr) AS next_node
+            FROM master_req mr
+                LEFT JOIN slaves s2 ON mr.req_addr = s2.result_addr
+                LEFT JOIN masters m ON mr.req_addr = m.result_addr
+                JOIN slaves s3 ON s3.master_addr = m.addr
+            WHERE COALESCE(s2.addr, s3.addr) IS NOT NULL
+                AND NOT EXISTS(SELECT 1 FROM slave_req sr WHERE sr.req_addr = s3.result_addr)
+                AND mr.master_addr = s_b.master_addr
+        ) legs ON TRUE
 
     ) SELECT array_agg(nodes) INTO v_nodes_list FROM backward_walk;
 

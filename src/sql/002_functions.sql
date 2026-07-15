@@ -274,7 +274,8 @@ CREATE OR REPLACE FUNCTION new_master(
     p_instruction TEXT,
     req_names TEXT[] DEFAULT NULL,
     req_addrs BIGINT[] DEFAULT NULL,
-    result_name TEXT DEFAULT NULL
+    result_name TEXT DEFAULT NULL,
+    p_addr BIGINT DEFAULT NULL
 ) RETURNS BIGINT AS $$
 DECLARE
     new_master_addr BIGINT;
@@ -283,9 +284,11 @@ DECLARE
     name TEXT;
 BEGIN
 
-    INSERT INTO masters(instruction) VALUES (p_instruction)
-    RETURNING addr, result_addr
-    INTO new_master_addr, new_master_result_addr;
+    new_master_addr := COALESCE(p_addr, new_addr());
+
+    INSERT INTO masters(instruction, addr) VALUES (p_instruction, new_master_addr)
+    RETURNING result_addr
+    INTO new_master_result_addr;
     
     IF req_names IS NOT NULL THEN
         FOREACH name IN ARRAY req_names LOOP
@@ -316,12 +319,9 @@ BEGIN
     WITH RECURSIVE forward_walk(nodes) AS (
         -- ANCHOR
 
-        SELECT slave_addr
-        FROM slave_req
-        WHERE req_addr = (SELECT result_addr FROM slaves WHERE addr = p_start_node)
+        SELECT p_start_node
 
         UNION ALL
-
 
         SELECT next_addr
         FROM forward_walk fw
@@ -389,10 +389,7 @@ DECLARE
 BEGIN
     WITH RECURSIVE backward_walk(nodes) AS (
         -- ANCHOR
-        SELECT s_a.addr
-        FROM slave_req sr_a
-            JOIN slaves s_a ON sr_a.req_addr = s_a.result_addr
-        WHERE sr_a.slave_addr = p_start_node
+        SELECT p_start_node
 
         UNION ALL
 

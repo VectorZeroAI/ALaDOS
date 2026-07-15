@@ -307,14 +307,19 @@ CREATE TABLE IF NOT EXISTS reusable_master_templates(
         ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS rmt_slaves(LIKE slaves INCLUDING ALL);
-
-ALTER TABLE rmt_slaves
-    ADD COLUMN IF NOT EXISTS template_addr BIGINT
+CREATE TABLE IF NOT EXISTS rmt_slaves(
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
+        REFERENCES addrs(addr) 
+            ON UPDATE CASCADE 
+            ON DELETE CASCADE,
+    instruction TEXT NOT NULL,
+    scope slave_scope NOT NULL DEFAULT 'general',
+    template_addr BIGINT
         REFERENCES reusable_master_templates
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    ADD COLUMN IF NOT EXISTS deps BIGINT[];
+    deps BIGINT[]
+);
 
 DO $$
 BEGIN

@@ -3,12 +3,14 @@
 from dataclasses import asdict
 from typing import Sequence
 
+from psycopg import ProgrammingError
 from psycopg.errors import DataError
-from python.rmt.types import ReturnParsedRmtExpression, RmtNodeReturn
+from python.rmt.types import ReturnParsedRmtExpression, RmtNode, RmtNodeReturn
 from ..utils.conn_factory import conn_factory, Conn
 from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
+from copy import copy
 
 import re
 
@@ -173,6 +175,9 @@ def create_from_range(
     print("intersection addresses:", intersection )
     print("intersection as list: ", [ a for a in intersection])
 
+    if len(intersection) < 2:
+        raise ValueError("Items do not intersect!")
+
 
     """
     Okay, so we have the steps now,
@@ -180,41 +185,70 @@ def create_from_range(
     as well as init the rmt template in its respective table.
     """
 
+    INSTRUCTION = 0
+    SCOPE = 1
+    ADDR = 2
+
     slaves = conn.execute("""
     SELECT instruction, scope, addr FROM slaves WHERE addr = ANY(%s::BIGINT[])
-        """, ([a for a in intersection],))
+        """, ([a for a in intersection],)).fetchall()
 
     deps = conn.execute("""
     SELECT s.addr, sr.slave_addr
     FROM slave_req sr
         JOIN slaves s ON sr.req_addr = s.result_addr
     WHERE sr.slave_addr = ANY(%s::BIGINT[])
-                        """, ([a for a in intersection], ))
+                        """, ([a for a in intersection], )).fetchall()
     
-    #slaves_deps: dict[int, list[str]] = {}
     slaves_deps = {}
 
-    for d in deps:
-        slaves_deps[d[1]] = []
+    print(f"Deps fetch : {deps}")
+
+    for s in slaves:
+        print(f"initing slaves_deps[{s[ADDR]}]")
+        slaves_deps[s[ADDR]] = []
 
     for d in deps:
+        print(f"sorting {d[0]} to {d[1]}")
         slaves_deps[d[1]].append(d[0])
 
     slaves = [[i for i in s] for s in slaves]
 
-    result: ReturnParsedRmtExpression = []
+    rmt_addr = conn.execute_fetchval("""
+    INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
+                 """)
 
+    print(f"slaves: {slaves}")
     for s in slaves:
-        result.append(RmtNodeReturn(
-            s[0],
-            s[2],
-            slaves_deps[s[2]],
-            s[1]
-        ))
+        new_addr = conn.execute_fetchval("SELECT new_addr();")
+        print(f"new_addr: {new_addr}", f"slave: {s}")
+        print(f"slaves_deps.values : {slaves_deps.values()}, slave_deps.items : {slaves_deps.items()}")
+        for k, sd in slaves_deps.items():
+            print(f"sd: {sd}, k: {k}")
+            for indx, d in enumerate(sd):
+                print(f"indx, d: {indx}, {d}")
+                if d == s[ADDR]:
+                    print(f"replacing {d}, wich is {s[ADDR]} with {new_addr}")
+                    slaves_deps[k][indx] = new_addr
 
-    result_jsonb: Jsonb = Jsonb([asdict(r)] for r in result)
+        print(f"reasigning deps from {s[ADDR]} to {new_addr}")
+        slaves_deps[new_addr] = slaves_deps.get(s[ADDR])
+        s[ADDR] = new_addr
+    
 
-    return conn.execute_fetchval("SELECT save_rmt(%s, %s);", (result_jsonb, name))
+    conn.executemany("""
+    INSERT INTO rmt_slaves(template_addr, deps, instruction, scope, addr) VALUES(%s, %s, %s, %s, %s)
+        """, [(rmt_addr, slaves_deps.get(s[2], []), s[INSTRUCTION], s[SCOPE], s[ADDR]) for s in slaves], False)
+
+    if name:
+        conn.execute("""
+        INSERT INTO names(name, addr) VALUES(%s, %s);
+                     """, (name, rmt_addr))
+
+    return rmt_addr
+    
+
+    
 
 
 def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) -> None:
@@ -320,10 +354,17 @@ def activate_as_master(rmt_addr: ReferenceTo,
                 raise DataError("Provided name was not able to be resolved.")
             depends_on[i] = name
 
-    master_addr = conn.execute_fetchval("""
-        SELECT new_master( p_instruction := 'NONE', req_addrs := %s); 
-                               """, (depends_on,)
-                               )
+    with conn.transaction():
+        master_addr = conn.execute_fetchval("""
+            SELECT new_addr();
+                                            """)
+        conn.execute("""
+             INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+                     """, (master_addr,))
+
+        conn.execute("""
+             SELECT new_master(p_instruction := 'NONE', req_addrs := %s, p_addr := %s); 
+                     """, (depends_on, master_addr))
 
 
     master_result_addr = conn.execute_fetchval("""
@@ -331,9 +372,10 @@ def activate_as_master(rmt_addr: ReferenceTo,
                                       """, (master_addr,))
 
     curr = conn.cursor()
-    curr.executemany("""
-    INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
-                    """, [(i, master_result_addr) for i in required_by])
+    if len(required_by) < 1:
+        curr.executemany("""
+        INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
+                        """, [(i, master_result_addr) for i in required_by])
         
     rmt_template = conn.execute("""
     SELECT addr,
@@ -363,7 +405,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
         } for t in rmt_template]
 
     for i in rmt_template:
-        old_addr = i['result_addr']
+        old_addr = copy(i['addr'])
 
         i['addr']= conn.execute_fetchval("SELECT new_addr()")
         i['result_addr']= conn.execute_fetchval("SELECT new_addr()")
@@ -426,6 +468,3 @@ def activate_as_master(rmt_addr: ReferenceTo,
         ]
     )
 
-    conn.execute("""
-    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
-                 """, (master_addr,))

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from dataclasses import asdict
-from typing import Sequence
+from typing import Sequence, get_args
 
 from psycopg.errors import DataError
+from python.executor.types import SlaveScope
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
@@ -486,3 +487,18 @@ def edit_instruction(node_id: str|int, sr_block: SearchAndReplaceBlock, conn: Co
         SET instruction = %s
     WHERE addr = %s
         """, (instruction, node_id))
+
+def change_scope(node_id: str|int, new_scope: SlaveScope, conn: Conn) -> None:
+
+    if isinstance(node_id, str):
+        node_id = conn.execute_fetchval("SELECT resolve_name(%s)", (node_id,))
+
+    if new_scope not in get_args(SlaveScope):
+        raise ValueError(f"given new scope {new_scope} not in allowed scopes {get_args(SlaveScope)}")
+
+    conn.execute("""
+    UPDATE rmt_slaves
+        SET scope = %s
+    WHERE addr = %s
+                 """, (new_scope,))
+

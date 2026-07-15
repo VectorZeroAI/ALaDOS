@@ -8,7 +8,6 @@ import psycopg
 from psycopg.types.json import Jsonb
 from .execute_tool import register_tool
 import subprocess
-import re
 import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, SlaveScope
@@ -16,32 +15,13 @@ from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
+from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
 
 ActionConfirmation: TypeAlias = str
-search_and_replace_block: TypeAlias = str
 
 ALL = get_args(SlaveScope)
 
 searcher_obj = SearxngSearcher()
-
-def _sr_block_parser(sr_block: search_and_replace_block) -> tuple[str, str]:
-    """
-    retuns (search, replacement)
-    search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
-    """
-    match = re.search(
-        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
-        sr_block,
-        re.DOTALL
-    )
-    if not match:
-        raise ValueError("No matches found.")
-    
-    search = match.group(1).strip()
-    replacement = match.group(2)
-    return (search, replacement)
-
-
 
 @register_tool("K.create", ['general', 'context'])
 def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
@@ -72,8 +52,8 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 
 
 @register_tool("K.edit", ['general', 'context'])
-def k_edit(description_change: search_and_replace_block,
-           content_change: search_and_replace_block,
+def k_edit(description_change: SearchAndReplaceBlock,
+           content_change: SearchAndReplaceBlock,
            _meta: _ExecToolMetaData,
            addr: int|None = None,
            name: str|None = None
@@ -221,8 +201,8 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 def edit_tool(_meta: _ExecToolMetaData,
               name: str|None = None,
               addr: int|None = None, 
-              header_change: search_and_replace_block|None = None,
-              body_change: search_and_replace_block|None = None,
+              header_change: SearchAndReplaceBlock|None = None,
+              body_change: SearchAndReplaceBlock|None = None,
               new_description: str|None = None,
               ) -> ActionConfirmation:
     """

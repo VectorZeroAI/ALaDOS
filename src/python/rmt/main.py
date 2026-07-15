@@ -3,10 +3,9 @@
 from dataclasses import asdict
 from typing import Sequence
 
-from psycopg import ProgrammingError
 from psycopg.errors import DataError
-from python.rmt.types import ReturnParsedRmtExpression, RmtNode, RmtNodeReturn
-from ..utils.conn_factory import conn_factory, Conn
+from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
+from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
@@ -468,3 +467,22 @@ def activate_as_master(rmt_addr: ReferenceTo,
         ]
     )
 
+
+def edit_instruction(node_id: str|int, sr_block: SearchAndReplaceBlock, conn: Conn) -> None:
+    
+    if isinstance(node_id, str):
+        node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (node_id, ))
+
+    instruction = conn.execute_fetchval("SELECT instruction FROM rmt_slaves WHERE addr = %s", (node_id,))
+    
+    search, replace = _sr_block_parser(sr_block)
+    
+    assert isinstance(instruction, str)
+
+    instruction = instruction.replace(search, replace)
+
+    conn.execute("""
+    UPDATE rmt_slaves
+        SET instruction = %s
+    WHERE addr = %s
+        """, (instruction, node_id))

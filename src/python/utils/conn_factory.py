@@ -7,6 +7,12 @@ from psycopg.rows import TupleRow
 from psycopg.types import composite
 from psycopg.sql import SQL
 
+class NoValue(RuntimeError):
+    def __init__(self, *error: str):
+        self.error = error
+    def __str__(self) -> str:
+        return str(self.error)
+
 class Conn(psycopg.Connection):
     def execute_fetchval(self, querry: SQL|LiteralString, params: Sequence = []) -> Any: ...
 
@@ -27,7 +33,7 @@ def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = 
             try:
                 return list(tuple_row)[0]
             except Exception as e2:
-                raise RuntimeError(f"returned tuple row doesnt have any items, returned shape {tuple_row}, tuple_row[0] failed with KeyError {e}.",f"REcovery failed due to {e2}, idea of recovery was to extract the through list() on the result and then [0].")
+                raise NoValue(f"returned tuple row doesnt have any items, returned shape {tuple_row}, tuple_row[0] failed with KeyError {e}.",f"REcovery failed due to {e2}, idea of recovery was to extract the through list() on the result and then [0].")
     else:
         raise RuntimeError("Database returned no answer to the querry!")
 

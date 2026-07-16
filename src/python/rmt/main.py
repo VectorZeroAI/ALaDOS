@@ -5,9 +5,9 @@ from typing import Sequence, get_args
 
 from psycopg.errors import DataError
 from python.executor.types import SlaveScope
-from python.utils.name_resolver import partial_resolve_names
+from python.utils.name_resolver import partial_resolve_names, resolve_to_addr
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
-from ..utils.conn_factory import Conn
+from ..utils.conn_factory import Conn, NoValue
 from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
@@ -155,7 +155,7 @@ def create_from_range(
         try:
             start_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (start_node_id,))
             end_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (end_node_id,))
-        except TypeError as e:
+        except Exception as e:
             raise ValueError(f"NAME COULD NOT BE RESOLVED, MOST LIKELY. ERROR: {e}")
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
@@ -273,11 +273,7 @@ def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) 
     """
     
     with conn.transaction():
-        if isinstance(node_id, str):
-            try:
-                node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (node_id))
-            except TypeError:
-                raise NameError("PROVIDED node_id string does not exist as a name!")
+        node_id = resolve_to_addr(node_id, conn)
 
         reqired_by = conn.execute("""
         SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);

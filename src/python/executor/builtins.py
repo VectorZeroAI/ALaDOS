@@ -6,6 +6,7 @@ from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
 from numpy import ndarray
 import psycopg
 from psycopg.types.json import Jsonb
+from python.utils.conn_factory import NoValue
 from python.utils.name_resolver import resolve_to_addr, resolve_to_addrs
 from .execute_tool import register_tool
 import subprocess
@@ -74,7 +75,7 @@ def k_edit(description_change: SearchAndReplaceBlock,
         flag_ownership = conn.execute_fetchval("""
         SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
                                       """, (addr, _meta.master_id))
-    except TypeError:
+    except NoValue:
         flag_ownership = False
 
     if not flag_ownership:
@@ -84,7 +85,6 @@ def k_edit(description_change: SearchAndReplaceBlock,
         old_k = conn.execute_fetchval("""
         SELECT content FROM knowledge WHERE addr = %s;
                              """, (addr,))
-        assert isinstance(old_k, str)
         search, replace = _sr_block_parser(content_change)
         new_k = old_k.replace(search, replace)
         conn.execute("""
@@ -95,7 +95,6 @@ def k_edit(description_change: SearchAndReplaceBlock,
         old_d = conn.execute_fetchval("""
         SELECT description FROM vector_ops WHERE addr = %s;
                              """, (addr,))
-        assert isinstance(old_d, str)
         search, replace = _sr_block_parser(description_change)
         new_d = old_d.replace(search, replace)
         conn.execute("""
@@ -167,13 +166,13 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
     """
     conn = _meta.conn
     addr = conn.execute_fetchval("""
-    SELECT new_addr();
+        SELECT new_addr();
                         """)
     conn.execute("""
-    INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
+        INSERT INTO executables(header, body, addr) VALUES (%s, %s, %s);
                  """, (header, body, addr,))
     conn.execute("""
-    INSERT INTO vector_ops(addr_exe, description) VALUES (%s, %s)
+        INSERT INTO vector_ops(addr_exe, description) VALUES (%s, %s)
                  """, (addr, description))
     if name is not None:
         conn.execute("""
@@ -220,9 +219,9 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     try:
         flag_ownership = conn.execute_fetchval("""
-        SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
+            SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
                                   """, (addr, _meta.master_id))
-    except TypeError:
+    except NoValue:
         flag_ownership = False
 
     if not flag_ownership:
@@ -436,9 +435,9 @@ def context_window_land(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> Action
 
     try:
         addr_type = conn.execute_fetchval("""
-        SELECT type FROM addrs_tables WHERE addr = %s;
+            SELECT type FROM addrs_tables WHERE addr = %s;
                                  """, (addr,))
-    except TypeError as e:
+    except NoValue as e:
         raise psycopg.DataError(f"Couldnt resolve addr {addr} to type, due to the following error: {e}, as result of fetch is not subscriptable.")
     if addr_type == "knowledge":
         conn.execute("""

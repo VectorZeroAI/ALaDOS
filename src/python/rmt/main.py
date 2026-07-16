@@ -4,10 +4,10 @@ from dataclasses import asdict
 from typing import Sequence, get_args
 
 from psycopg.errors import DataError
-from python.executor.types import SlaveScope
-from python.utils.name_resolver import partial_resolve_names, resolve_to_addr
+from python.executor.types import SlaveScope, SlaveScope_
+from python.utils.name_resolver import resolve_to_addrs, resolve_to_addr
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
-from ..utils.conn_factory import Conn, NoValue
+from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
 from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
@@ -315,23 +315,34 @@ def insert_node(rmt_id: ReferenceTo|str,
                 instruction: str,
                 conn: Conn,
                 name: str|None = None,
+                scope: SlaveScope_ = 'general',
                 depends_on: Sequence[ReferenceTo|str] = [],
                 required_by: Sequence[ReferenceTo|str] = []
-                ) -> None:
+                ) -> ReferenceTo:
     """ Inserts a node into the rmt DAG. """
 
-    # PLAN : So first we insert the instruction and the name and the deps into the rmt_slaves
-    # Then we update each of the "required_by" to include the new rmt_slave
     if isinstance(rmt_id, str):
         rmt_id = conn.execute_fetchval("SELECT resolve_name(%s);", (rmt_id,))
 
-    depends_on = partial_resolve_names(depends_on)
-    required_by = partial_resolve_names(required_by)
+    depends_on = resolve_to_addrs(depends_on, conn)
+    required_by = resolve_to_addrs(required_by, conn)
     
-    addr = conn.execute_fetchval("""
-    INSERT INTO rmt_slaves(template_addr, instruction, scope, deps)
-    VALUES(%s, %s, %s, %s)
-                 """, (rmt_id,))
+    with conn.transaction():
+        addr = conn.execute_fetchval("""
+        INSERT INTO rmt_slaves(template_addr, instruction, scope, deps)
+        VALUES(%s, %s, %s, %s)
+                     """, (rmt_id, instruction, scope, depends_on))
+        conn.execute("""
+        UPDATE rmt_slaves
+            SET deps = array_append(deps, %s)
+        WHERE addr = ANY(%s)
+                         """, (addr, required_by))
+        if name:
+            conn.execute("""
+            INSERT INTO names(name, addr) VALUES(%s, %s);
+                         """, (name, addr))
+
+    return addr
 
     
 

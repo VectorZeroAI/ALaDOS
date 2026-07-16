@@ -5,6 +5,8 @@ from types import FunctionType
 from typing import Sequence
 import traceback
 
+from python.sceduler.goal_stack.types import LoadsData
+
 from ..utils.config_handlers import load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
@@ -13,7 +15,6 @@ from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
 from ..sceduler.main import slave_addr_to_instr
-from ..types import ReferenceTo
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.llm_to_json import llm_to_json
@@ -57,7 +58,6 @@ Architecture of states:
     7. CONTEXT_SHORTENING
     8. FINISH (Write the result)
 
-<<<<<<< HEAD
 Transitions:
     1 -> 2 -> 3 -> 4 -> 8
     3 -> 7 -> 4 -> 3
@@ -310,7 +310,7 @@ Transitions:
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
-                ITEMS: {resolve_loads({"items_addrs": addrs_items})} ITEMS END.
+                ITEMS: {resolve_loads(LoadsData(addrs_items), conn)} ITEMS END.
                 PARADOX: {curr.paradox_e.paradox} PARADOX END.
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """

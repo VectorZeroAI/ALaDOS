@@ -62,7 +62,7 @@ def clean_db():
     with conn.transaction():
         for t in tables:
             try:
-                conn.execute(f"DELETE FROM {t} CASCADE")
+                conn.execute(f"DELETE FROM {t} CASCADE") # pyright: ignore
             except Exception:
                 pass
         # Reset sequences

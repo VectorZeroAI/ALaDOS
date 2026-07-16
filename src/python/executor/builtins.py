@@ -103,7 +103,7 @@ def k_edit(description_change: SearchAndReplaceBlock,
 
         _meta._embedder_queue.put(addr)
 
-    return f"Edited the knowledge item {name if name is not None else "Nameless"}@{addr}"
+    return f"Edited the knowledge item {id if isinstance(id, str) else "Nameless"}@{addr}"
 
 
 

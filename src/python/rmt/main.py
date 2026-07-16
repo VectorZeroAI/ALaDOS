@@ -5,6 +5,7 @@ from typing import Sequence, get_args
 
 from psycopg.errors import DataError
 from python.executor.types import SlaveScope
+from python.utils.name_resolver import partial_resolve_names
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
@@ -271,8 +272,6 @@ def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) 
 
     """
     
-    Conn
-
     with conn.transaction():
         if isinstance(node_id, str):
             try:
@@ -316,16 +315,29 @@ def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) 
 
 
 
-def insert_node(rmt_addr: ReferenceTo,
+def insert_node(rmt_id: ReferenceTo|str,
                 instruction: str,
                 conn: Conn,
                 name: str|None = None,
-                depends_on: Sequence[int|str] = []
+                depends_on: Sequence[ReferenceTo|str] = [],
+                required_by: Sequence[ReferenceTo|str] = []
                 ) -> None:
     """ Inserts a node into the rmt DAG. """
-    
-    pass
 
+    # PLAN : So first we insert the instruction and the name and the deps into the rmt_slaves
+    # Then we update each of the "required_by" to include the new rmt_slave
+    if isinstance(rmt_id, str):
+        rmt_id = conn.execute_fetchval("SELECT resolve_name(%s);", (rmt_id,))
+
+    depends_on = partial_resolve_names(depends_on)
+    required_by = partial_resolve_names(required_by)
+    
+    addr = conn.execute_fetchval("""
+    INSERT INTO rmt_slaves(template_addr, instruction, scope, deps)
+    VALUES(%s, %s, %s, %s)
+                 """, (rmt_id,))
+
+    
 
 
 

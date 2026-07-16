@@ -6,6 +6,8 @@ Run with: pytest -s test_rmt.py
 Requires a running PostgreSQL database with the full ALaDOS schema applied.
 Uses the project's Conn type, connected to alados_test, with default TupleRow rows.
 """
+from typing import cast
+
 import pytest
 import psycopg
 import types
@@ -38,6 +40,7 @@ def conn_factory_test() -> Conn:
     conn_raw = psycopg.connect(host=DB_HOST, dbname=DB_NAME)
     conn_raw.autocommit = False          # we use explicit transactions
     conn = register_all_the_composite_types(conn_raw)
+    conn = cast(Conn, conn)
     conn.execute_fetchval = types.MethodType(_execute_fetchval, conn)
     conn.executemany = types.MethodType(_execute_many, conn)
 

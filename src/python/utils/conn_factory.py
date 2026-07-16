@@ -9,7 +9,14 @@ from psycopg.sql import SQL
 
 class Conn(psycopg.Connection):
     def execute_fetchval(self, querry: SQL|LiteralString, params: Sequence = []) -> Any: ...
-    def executemany(self, querry: SQL|LiteralString, param_seq: Sequence[Sequence], returning: bool = False) -> None|Any: ...
+
+    @overload
+    def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[True]) -> Iterator[psycopg.Cursor[TupleRow]]: ...
+
+    @overload
+    def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[False]) -> None: ...
+
+    def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: bool = False) -> None|Any: ...
 
 def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = []) -> Any:
     tuple_row = self.execute(querry, params).fetchone()
@@ -24,13 +31,8 @@ def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = 
     else:
         raise RuntimeError("Database returned no answer to the querry!")
 
-@overload
-def _execute_many(self: Conn, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[True]) -> Iterator[psycopg.Cursor[TupleRow]]: ...
 
-@overload
-def _execute_many(self: Conn, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[False]) -> None: ...
-
-def _execute_many(self, querry, params_seq, returning):
+def _execute_many(self: Conn, querry, params_seq, returning = False):
     with self.cursor() as cur:
         cur.executemany(querry, params_seq, returning=returning)
         if returning:
@@ -50,8 +52,10 @@ def conn_factory() -> Conn:
 
     conn = register_all_the_composite_types(conn)
 
-    conn.execute_fetchval = types.MethodType(_execute_fetchval, conn) # pyright: ignore
-    conn.executemany = types.MethodType(_execute_many, conn) # pyright: ignore
+    conn = cast(Conn, conn)
+
+    conn.execute_fetchval = types.MethodType(_execute_fetchval, conn)
+    conn.executemany = types.MethodType(_execute_many, conn)
 
     return cast(Conn, conn)
 

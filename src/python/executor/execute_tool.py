@@ -11,6 +11,7 @@ HEADERS_REGISTRY = {}
 
 TOOL_USAGE_INSTRUCTION = """
 You should output tool calls. Otherwise your response will be treated as plaintext result. 
+Whenever you see the argument id, it means its ether an address, e.g. number, or a name.
 When calling tools you must follow this instruction format:
 [
     {

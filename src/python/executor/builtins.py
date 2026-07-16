@@ -6,11 +6,12 @@ from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
 from numpy import ndarray
 import psycopg
 from psycopg.types.json import Jsonb
+from python.utils.name_resolver import resolve_to_addr, resolve_to_addrs
 from .execute_tool import register_tool
 import subprocess
 import json
 from .embedder import embedder
-from .types import _ExecToolMetaData, SlaveScope
+from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
 from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
@@ -55,8 +56,7 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 def k_edit(description_change: SearchAndReplaceBlock,
            content_change: SearchAndReplaceBlock,
            _meta: _ExecToolMetaData,
-           addr: int|None = None,
-           name: str|None = None
+           id: ReferenceTo|str,
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 
@@ -67,10 +67,8 @@ def k_edit(description_change: SearchAndReplaceBlock,
     to make addr and name optional while keeping _meta the last argument.
     """
     conn = _meta.conn
-    if addr is None:
-        addr = conn.execute_fetchval("""
-        SELECT resolve_name(%s);
-                     """, (name,))
+
+    addr = resolve_to_addr(id, conn)
 
     try:
         flag_ownership = conn.execute_fetchval("""
@@ -113,40 +111,31 @@ def k_edit(description_change: SearchAndReplaceBlock,
 
 
 @register_tool("K.read", ['general', 'context'])
-def k_read(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None) -> ActionConfirmation:
-    """ Reads a knowledge item by address or by name. One of those must be provided. """
+def k_read(_meta: _ExecToolMetaData, id: int|str) -> ActionConfirmation:
+    """ Resolve knowledge item by ID. """
     conn = _meta.conn
-    if addr is not None:
-        result = conn.execute_fetchval("""
-        SELECT content FROM knowledge WHERE addr = %s
-                     """, (addr,))
-    elif name is not None:
-        result = conn.execute_fetchval("""
-        SELECT k.content FROM knowledge k JOIN names n ON k.addr = n.addr WHERE n.name = %s
-                     """, (name,))
-    else:
-        raise TypeError("ADDR OR NAME MUST BE PROVIDED")
+    addr = resolve_to_addr(id, conn)
 
-    return f"Knowledge entry {name if name is not None else "no name"}@{addr if addr is not None else "Did not resolve address."} contents: {result}."
+    result = conn.execute_fetchval("""
+    SELECT content FROM knowledge WHERE addr = %s
+                 """, (addr,))
+
+    return f"Knowledge entry {id if isinstance(id, str) else "no name"}@{addr}, contents: {result}."
 
 
 
 @register_tool("tool.execute", ['general'])
-def execute_tool_builtin_func(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
+def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: int|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
     """ 
-    Executes a tool beyond buildins, from the database, by address or name.
+    Executes a tool beyond buildins, from the database, by id.
     One of addr or name must not be None. 
     kwargs are the parameters you pass to the programm. They are json serialised, so do not try to pass in anything other then json.
     Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
 
     """
     conn = _meta.conn
-    if name is not None:
-        v_addr = conn.execute_fetchval("""
-        SELECT resolve_name(%s);
-                              """, (name,))
-    else:
-        v_addr = addr
+    
+    v_addr = resolve_to_addr(id, conn)
 
     body = conn.execute_fetchval("""
     SELECT body FROM executables WHERE addr = %s;
@@ -199,8 +188,7 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 
 @register_tool("tool.edit", ['general', 'context'])
 def edit_tool(_meta: _ExecToolMetaData,
-              name: str|None = None,
-              addr: int|None = None, 
+              id: str|int,
               header_change: SearchAndReplaceBlock|None = None,
               body_change: SearchAndReplaceBlock|None = None,
               new_description: str|None = None,
@@ -224,18 +212,11 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     if header_change is None and body_change is None and new_description is None:
         raise TypeError("No change provided. Unable to apply nothing.")
-    if name is None and addr is None:
-        raise TypeError("No addr or name provided. Unable to identify what tool to edit.")
 
     conn = _meta.conn
 
-    if addr is None:
-        try:
-            addr = conn.execute_fetchval("""
-            SELECT resolve_name(%s);
-                                """, (name,))
-        except Exception as e:
-            raise Exception("Name most likely does not exist.") from e
+
+    addr = resolve_to_addr(id, conn)
 
     try:
         flag_ownership = conn.execute_fetchval("""
@@ -281,24 +262,23 @@ def edit_tool(_meta: _ExecToolMetaData,
         UPDATE executables SET header = %s WHERE addr = %s;
                      """, (new_header, addr))
 
-    return f"Applied the edits to the tool {name}@{addr}"
+    return f"Applied the edits to the tool {id if isinstance(id, str) else 'No_Name'}@{addr}"
 
 
 
 
 @register_tool("context.add", ['general', 'context'])
-def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_add(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta.conn
-    if addr is None:
-        addr = conn.execute_fetchval("""
-        SELECT resolve_name(%s);
-                            """, (name,))
+    
+    addr = resolve_to_addr(id, conn)
     
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_meta.master_id, addr))
-    return f"Added context {name if name is not None else "No name"}@{addr}."
+    return f"Added context {id if isinstance(id, str) else "No name"}@{addr}."
+    # TODO: Try to find a name and insert the name if found.
 
 
 
@@ -307,8 +287,7 @@ def context_add_by_addr(addr: int|None, name: str|None, _meta: _ExecToolMetaData
 def add_slave(instruction: str,
               _meta: _ExecToolMetaData,
               slave_type: SlaveScope = 'general',
-              required_results_names: list[str]|None=None,
-              required_results_addrs: list[int]|None=None,
+              required_results_ids: list[str|ReferenceTo]|None=None,
               slave_name: str|None=None,
               result_name: str|None=None
               ) -> ActionConfirmation:
@@ -317,24 +296,23 @@ def add_slave(instruction: str,
     A step may require anouther steps result, by adding the required results name or address. 
     A step gets the results it requires when it is executed.
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
-    required_results_names and required_results_addrs are for RESULTS OF SLAVES, not RESULTS OF TOOL CALLS.
+    required_results_ids are for RESULTS OF SLAVES, **NOT RESULTS OF TOOL CALLS**.
     You can assume top down execution of the tool calls you wrote, but asynchronous execution of the slave goals themself.
     slave_type is the type of the slave being added. The differenses are the tools that it sees. There is a baseline of what tools each one sees, and tools only specialists see.
     required_results_names can include "self", wich would mean the currently executed slave, e.g. your current result will be forwarded to it.
     Currently allowed slave_types are: 
     """
     conn = _meta.conn
-    if required_results_addrs is None:
-        required_results_addrs = []
 
-    if required_results_names is not None:
-        for i in required_results_names:
-            if i == "self":
+    required_results_addrs = []
+
+    if required_results_ids is not None:
+        for i in reversed(required_results_ids):
+            if i == 'self':
+                required_results_ids.remove(i)
                 required_results_addrs.append(_meta.slave_id)
-                continue
-            required_results_addrs.append(conn.execute_fetchval("""
-            SELECT resolve_name(%s);
-                  """, (i,)))
+
+        required_results_addrs.extend(resolve_to_addrs(required_results_ids, conn))
 
     if slave_type == "planner":
         return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever
@@ -387,6 +365,8 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     fetch = conn.execute("""
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
                          """, (_meta.master_id,)).fetchall()
+
+    # TODO : Enchanse this process by adding a context manager slave as well as better views of previous tasks. 
 
     prompt  =  """
     You task is to decide how to further proceed. For a given task,
@@ -446,11 +426,13 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
 
 
 @register_tool("context.window.land_by_addr", ['context'])
-def context_window_land(addr: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_window_land(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
-    Lands a viewing window, or a context window, these are the same thing, onto an addr.
+    Lands a viewing window onto an item by id.
     """
     conn = _meta.conn
+
+    addr = resolve_to_addr(id, conn)
 
     try:
         addr_type = conn.execute_fetchval("""
@@ -580,19 +562,13 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
 
 
 @register_tool("context.unload_item", ["context"])
-def unload_item(_meta: _ExecToolMetaData, addr: int|None = None, name: str|None = None) -> ActionConfirmation:
+def unload_item(_meta: _ExecToolMetaData, id: int|str) -> ActionConfirmation:
     """
-    addr or name must be given.
+    Unloads the item from the context window, by id.
     """
-    if not addr and not name:
-        raise TypeError("addr or name must be provided")
-
     conn = _meta.conn
 
-    if not addr:
-        addr = conn.execute_fetchval("""
-    SELECT resolve_name(%s);
-                            """, (name,))
+    addr = resolve_to_addr(id, conn)
 
     conn.execute("""
     DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
@@ -697,8 +673,7 @@ def web_post(url: str,
 @register_tool("goal.add_master", ['task'])
 def create_master(instruction: str,
                   _meta: _ExecToolMetaData,
-                  required_names: Sequence[str]|None = None,
-                  required_addrs: Sequence[int]|None = None,
+                  required_ids: Sequence[str|int] = [],
                   result_name: str|None = None
                   ) -> ActionConfirmation:
     """
@@ -707,56 +682,43 @@ def create_master(instruction: str,
 
     conn = _meta.conn
 
+    required_addrs = resolve_to_addrs(required_ids, conn)
+
     conn.execute("""
     SELECT new_master(
         p_instruction := %s,
-        req_names := %s,
         req_addrs := %s,
         result_name := %s
         );
-                 """, (instruction, required_names, required_addrs, result_name))
+                 """, (instruction, required_addrs, result_name))
 
     return f"Created master with instruction '{instruction}'."
 
 @register_tool("claim_item", ['general', 'context'])
-def claim_item(_meta: _ExecToolMetaData, item_addr: int|None = None, item_name: str|None = None) -> ActionConfirmation:
+def claim_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmation:
     """
     Before editing an item, you must claim it with this function.
     You can only suply item_name OR item_addr, not both, not none.
     This function claims you to be the owner of the item, so only you can edit the file.
     """
     conn = _meta.conn
-
-    if (item_addr is None) and (item_name is None):
-        raise TypeError("No item identification provided to the function.")
-    if (item_addr is not None) and (item_name is not None):
-        raise TypeError("Both mutually exclusive identifiers supplied.")
-
-    if item_addr is None:
-        item_addr = conn.execute_fetchval("SELECT resolve_name(%s);", (item_name,))
+    item_addr = resolve_to_addr(item_id, conn)
 
     conn.execute("""
     INSERT INTO ownership(addr, owner) VALUES(%s, %s)
                  """, (item_addr, _meta.master_id))
 
-    return f"Claimed the item at addr {item_addr}"
+    return f"Claimed the item at address {item_addr}."
 
 
 @register_tool("release_item", ['general', 'context'])
-def release_item(_meta: _ExecToolMetaData, item_addr: int|None = None, item_name: str|None = None) -> ActionConfirmation:
+def release_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmation:
     """
     Function to release the file, allowing others to edit the file, after you no longer need the item. Make sure to release the items you claimed when you no longer need them.
     """
     conn = _meta.conn
 
-    if (item_addr is None) and (item_name is None):
-        raise TypeError("No item identification provided to the function.")
-    if (item_addr is not None) and (item_name is not None):
-        raise TypeError("Both mutually exclusive identifiers supplied.")
-
-    
-    if item_addr is None:
-        item_addr = conn.execute_fetchval("SELECT resolve_name(%s);", (item_name,))
+    item_addr = resolve_to_addr(item_id, conn)
 
     conn.execute("""
     DELETE FROM ownership WHERE addr = %s AND owner = %s;

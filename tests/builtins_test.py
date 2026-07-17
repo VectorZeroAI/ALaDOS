@@ -137,6 +137,7 @@ def test_context_window_land_by_addr(meta):
     assert anchor == addr
 
 def test_context_window_size_change(meta):
+    # Set up a window first
     name = unique_name("size_change")
     k_create(content="size", description="size desc", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
@@ -150,15 +151,16 @@ def test_context_window_size_change(meta):
     assert row[1] == 10   # default 12 - 2
 
 def test_move_window_anchor(meta):
-    # Insert several items with embeddings so positions are calculated naturally
+    # Insert several items with embeddings and manually set positions to bypass trigger issues.
     conn = meta.conn
     items = []
     for i in range(3):
         name = unique_name(f"move_{i}")
         k_create(content=f"item{i}", description=f"desc{i}", name=name, _meta=meta)
         addr = resolve_to_addr(name, conn)
-        conn.execute("UPDATE vector_ops SET emb = array_fill(%s::float, ARRAY[768])::vector(768) WHERE addr = %s",
-                     (i * 0.1, addr))
+        # Manually set embedding and position to avoid trigger-dependent unique violations
+        conn.execute("UPDATE vector_ops SET emb = array_fill(%s::float, ARRAY[768])::vector(768), position = %s WHERE addr = %s",
+                     (i * 0.1, 100 + i * 100, addr))
         items.append(addr)
     # Set window anchor to the middle item
     context_window_land_by_addr(id=items[1], _meta=meta)
@@ -168,7 +170,6 @@ def test_move_window_anchor(meta):
         "SELECT COALESCE(window_anchor_knowledge, window_anchor_exe) FROM master_context WHERE addr=%s",
         (meta.master_id,)
     )
-    # After the fix, the positions will be distinct; the anchor should move to the previous item
     assert new_anchor == items[0]
 
 # ----------------------------------------------------------------------
@@ -244,7 +245,6 @@ def test_tool_execute(meta):
     )
     res = execute_tool_builtin_func(id=name, kwargs={"key": "value"}, _meta=meta)
     assert "ran tools stdout" in res
-    # Parse the output to extract the JSON result
     output_json = res.split("ran tools stdout: ", 1)[1]
     data = json.loads(output_json)
     assert data["res"] == json.dumps({"key": "value"})
@@ -293,7 +293,7 @@ def test_web_post(mock_post, meta):
     assert "post text" in res
 
 def test_user_send_message(meta):
-    # Set up a minimal session context so the tool can find an ai_message result
+    # Set up minimal session context required by the tool
     conn = meta.conn
     session_name = "test_session"
     # Give the master a name for the session
@@ -304,7 +304,6 @@ def test_user_send_message(meta):
         "INSERT INTO results (addr, ready, metadata) VALUES (%s, false, %s::jsonb)",
         (ai_msg_addr, json.dumps({"type": "ai_message", "session_name": session_name, "turn": 1}))
     )
-    # Now the tool should succeed
     res = send_message_to_human_v_webui(text="hello", _meta=meta)
     assert "Sent a message" in res
 
@@ -346,7 +345,9 @@ def test_rmt_create_from_master(meta):
     master_name = unique_name("src_master")
     # Create a master with a planner slave + add a dummy non-planner slave
     create_master(instruction="test master", result_name=master_name, _meta=meta)
-    master_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (master_name,))
+    # get master addr from result name
+    result_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (master_name,))
+    master_addr = conn.execute_fetchval("SELECT addr FROM masters WHERE result_addr = %s", (result_addr,))
     # Add a dummy slave that won't be filtered out
     conn.execute("SELECT new_slave(%s, 'keep_me', 'general')", (master_addr,))
     rmt_name = unique_name("rmt_from_master")
@@ -372,16 +373,17 @@ def test_rmt_insert_and_delete_node(meta):
     # Create a real name for that node so we can refer to it in depends_on
     node_name = unique_name("node_n1")
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
+    # Insert a new node, saving its name for later deletion
+    new_node_name = unique_name("new_node")
     res = rmt_insert_node(
         rmt_id=rmt_addr,
         instruction="new node",
-        name=unique_name("new_node"),
+        name=new_node_name,
         depends_on=[node_name],
         _meta=meta
     )
     assert "Inserted rmt node" in res
-    # Delete the newly inserted node (by its name)
-    new_node_name = unique_name("new_node")
+    # Delete the newly inserted node by its name
     new_node_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (new_node_name,))
     rmt_delete_node(node_id=new_node_addr, concatenate=False, _meta=meta)
     count = conn.execute_fetchval(

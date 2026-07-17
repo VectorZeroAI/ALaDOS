@@ -290,7 +290,7 @@ def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 def add_slave(instruction: str,
               _meta: _ExecToolMetaData,
               slave_type: SlaveScope = 'general',
-              required_results_ids: list[str|Addr]|None=None,
+              required_results_ids: list[str|Addr] = [],
               slave_name: str|None=None,
               result_name: str|None=None
               ) -> ActionConfirmation:
@@ -309,13 +309,13 @@ def add_slave(instruction: str,
 
     required_results_addrs = []
 
-    if required_results_ids is not None:
-        for i in reversed(required_results_ids):
-            if i == 'self':
-                required_results_ids.remove(i)
-                required_results_addrs.append(_meta.slave_id)
+    for i in required_results_ids:
+        if i == 'self':
+            required_results_addrs.append(_meta.slave_id)
+        else:
+            required_results_addrs.append(i)
 
-        required_results_addrs.extend(resolve_to_addrs(required_results_ids, conn))
+    required_results_addrs = resolve_to_addrs(required_results_ids, conn)
 
     if slave_type == "planner":
         return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever

@@ -246,13 +246,10 @@ BEGIN
 
     END LOOP;
 
-    single_slave.master_addr := NULL;
-
     FOREACH tmp_el IN ARRAY temporary_table LOOP
 
         single_slave.addr := tmp_el.addr;
         single_slave.instruction := tmp_el.instruction;
-        single_slave.result_addr := new_addr();
         single_slave.scope := tmp_el.scope;
         single_slave.deps := tmp_el.deps_addr;
         single_slave.template_addr := v_template_addr;

@@ -311,7 +311,8 @@ def add_slave(instruction: str,
 
     for i in required_results_ids:
         if i == 'self':
-            required_results_addrs.append(_meta.slave_id)
+            self_addr = conn.execute_fetchval("SELECT result_addr FROM slaves WHERE addr = %s", (_meta.slave_id,))
+            required_results_addrs.append(self_addr)
         else:
             required_results_addrs.append(i)
 

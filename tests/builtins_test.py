@@ -1,4 +1,5 @@
 from unittest.mock import patch
+import json
 
 import pytest
 
@@ -71,7 +72,7 @@ def create_test_meta(conn: Conn) -> _ExecToolMetaData:
 def conn():
     """Return a fresh database connection with a transaction that rolls back after test."""
     db = conn_factory()
-    db.autocommit = False  # we rollback after test
+    db.autocommit = False
     db.execute("BEGIN")
     yield db
     db.execute("ROLLBACK")
@@ -136,7 +137,6 @@ def test_context_window_land_by_addr(meta):
     assert anchor == addr
 
 def test_context_window_size_change(meta):
-    # Set up a window first
     name = unique_name("size_change")
     k_create(content="size", description="size desc", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
@@ -168,6 +168,7 @@ def test_move_window_anchor(meta):
         "SELECT COALESCE(window_anchor_knowledge, window_anchor_exe) FROM master_context WHERE addr=%s",
         (meta.master_id,)
     )
+    # After the fix, the positions will be distinct; the anchor should move to the previous item
     assert new_anchor == items[0]
 
 # ----------------------------------------------------------------------
@@ -243,7 +244,10 @@ def test_tool_execute(meta):
     )
     res = execute_tool_builtin_func(id=name, kwargs={"key": "value"}, _meta=meta)
     assert "ran tools stdout" in res
-    assert '"key": "value"' in res
+    # Parse the output to extract the JSON result
+    output_json = res.split("ran tools stdout: ", 1)[1]
+    data = json.loads(output_json)
+    assert data["res"] == json.dumps({"key": "value"})
 
 # ----------------------------------------------------------------------
 # Claim / release
@@ -289,6 +293,18 @@ def test_web_post(mock_post, meta):
     assert "post text" in res
 
 def test_user_send_message(meta):
+    # Set up a minimal session context so the tool can find an ai_message result
+    conn = meta.conn
+    session_name = "test_session"
+    # Give the master a name for the session
+    conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (meta.master_id, session_name))
+    # Insert an AI message result that the tool will target
+    ai_msg_addr = conn.execute_fetchval("SELECT new_addr()")
+    conn.execute(
+        "INSERT INTO results (addr, ready, metadata) VALUES (%s, false, %s::jsonb)",
+        (ai_msg_addr, json.dumps({"type": "ai_message", "session_name": session_name, "turn": 1}))
+    )
+    # Now the tool should succeed
     res = send_message_to_human_v_webui(text="hello", _meta=meta)
     assert "Sent a message" in res
 
@@ -328,16 +344,19 @@ def test_rmt_serialise(meta):
 def test_rmt_create_from_master(meta):
     conn = meta.conn
     master_name = unique_name("src_master")
+    # Create a master with a planner slave + add a dummy non-planner slave
     create_master(instruction="test master", result_name=master_name, _meta=meta)
     master_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (master_name,))
+    # Add a dummy slave that won't be filtered out
+    conn.execute("SELECT new_slave(%s, 'keep_me', 'general')", (master_addr,))
     rmt_name = unique_name("rmt_from_master")
     res = tool_create_from_master(master_id=master_addr, name=rmt_name, _meta=meta)
     assert "Created rmt from master" in res
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (rmt_name,))
-    # Correct table name and column
     count = conn.execute_fetchval(
         "SELECT count(*) FROM rmt_slaves WHERE template_addr=%s", (rmt_addr,)
     )
+    # Should contain at least the dummy slave
     assert count > 0
 
 def test_rmt_insert_and_delete_node(meta):
@@ -346,7 +365,7 @@ def test_rmt_insert_and_delete_node(meta):
     rmt_name = unique_name("rmt_edit")
     rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (rmt_name,))
-    # Get addr of the existing node by instruction (since id is not stored as a name)
+    # Get addr of the existing node by instruction
     node_addr = conn.execute_fetchval(
         "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='initial'", (rmt_addr,)
     )
@@ -361,9 +380,8 @@ def test_rmt_insert_and_delete_node(meta):
         _meta=meta
     )
     assert "Inserted rmt node" in res
-    # Now delete the newly inserted node (by its name if provided)
+    # Delete the newly inserted node (by its name)
     new_node_name = unique_name("new_node")
-    # We need to get its addr by name
     new_node_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (new_node_name,))
     rmt_delete_node(node_id=new_node_addr, concatenate=False, _meta=meta)
     count = conn.execute_fetchval(
@@ -392,12 +410,10 @@ def test_rmt_edit_instruction(meta):
     dsl = "START -> (id='editme', instruction='old text') -> END"
     rmt_name = unique_name("rmt_edit_instr")
     rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
-    # Get addr of the node (again, id is not a name; fetch by instruction)
     node_addr = conn.execute_fetchval(
         "SELECT addr FROM rmt_slaves WHERE template_addr=(SELECT addr FROM names WHERE name=%s) AND instruction='old text'",
         (rmt_name,)
     )
-    # Give it a real name so edit_instruction can resolve it
     node_name = unique_name("editme_name")
     conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
     rmt_edit_instruction(node_id=node_name, sr_block="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
@@ -409,7 +425,6 @@ def test_rmt_change_scope(meta):
     dsl = "START -> (id='scope_node', instruction='test', scope='general') -> END"
     rmt_name = unique_name("rmt_scope")
     rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
-    # Get node addr
     node_addr = conn.execute_fetchval(
         "SELECT addr FROM rmt_slaves WHERE template_addr=(SELECT addr FROM names WHERE name=%s) AND instruction='test'",
         (rmt_name,)
@@ -421,7 +436,7 @@ def test_rmt_change_scope(meta):
     assert scope == 'task'
 
 # ----------------------------------------------------------------------
-# Paradox & Error tests (placeholders)
+# Paradox & Error tests
 # ----------------------------------------------------------------------
 def test_report_paradoxal_information(meta):
     with pytest.raises(Exception):   # ParadoxDetected

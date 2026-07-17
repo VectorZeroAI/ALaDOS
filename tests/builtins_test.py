@@ -194,11 +194,16 @@ def test_add_slave_with_requires(meta):
     assert req_rel == req_addr
 
 def test_add_slave_self_requires(meta):
+    conn = meta.conn
+    # Find the result_addr of the existing dummy slave
+    result_addr = conn.execute_fetchval(
+        "SELECT result_addr FROM slaves WHERE addr = %s", (meta.slave_id,)
+    )
     res = add_slave(instruction="self depends", required_results_ids=['self'], _meta=meta)
     assert "Added a new slave" in res
-    slave_addr = meta.conn.execute_fetchval("SELECT addr FROM slaves WHERE instruction='self depends'")
-    req_rel = meta.conn.execute_fetchval("SELECT req_addr FROM slave_req WHERE slave_addr=%s", (slave_addr,))
-    assert req_rel == meta.slave_id
+    slave_addr = conn.execute_fetchval("SELECT addr FROM slaves WHERE instruction='self depends'")
+    req_rel = conn.execute_fetchval("SELECT req_addr FROM slave_req WHERE slave_addr=%s", (slave_addr,))
+    assert req_rel == result_addr
 
 def test_master_result_add(meta):
     master_result_add(text="result chunk", _meta=meta)
@@ -348,8 +353,8 @@ def test_rmt_create_from_master(meta):
     # get master addr from result name
     result_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (master_name,))
     master_addr = conn.execute_fetchval("SELECT addr FROM masters WHERE result_addr = %s", (result_addr,))
-    # Add a dummy slave that won't be filtered out
-    conn.execute("SELECT new_slave(%s, 'keep_me', 'general')", (master_addr,))
+    # Add a dummy slave that won't be filtered out (use named parameter for scope)
+    conn.execute("SELECT new_slave(%s, 'keep_me', p_slave_scope := 'general')", (master_addr,))
     rmt_name = unique_name("rmt_from_master")
     res = tool_create_from_master(master_id=master_addr, name=rmt_name, _meta=meta)
     assert "Created rmt from master" in res

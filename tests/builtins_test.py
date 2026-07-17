@@ -5,13 +5,18 @@ import time
 from unittest.mock import Mock, patch
 
 # Adjust import path to match your project structure
-from src.python.executor.builtins import (
+from ..src.python.executor.builtins import (
     k_create, k_edit, k_read, execute_tool_builtin_func, create_tool, edit_tool,
-    context_add_by_addr, add_slave, add_replanner_slave, master_result_add,
+    context_add, add_slave, add_replanner_slave, master_result_add,
     context_window_lands, context_window_land, context_window_size_change,
     move_window_anchor, result_write, report_paradoxal_information, add_cronjob,
     unload_item, web_searcher_function_fulltext, send_message_to_human_v_webui,
-    search_for_urls
+    search_for_urls,
+    claim_item, release_item,
+    create_master,
+    rmt_create_from_range, rmt_serialise, rmt_create_from_serial,
+    rmt_create_from_master, rmt_delete_node, rmt_insert_node,
+    rmt_activate_as_master, rmt_edit_instruction, rmt_change_scope
 )
 from src.python.executor.types import _ExecToolMetaData
 from src.python.executor.exceptions import ParadoxDetected
@@ -27,7 +32,7 @@ def test_conn():
         port=5432,
         dbname="alados_test"
     )
-    conn.autocommit = False # FIXME : This is no longer the same as true conn factory, so this needs to be fixed to stay in check with conn_factory.
+    conn.autocommit = False
     yield conn
     conn.close()
 
@@ -114,11 +119,12 @@ def test_k_create(meta):
 
 def test_k_edit_by_addr(meta):
     conn = meta['conn']
-    # Create a knowledge item using the builtin (so vector_ops is set correctly)
     name = unique_name("edit_addr")
     k_create(content="old content", description="old desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-    res = k_edit(addr=addr, content_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
+    # Claim the item before editing
+    claim_item(item_id=addr, _meta=meta)
+    res = k_edit(id=addr, content_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
     assert "Edited the knowledge item" in res
     with conn.cursor() as cur:
         cur.execute("SELECT content FROM knowledge WHERE addr=%s", (addr,))
@@ -132,9 +138,11 @@ def test_k_edit_by_name(meta):
     conn = meta['conn']
     name = unique_name("edit_name")
     k_create(content="foo", description="bar", name=name, _meta=meta)
-    res = k_edit(name=name, description_change="<SEARCH>bar</SEARCH><REPLACE>baz</REPLACE>", _meta=meta)
-    assert "Edited the knowledge item" in res
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    # Claim the item
+    claim_item(item_id=addr, _meta=meta)
+    res = k_edit(id=name, description_change="<SEARCH>bar</SEARCH><REPLACE>baz</REPLACE>", _meta=meta)
+    assert "Edited the knowledge item" in res
     desc = conn.execute("SELECT description FROM vector_ops WHERE addr=%s", (addr,)).fetchone()[0]
     assert desc == "baz"
 
@@ -144,21 +152,21 @@ def test_k_read_by_addr(meta):
     name = unique_name("read_addr")
     k_create(content="secret", description="desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-    res = k_read(addr=addr, _meta=meta)
+    res = k_read(id=addr, _meta=meta)
     assert "secret" in res
 
 
 def test_k_read_by_name(meta):
     name = unique_name("read_name")
     k_create(content="secret2", description="desc", name=name, _meta=meta)
-    res = k_read(name=name, _meta=meta)
+    res = k_read(id=name, _meta=meta)
     assert "secret2" in res
 
 
 def test_execute_tool(meta, mock_subprocess):
     tool_name = unique_name("test_tool")
     create_tool(description="desc", header="test header", body="print('hello')", name=tool_name, _meta=meta)
-    res = execute_tool_builtin_func(name=tool_name, kwargs={"x": 1}, _meta=meta)
+    res = execute_tool_builtin_func(id=tool_name, kwargs={"x": 1}, _meta=meta)
     assert "ran tools stdout: mocked output" in res
     mock_subprocess.assert_called_once()
 
@@ -181,10 +189,15 @@ def test_edit_tool(meta):
     tool_name = unique_name("edit_tool")
     create_tool(description="old desc", header="old header", body="old body", name=tool_name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (tool_name,)).fetchone()[0]
-    res = edit_tool(name=tool_name,
-                    header_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
-                    body_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
-                    new_description="new desc", _meta=meta)
+    # Claim the tool
+    claim_item(item_id=addr, _meta=meta)
+    res = edit_tool(
+        id=tool_name,
+        header_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
+        body_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
+        new_description="new desc",
+        _meta=meta
+    )
     assert "Applied the edits" in res
     with conn.cursor() as cur:
         cur.execute("SELECT header, body FROM executables WHERE addr=%s", (addr,))
@@ -200,7 +213,7 @@ def test_context_add(meta):
     name = unique_name("ctx_item")
     k_create(content="ctx content", description="desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-    res = context_add_by_addr(addr=addr, name=None, _meta=meta)
+    res = context_add(id=addr, _meta=meta)
     assert "Added context" in res
     loaded = conn.execute("SELECT item_addr FROM master_load WHERE master_addr=%s", (meta['master_id'],)).fetchall()
     assert (addr,) in loaded
@@ -210,7 +223,12 @@ def test_add_slave(meta):
     conn = meta['conn']
     before = conn.execute("SELECT count(*) FROM slaves WHERE master_addr=%s", (meta['master_id'],)).fetchone()[0]
     result_name = unique_name("slave_result")
-    res = add_slave(instruction="do something", slave_type="general", result_name=result_name, _meta=meta)
+    res = add_slave(
+        instruction="do something",
+        slave_type="general",
+        result_name=result_name,
+        _meta=meta
+    )
     assert "Added a new slave" in res
     after = conn.execute("SELECT count(*) FROM slaves WHERE master_addr=%s", (meta['master_id'],)).fetchone()[0]
     assert after == before + 1
@@ -230,7 +248,11 @@ def test_add_slave_with_requires(meta):
         cur.execute("INSERT INTO results (addr, ready) VALUES (%s, false)", (req_addr,))
         cur.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (req_addr, req_name))
     # Add a slave that requires it
-    res = add_slave(instruction="depends", required_results_names=[req_name], _meta=meta)
+    res = add_slave(
+        instruction="depends",
+        required_results_ids=[req_name],
+        _meta=meta
+    )
     assert "Added a new slave" in res
     slave_addr = conn.execute("SELECT addr FROM slaves WHERE instruction='depends'").fetchone()[0]
     req_rel = conn.execute("SELECT req_addr FROM slave_req WHERE slave_addr=%s", (slave_addr,)).fetchone()[0]
@@ -264,14 +286,12 @@ def test_master_result_add(meta):
 
 
 def test_context_window_semantic_land(meta):
-    # Insert a dummy knowledge with a vector so s_land has something
     conn = meta['conn']
     name = unique_name("semantic_dummy")
     k_create(content="dummy", description="dummy desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     # Update vector_ops to have a non‑null emb (the trigger will set position)
     conn.execute("UPDATE vector_ops SET emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s", (addr,))
-    # Now semantic land should find it
     res = context_window_lands(querry="test query", _meta=meta)
     assert "Semantically moved the viewing window anchor" in res
 
@@ -281,7 +301,7 @@ def test_context_window_land(meta):
     name = unique_name("window_anchor")
     k_create(content="anchor", description="anchor desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-    res = context_window_land(addr=addr, _meta=meta)
+    res = context_window_land(id=addr, _meta=meta)
     assert "Moved context window center to" in res
     anchor_k = conn.execute("SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta['master_id'],)).fetchone()[0]
     assert anchor_k == addr
@@ -291,7 +311,6 @@ def test_context_window_land(meta):
 
 def test_context_window_size_change(meta):
     conn = meta['conn']
-    # First set an anchor and valid sizes to satisfy the constraint
     name = unique_name("size_anchor")
     k_create(content="anchor", description="desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
@@ -302,24 +321,21 @@ def test_context_window_size_change(meta):
     """, (addr, meta['master_id']))
     res = context_window_size_change(left=2, right=3, _meta=meta)
     assert "Changed context window size" in res
-    l, r = conn.execute("SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta.master_id,)).fetchone()
+    l, r = conn.execute("SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta['master_id'],)).fetchone()
     assert l == 7
     assert r == 8
 
 
 def test_move_window_anchor(meta):
     conn = meta['conn']
-    # Create a dummy vector_ops row with a known position
     name = unique_name("move_anchor")
     k_create(content="anchor knowledge", description="anchor desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-
     conn.execute("UPDATE vector_ops SET position = 100, emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s", (addr,))
 
-    name2 = unique_name("move_anchor")
-    k_create(content="anchor knowledge", description="anchor desc", name=name2, _meta=meta)
-    addr2 = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
-
+    name2 = unique_name("move_anchor2")
+    k_create(content="anchor knowledge2", description="anchor desc2", name=name2, _meta=meta)
+    addr2 = conn.execute("SELECT addr FROM names WHERE name=%s", (name2,)).fetchone()[0]
     conn.execute("UPDATE vector_ops SET position = 124, emb = array_fill(0.2, ARRAY[768])::vector(768) WHERE addr = %s", (addr2,))
 
     conn.execute("""
@@ -351,8 +367,13 @@ def test_report_paradoxal_information(meta):
 
 @patch('src.python.executor.builtins.parse')
 def test_add_cronjob(mock_parse, meta):
-    res = add_cronjob(cronjob_type='once', cronjob_action='do_this_later', time_between_runs=60,
-                      params={'ai_instruction': 'test'}, _meta=meta)
+    res = add_cronjob(
+        cronjob_type='once',
+        cronjob_action='do_this_later',
+        time_between_runs=60,
+        params={'ai_instruction': 'test'},
+        _meta=meta
+    )
     assert "Added a cronjob" in res
     mock_parse.assert_called_once_with({
         'action': 'do_this_later',
@@ -369,7 +390,7 @@ def test_unload_item_by_addr(meta):
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     # Load it into context
     conn.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
-    res = unload_item(addr=addr, _meta=meta)
+    res = unload_item(id=addr, _meta=meta)
     assert "Unloaded item" in res
     loaded = conn.execute("SELECT item_addr FROM master_load WHERE master_addr=%s", (meta['master_id'],)).fetchall()
     assert (addr,) not in loaded
@@ -381,7 +402,7 @@ def test_unload_item_by_name(meta):
     k_create(content="temp2", description="desc", name=name, _meta=meta)
     addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
     conn.execute("INSERT INTO master_load (master_addr, item_addr) VALUES (%s, %s)", (meta['master_id'], addr))
-    res = unload_item(name=name, _meta=meta)
+    res = unload_item(id=name, _meta=meta)
     assert "Unloaded item" in res
 
 
@@ -424,3 +445,149 @@ def test_search_for_urls(meta, mock_searcher):
     assert "url=http://a.com" in res
     assert "title=B" in res
     mock_searcher.search.assert_called_once_with("test")
+
+
+# ---------- Tests for new tools ----------
+def test_claim_and_release_item(meta):
+    conn = meta['conn']
+    name = unique_name("claim_test")
+    k_create(content="test", description="desc", name=name, _meta=meta)
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    # Claim
+    res = claim_item(item_id=addr, _meta=meta)
+    assert "Claimed the item" in res
+    owner = conn.execute("SELECT owner FROM ownership WHERE addr=%s", (addr,)).fetchone()[0]
+    assert owner == meta['master_id']
+    # Release
+    res = release_item(item_id=addr, _meta=meta)
+    assert "Released the item" in res
+    owner = conn.execute("SELECT owner FROM ownership WHERE addr=%s", (addr,)).fetchone()
+    assert owner is None
+
+
+def test_create_master(meta):
+    conn = meta['conn']
+    # Create a dependency result
+    dep_name = unique_name("dep_result")
+    with conn.cursor() as cur:
+        cur.execute("SELECT new_addr()")
+        dep_addr = cur.fetchone()[0]
+        cur.execute("INSERT INTO results (addr, ready) VALUES (%s, false)", (dep_addr,))
+        cur.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (dep_addr, dep_name))
+    before = conn.execute("SELECT count(*) FROM masters").fetchone()[0]
+    res = create_master(
+        instruction="new master",
+        required_ids=[dep_name],
+        result_name=unique_name("master_result"),
+        _meta=meta
+    )
+    assert "Created master" in res
+    after = conn.execute("SELECT count(*) FROM masters").fetchone()[0]
+    assert after == before + 1
+
+
+def test_rmt_serialize(meta):
+    conn = meta['conn']
+    # Create a simple RMT via DSL
+    dsl = "START -> (instruction='step1') -> (instruction='step2') -> END"
+    name = unique_name("rmt_serial")
+    rmt_addr = rmt_create_from_serial(dsl=dsl, name=name, _meta=meta)
+    # Parse the addr from return
+    addr = conn.execute("SELECT addr FROM names WHERE name=%s", (name,)).fetchone()[0]
+    serial = rmt_serialise(id=addr, _meta=meta)
+    assert "Readable form of RMT" in serial
+    assert "step1" in serial
+    assert "step2" in serial
+
+
+def test_rmt_create_from_master(meta):
+    conn = meta['conn']
+    # First create a master
+    master_name = unique_name("src_master")
+    create_master(instruction="test master", result_name=master_name, _meta=meta)
+    master_addr = conn.execute("SELECT addr FROM names WHERE name=%s", (master_name,)).fetchone()[0]
+    rmt_name = unique_name("rmt_from_master")
+    res = rmt_create_from_master(master_id=master_addr, name=rmt_name, _meta=meta)
+    assert "Created rmt from master" in res
+    rmt_addr = conn.execute("SELECT addr FROM names WHERE name=%s", (rmt_name,)).fetchone()[0]
+    # Check that it exists in rmt_nodes
+    count = conn.execute("SELECT count(*) FROM rmt_nodes WHERE rmt_addr=%s", (rmt_addr,)).fetchone()[0]
+    assert count > 0
+
+
+def test_rmt_insert_and_delete_node(meta):
+    conn = meta['conn']
+    # Create an RMT with one node
+    dsl = "START -> (id='n1', instruction='initial') -> END"
+    rmt_name = unique_name("rmt_edit")
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_addr = conn.execute("SELECT addr FROM names WHERE name=%s", (rmt_name,)).fetchone()[0]
+    # Insert a new node
+    res = rmt_insert_node(
+        rmt_id=rmt_addr,
+        instruction="new node",
+        name=unique_name("new_node"),
+        depends_on=['n1'],
+        _meta=meta
+    )
+    assert "Inserted rmt node" in res
+    # Delete the old node
+    res = rmt_delete_node(node_id='n1', concatenate=True, _meta=meta)
+    assert "Deleted node" in res
+    # Verify the RMT now has only the new node
+    nodes = conn.execute("SELECT instruction FROM rmt_nodes WHERE rmt_addr=%s", (rmt_addr,)).fetchall()
+    assert len(nodes) == 1
+    assert nodes[0][0] == "new node"
+
+
+def test_rmt_activate_as_master(meta):
+    conn = meta['conn']
+    # Create a simple RMT
+    dsl = "START -> (instruction='do work') -> END"
+    rmt_name = unique_name("rmt_activate")
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_addr = conn.execute("SELECT addr FROM names WHERE name=%s", (rmt_name,)).fetchone()[0]
+    # Activate it as master
+    res = rmt_activate_as_master(
+        rmt_id=rmt_addr,
+        inputs={},
+        _meta=meta
+    )
+    assert "Activated rmt" in res
+    # Check that a new master was created
+    master_count = conn.execute("SELECT count(*) FROM masters WHERE instruction LIKE '%do work%'").fetchone()[0]
+    assert master_count > 0
+
+
+def test_rmt_edit_instruction(meta):
+    conn = meta['conn']
+    # Create RMT with a node with an id
+    dsl = "START -> (id='editme', instruction='old text') -> END"
+    rmt_name = unique_name("rmt_edit_instr")
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    # Edit instruction
+    res = rmt_edit_instruction(
+        node_id='editme',
+        sr_block="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
+        _meta=meta
+    )
+    assert "Edited instruction" in res
+    # Verify
+    node_addr = conn.execute("SELECT addr FROM rmt_nodes WHERE node_id='editme'").fetchone()[0]
+    instr = conn.execute("SELECT instruction FROM rmt_nodes WHERE addr=%s", (node_addr,)).fetchone()[0]
+    assert instr == "new text"
+
+
+def test_rmt_change_scope(meta):
+    conn = meta['conn']
+    # Create RMT with a node
+    dsl = "START -> (id='scope_node', instruction='test', scope='general') -> END"
+    rmt_name = unique_name("rmt_scope")
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    # Change scope
+    res = rmt_change_scope(node_id='scope_node', new_scope='task', _meta=meta)
+    assert "Updated instruction" in res  # Actually returns "Updated instruction of rmt node ..."
+    # Verify
+    node_addr = conn.execute("SELECT addr FROM rmt_nodes WHERE node_id='scope_node'").fetchone()[0]
+    scope = conn.execute("SELECT scope FROM rmt_nodes WHERE addr=%s", (node_addr,)).fetchone()[0]
+    assert scope == 'task'

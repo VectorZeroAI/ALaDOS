@@ -58,10 +58,10 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 
 
 @register_tool("K.edit", ['general', 'context'])
-def k_edit(description_change: SearchAndReplaceBlock,
-           content_change: SearchAndReplaceBlock,
-           _meta: _ExecToolMetaData,
+def k_edit(_meta: _ExecToolMetaData,
            id: Addr|str,
+           description_change: SearchAndReplaceBlock|None = None,
+           content_change: SearchAndReplaceBlock|None = None,
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 

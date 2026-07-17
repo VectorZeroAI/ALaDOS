@@ -1,29 +1,43 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, ANY
-from src.python.executor.builtins import (
-    k_create, k_edit, k_read,
-    context_add,
-    add_slave,
+
+from ALaDOS.src.python.executor.builtins import (
     add_cronjob,
-    master_result_add,
+    add_slave,
+    claim_item,
+    context_add,
     context_window_land_by_addr,
     context_window_size_change,
+    create_master,
+    create_tool,
+    edit_tool,
+    execute_tool_builtin_func,
+    k_create,
+    k_edit,
+    k_read,
+    master_result_add,
     move_window_anchor,
-    result_write,
-    claim_item, release_item,
-    create_tool, edit_tool, execute_tool_builtin_func,
-    web_searcher_function_fulltext, search_for_urls, web_request, web_post,
-    send_message_to_human_v_webui,
+    release_item,
     report_paradoxal_information,
-    rmt_create_from_serial, rmt_serialize,
-    tool_create_from_master, create_master,
-    rmt_delete_node, rmt_insert_node,
-    rmt_activate_as_master, rmt_edit_instruction, rmt_change_scope,
+    result_write,
+    rmt_activate_as_master,
+    rmt_change_scope,
+    rmt_create_from_serial,
+    rmt_delete_node,
+    rmt_edit_instruction,
+    rmt_insert_node,
+    rmt_serialise,
+    search_for_urls,
+    send_message_to_human_v_webui,
+    tool_create_from_master,
+    web_post,
+    web_request,
+    web_searcher_function_fulltext,
 )
-from src.python.executor.types import _ExecToolMetaData, SlaveScope_
-from src.python.utils.conn_factory import conn_factory, Conn
-from src.python.utils.name_resolver import resolve_to_addr
-import json
+from ALaDOS.src.python.executor.types import _ExecToolMetaData
+from ALaDOS.src.python.utils.conn_factory import Conn, conn_factory
+from ALaDOS.src.python.utils.name_resolver import resolve_to_addr
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -248,26 +262,26 @@ def test_claim_and_release(meta):
 # ----------------------------------------------------------------------
 # Web search / communication
 # ----------------------------------------------------------------------
-@patch('src.python.executor.builtins.searcher_obj.search_website_content', return_value="mock fulltext")
+@patch('ALaDOS.src.python.executor.builtins.searcher_obj.search_website_content', return_value="mock fulltext")
 def test_web_search_fulltext(mock_search, meta):
     res = web_searcher_function_fulltext(query="test query", _meta=meta)
     assert "mock fulltext" in res
 
-@patch('src.python.executor.builtins.searcher_obj.search', return_value=[
+@patch('ALaDOS.src.python.executor.builtins.searcher_obj.search', return_value=[
     {"url": "http://example.com", "title": "Example", "snippet": "snippet"}
 ])
 def test_web_search(mock_search, meta):
     res = search_for_urls(query="test", amount_results=1, _meta=meta)
     assert "http://example.com" in res
 
-@patch('src.python.executor.builtins.httpsystem.get', return_value={
+@patch('ALaDOS.src.python.executor.builtins.httpsystem.get', return_value={
     "url": "http://example.com", "text": "extracted text", "status_code": 200, "content_raw": "raw"
 })
 def test_web_get(mock_get, meta):
     res = web_request(url="http://example.com", _meta=meta)
     assert "extracted text" in res
 
-@patch('src.python.executor.builtins.httpsystem.post', return_value={
+@patch('ALaDOS.src.python.executor.builtins.httpsystem.post', return_value={
     "url": "http://example.com", "text": "post text", "status_code": 201, "content_raw": "raw"
 })
 def test_web_post(mock_post, meta):
@@ -281,7 +295,7 @@ def test_user_send_message(meta):
 # ----------------------------------------------------------------------
 # Cronjob
 # ----------------------------------------------------------------------
-@patch('src.python.executor.builtins.parse')
+@patch('ALaDOS.src.python.executor.builtins.parse')
 def test_add_cronjob(mock_parse, meta):
     res = add_cronjob(
         cronjob_type='once',
@@ -301,13 +315,13 @@ def test_add_cronjob(mock_parse, meta):
 # ----------------------------------------------------------------------
 # RMT (Reusable Master Template) tests
 # ----------------------------------------------------------------------
-def test_rmt_serialize(meta):
+def test_rmt_serialise(meta):
     conn = meta.conn
     dsl = "START -> (instruction='step1') -> (instruction='step2') -> END"
     name = unique_name("rmt_serial")
     rmt_create_from_serial(dsl=dsl, name=name, _meta=meta)
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (name,))
-    serial = rmt_serialize(id=rmt_addr, _meta=meta)
+    serial = rmt_serialise(id=rmt_addr, _meta=meta)
     assert "step1" in serial
     assert "step2" in serial
 

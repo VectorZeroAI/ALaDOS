@@ -315,7 +315,7 @@ def add_slave(instruction: str,
         else:
             required_results_addrs.append(i)
 
-    required_results_addrs = resolve_to_addrs(required_results_ids, conn)
+    required_results_addrs = resolve_to_addrs(required_results_addrs, conn)
 
     if slave_type == "planner":
         return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever

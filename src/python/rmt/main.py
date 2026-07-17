@@ -384,7 +384,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
                      """, (master_addr,))
 
         conn.execute("""
-    SELECT new_master(p_instruction := 'NONE', req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
+    SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
                      """, (depends_on, master_addr))
 
     master_result_addr = conn.execute_fetchval("""

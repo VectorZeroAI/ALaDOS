@@ -119,16 +119,15 @@ def create_from_master(master_addr: ReferenceTo, conn: Conn, name: str|None = No
 
     for s in slaves:
         conn.execute("""
-    INSERT INTO rmt_slaves(template_addr, deps, addr, instruction, scope, result_addr)
-    VALUES(%s, %s, %s, %s, %s, %s)
+    INSERT INTO rmt_slaves(template_addr, deps, addr, instruction, scope)
+    VALUES(%s, %s, %s, %s, %s)
                      """,
          (
              rmt_addr,
              s[SLAVE_DEPS],
              s[SLAVE_ADDR],
              s[SLAVE_INSTR],
-             s[SLAVE_SCOPE],
-             conn.execute_fetchval("SELECT new_addr();")
+             s[SLAVE_SCOPE]
          )
     )
 
@@ -399,10 +398,9 @@ def activate_as_master(rmt_addr: ReferenceTo,
         
     rmt_template = conn.execute("""
     SELECT addr,
-        master_addr,
         instruction,
-        result_addr,
-        scope, deps
+        scope,
+        deps
     FROM rmt_slaves
     WHERE template_addr = %s
     """, [rmt_addr,]).fetchall()
@@ -417,11 +415,9 @@ def activate_as_master(rmt_addr: ReferenceTo,
 
     rmt_template = [{
         "addr": t[0],
-        "master_addr": t[1],
-        "instruction": t[2],
-        "result_addr": t[3],
-        "scope": t[4],
-        "deps": t[5]
+        "instruction": t[1],
+        "scope": t[2],
+        "deps": t[3]
         } for t in rmt_template]
 
     for i in rmt_template:

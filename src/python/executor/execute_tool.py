@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Callable, get_args
+from typing import Callable, ParamSpec, TypeVar, get_args
 from ..executor.types import ToolCall
 import inspect
 import re
@@ -52,9 +52,12 @@ def _construct_header(func: Callable, name: str|None = None) -> str:
     signature_str = "\n".join((signature_str, (func.__doc__ or "No description provided")))
     return signature_str
 
+P = ParamSpec('P')
+R = TypeVar('R')
+
 
 def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
-    def decorator(func: Callable):
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         TOOL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)
         for i in scope:

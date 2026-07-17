@@ -18,7 +18,11 @@ from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
 from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
+from ..rmt.main import activate_as_master, change_scope, create_from_range, create_from_serial, delete_node, edit_instruction, insert_node, serialize, create_from_master
 
+
+Addr: TypeAlias = ReferenceTo
+Name: TypeAlias = str
 ActionConfirmation: TypeAlias = str
 
 ALL = get_args(SlaveScope)
@@ -57,7 +61,7 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 def k_edit(description_change: SearchAndReplaceBlock,
            content_change: SearchAndReplaceBlock,
            _meta: _ExecToolMetaData,
-           id: ReferenceTo|str,
+           id: Addr|str,
            ) -> ActionConfirmation:
     """
     Edits a knowledge entry. 
@@ -110,7 +114,7 @@ def k_edit(description_change: SearchAndReplaceBlock,
 
 
 @register_tool("K.read", ['general', 'context'])
-def k_read(_meta: _ExecToolMetaData, id: int|str) -> ActionConfirmation:
+def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     """ Resolve knowledge item by ID. """
     conn = _meta.conn
     addr = resolve_to_addr(id, conn)
@@ -124,7 +128,7 @@ def k_read(_meta: _ExecToolMetaData, id: int|str) -> ActionConfirmation:
 
 
 @register_tool("tool.execute", ['general'])
-def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: int|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
+def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
     """ 
     Executes a tool beyond buildins, from the database, by id.
     One of addr or name must not be None. 
@@ -187,7 +191,7 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 
 @register_tool("tool.edit", ['general', 'context'])
 def edit_tool(_meta: _ExecToolMetaData,
-              id: str|int,
+              id: str|Addr,
               header_change: SearchAndReplaceBlock|None = None,
               body_change: SearchAndReplaceBlock|None = None,
               new_description: str|None = None,
@@ -267,7 +271,7 @@ def edit_tool(_meta: _ExecToolMetaData,
 
 
 @register_tool("context.add", ['general', 'context'])
-def context_add(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta.conn
     
@@ -286,7 +290,7 @@ def context_add(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> ActionConfirma
 def add_slave(instruction: str,
               _meta: _ExecToolMetaData,
               slave_type: SlaveScope = 'general',
-              required_results_ids: list[str|ReferenceTo]|None=None,
+              required_results_ids: list[str|Addr]|None=None,
               slave_name: str|None=None,
               result_name: str|None=None
               ) -> ActionConfirmation:
@@ -425,7 +429,7 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
 
 
 @register_tool("context.window.land_by_addr", ['context'])
-def context_window_land(id: ReferenceTo|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_window_land(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window onto an item by id.
     """
@@ -511,7 +515,7 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 
 @register_tool("K.report_paradoxal_information", ALL)
-def report_paradoxal_information(items: Sequence[str|int], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
     paradox: the paradox in the information
@@ -561,7 +565,7 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
 
 
 @register_tool("context.unload_item", ["context"])
-def unload_item(_meta: _ExecToolMetaData, id: int|str) -> ActionConfirmation:
+def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     """
     Unloads the item from the context window, by id.
     """
@@ -672,7 +676,7 @@ def web_post(url: str,
 @register_tool("goal.add_master", ['task'])
 def create_master(instruction: str,
                   _meta: _ExecToolMetaData,
-                  required_ids: Sequence[str|int] = [],
+                  required_ids: Sequence[str|Addr] = [],
                   result_name: str|None = None
                   ) -> ActionConfirmation:
     """
@@ -694,7 +698,7 @@ def create_master(instruction: str,
     return f"Created master with instruction '{instruction}'."
 
 @register_tool("claim_item", ['general', 'context'])
-def claim_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmation:
+def claim_item(_meta: _ExecToolMetaData, item_id: Addr|str) -> ActionConfirmation:
     """
     Before editing an item, you must claim it with this function.
     You can only suply item_name OR item_addr, not both, not none.
@@ -711,7 +715,7 @@ def claim_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmation
 
 
 @register_tool("release_item", ['general', 'context'])
-def release_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmation:
+def release_item(_meta: _ExecToolMetaData, item_id: Addr|str) -> ActionConfirmation:
     """
     Function to release the file, allowing others to edit the file, after you no longer need the item. Make sure to release the items you claimed when you no longer need them.
     """
@@ -724,3 +728,159 @@ def release_item(_meta: _ExecToolMetaData, item_id: int|str) -> ActionConfirmati
                  """, (item_addr,_meta.master_id))
 
     return f"Released the item at addr {item_addr}"
+
+
+
+@register_tool("rmt.create.from_range", ['task'])
+def rmt_create_from_range(_meta: _ExecToolMetaData, start_id: Addr|str, end_id: Addr|str, name: str|None = None) -> ActionConfirmation:
+    """
+    Creates a reusable master template from a range of items. Traverses the live execution history to find the slaves between the start and end, inclusively,
+    and then just makes that into an rmt. 
+    Does not include any variables, and most likely requires further edits before being usable.
+    start_id and end_id may NOT include 'self' or other relative references.
+    """
+    conn = _meta.conn
+    addr = create_from_range(start_id, conn, end_id, name)
+    return f"Created rmt {name if name is not None else "No name"}@{addr} from range."
+
+
+@register_tool("rmt.serialize", ['task'])
+def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
+    """
+    Serialises an rmt into a readable format.
+    """
+    conn = _meta.conn
+    addr = resolve_to_addr(id, conn)
+    serial = serialize(addr, conn)
+    return f"Readable form of RMT {id if isinstance(id, str) else 'No name'}@{addr} : [{serial}]"
+
+
+@register_tool("rmt.create.from_dsl", ['task'])
+def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, name: str|None = None) -> ActionConfirmation:
+    """
+    Creates an rmt from dsl.
+    The dsl format is the following: 
+        START -> (id='optional node id here', instruction='mandatory instruction unless its a reference', scope='optional slave scope default general') -> (instruction='next slave') -> END
+        START -> (id='stuff1', instruction='do stuff1') -> (id='stuff2', instruction='do stuff 2') -> END
+            (instruction='do_stuff 1.5') -> (id='stuff2')
+            (id='stuff1') -> (instruction='do_stuff 1/2') -> (id='stuff2')
+    Rules: 
+        START and END dont do anything, they are ignored.
+        the dsl structure is basically START -> node_that_does_stuff -> node_that_gets_stuff_to_do_other_stuff -> END
+        nodes are inside ()
+        they have 3 keyword arguments:
+            instruction='' (required)
+            id='' (optional)
+            scope='' (optional default 'general')
+        There are variables that are substituted at the activation time. They are marked like this ${{varname}}.
+        Variables are only allowed within instructions.
+
+        There are also **references**.
+        References are (id='id that already appeared before'). (parsing order: left to right in lines, top to bottom of the whole input.)
+        Note that -> Can not reference through line barriers, e.g. '''
+            node -> 
+            node2
+        '''
+        is invalid.
+
+        Intendation is ignored, and whitespaces are ignored.
+
+        References are used to describe branches and merges of the task flow, e.g. when one node is part of many linear execution lines, you define it once, and reference it for the rest of uses.
+        During parsing, all references are flattened to just pointers to the node they reference.
+    """
+
+    conn = _meta.conn
+    addr = create_from_serial(dsl, conn, name)
+    return f"Created rmt {name if name is not None else 'No name'}@{addr}."
+
+
+
+@register_tool("rmt.create.from_master", ['task'])
+def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name: str|None = None) -> ActionConfirmation:
+    """
+    Create rmt from master.
+    Does not include any variables, wich means its very likely it will need further edits before being usable.
+    """
+    conn = _meta.conn
+    m_addr = resolve_to_addr(master_id, conn)
+    addr = create_from_master(m_addr, conn, name)
+    
+    return f"Created rmt from master {master_id if isinstance(master_id, str) else 'No Name'}@{m_addr} under the identifiers {name if name else 'No name'}@{addr}."
+
+
+@register_tool("rmt.edit.delete_node", ['task'])
+def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
+    """
+    Deletes a node from rmt.
+    concatenate is a boolean flag that tells if it should concatenate the resulting DAG or not.
+    If True, it does this: 
+        example: delete node 2
+        1 -> 2 -> 3 to 1 -> 3
+    if False, it does this:
+        example: delete node 2
+        1 -> 2 -> 3 to 1 3 (notice no connection between 1 and 3)
+
+    It deletes the node regardless of the rmt template the node belongs to, because it can, so be carefull to remove correct nodes. (Addr and Name are unique, but dont mistype them.)
+    """
+    conn = _meta.conn
+    delete_node(node_id, conn, concatenate)
+    return f"Deleted node {node_id} from the rmt."
+
+
+@register_tool("rmt.edit.insert_node", ['task'])
+def rmt_insert_node(_meta: _ExecToolMetaData,
+                rmt_id: Addr|Name,
+                instruction: str,
+                name: str|None = None,
+                scope: SlaveScope = 'general',
+                depends_on: Sequence[ReferenceTo|str] = [],
+                required_by: Sequence[ReferenceTo|str] = []
+                ) -> ActionConfirmation:
+    """
+    Inserts the given node into the given rmt with the given relationships to the reest of the rmt (depends_on, required_by).
+    """
+
+    conn = _meta.conn
+    addr = insert_node(rmt_id, instruction, conn, name, scope, depends_on, required_by)
+    
+    return f"Inserted rmt node {name if name else 'No name'}@{addr} into rmt template {rmt_id}."
+
+
+
+@register_tool("rmt.activate_as_master", ['general', 'task'])
+def rmt_activate_as_master(_meta: _ExecToolMetaData,
+                           rmt_id: Addr|Name,
+                           inputs: dict[str, str],
+                           depends_on: Sequence[Addr|Name] = [],
+                           required_by: Sequence[Addr|Name] = []
+                           ) -> ActionConfirmation:
+    """
+    Activates a reusable master template as a master, with the given relationships to the rest of the task.
+    depends_on may use 'self' to identify your current task as a dependancy of the rmt.
+    """
+    conn = _meta.conn
+    addr = resolve_to_addr(rmt_id, conn)
+
+    activate_as_master(addr, conn, depends_on, required_by, inputs)
+
+    return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
+
+
+@register_tool("rmt.edit.instruction", ['task'])
+def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
+    """
+    Edits the rmt instruction.
+    """
+    conn = _meta.conn
+    edit_instruction(node_id, sr_block, conn)
+    return f"Edited instruction of rmt node {node_id}"
+
+
+@register_tool("rmt.edit.scope", ['task'])
+def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
+    """
+    Updates the new_scope
+    """
+    conn = _meta.conn
+    change_scope(node_id, new_scope, conn)
+    return f"Updated instruction of rmt node {node_id}"

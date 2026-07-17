@@ -429,7 +429,7 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
 
 
 @register_tool("context.window.land_by_addr", ['context'])
-def context_window_land(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Lands a viewing window onto an item by id.
     """

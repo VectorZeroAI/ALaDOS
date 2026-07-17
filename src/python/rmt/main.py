@@ -331,6 +331,7 @@ def insert_node(rmt_id: ReferenceTo|str,
         addr = conn.execute_fetchval("""
         INSERT INTO rmt_slaves(template_addr, instruction, scope, deps)
         VALUES(%s, %s, %s, %s)
+        RETURNING addr
                      """, (rmt_id, instruction, scope, depends_on))
         conn.execute("""
         UPDATE rmt_slaves
@@ -377,14 +378,14 @@ def activate_as_master(rmt_addr: ReferenceTo,
         master_addr = conn.execute_fetchval("""
             SELECT new_addr();
                                             """)
+
         conn.execute("""
-             INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
                      """, (master_addr,))
 
         conn.execute("""
-             SELECT new_master(p_instruction := 'NONE', req_addrs := %s, p_addr := %s); 
+    SELECT new_master(p_instruction := 'NONE', req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
                      """, (depends_on, master_addr))
-
 
     master_result_addr = conn.execute_fetchval("""
         SELECT result_addr FROM masters WHERE addr = %s;
@@ -519,5 +520,5 @@ def change_scope(node_id: str|int, new_scope: SlaveScope, conn: Conn) -> None:
     UPDATE rmt_slaves
         SET scope = %s
     WHERE addr = %s
-                 """, (new_scope,))
+                 """, (new_scope, node_id))
 

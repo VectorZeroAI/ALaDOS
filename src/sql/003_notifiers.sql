@@ -26,18 +26,18 @@ CREATE OR REPLACE FUNCTION position_calculation()
         SELECT position, NEW.emb <=> emb AS distance INTO item_2_pos, item_2_distance
         FROM vector_ops WHERE emb IS NOT NULL AND addr != NEW.addr ORDER BY distance LIMIT 1 OFFSET 1;
 
-        IF item_1_pos IS NULL THEN
-            NEW.position := 0;
+        IF item_1_pos IS NULL AND item_1_distance IS NULL THEN
+            NEW.position := nextval('vector_ops_position');
             RETURN NEW;
         END IF;
 
-        IF item_2_pos IS NULL THEN
-            NEW.position := 1;
+        IF item_2_pos IS NULL AND item_2_distance IS NULL THEN
+            NEW.position := nextval('vector_ops_position');
             RETURN NEW;
         END IF;
 
         IF item_1_distance > 0.4 THEN
-            NEW.position := COALESCE((SELECT MAX(position) FROM vector_ops), 0) + 100;
+            NEW.position := nextval('vector_ops_position');
             RETURN NEW;
         END IF;
 

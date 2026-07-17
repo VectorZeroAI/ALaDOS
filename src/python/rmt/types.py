@@ -21,7 +21,7 @@ class RmtNodeIncomplete:
     instruction: str = field(default='')
     deps: list[str] = field(default_factory=list)
     scope: SlaveScope_ = field(default='general')
-    id: str = field(default=str(uuid4()))
+    id: str = field(default_factory=lambda: str(uuid4()))
 
 @dataclass(slots=True)
 class RmtNodeReturn:

@@ -373,11 +373,13 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     # TODO : Enchanse this process by adding a context manager slave as well as better views of previous tasks. 
 
     prompt  =  """
-    You task is to decide how to further proceed. For a given task,
-    the given results and the master results,
-    either formulate the next plan steps,
-    or finalise the master result, if you already have enough information from the previous steps and their results,
+    You task is to decide how to further proceed. For the master instruction,
+    the results and the master result,
+    either formulate the next incremental plan step torwards completion of the master instruction,
+    or finalise the master result,
+    if you already have enough information from the previous steps and their results,
     or do nothing, if the master result is already finalised enough. 
+    Also check the quality of instruction and task completion, and if its below acceptance, and if it influences further steps, asign that same task again, to be done anew, and tweak the instruction for higher quality.
     DO NOT ADD SLAVES WITH THE SAME TASK REPETETIVELY!!!
     DO NOT TRY TO PLAN ALL STEPS AT ONCE.
     The task is complete if the master instruction is fully answered via the current master result. 

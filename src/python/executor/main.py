@@ -184,6 +184,19 @@ Transitions:
 
             case ExecuteState():
                 curr = state
+                
+                items = []
+                for i in curr.tool_calls:
+                    if 'edit' in i.tool:
+                        items.append(ID_EXTRACTOR[i.tool](i.args))
+
+
+                conn.execute("""
+                SELECT version FROM vector_ops WHERE addr = ANY(%s)
+                             """, (,))
+
+                items_versions = []
+
                 metadata_c = _ExecToolMetaData(
                         curr.instr.master_addr,
                         conn,

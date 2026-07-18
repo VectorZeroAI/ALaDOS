@@ -77,16 +77,20 @@ RETURNS TRIGGER AS $$
             You can add slaves via "goal.add_slave" tool.
             You can add masters via "goal.add_master" tool.
             Slaves are atomic self contained signle Reason + Act steps in the plan.
-            A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all.
-            (plan segment MUST end with a planner slave UNLESS its done).
+            A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have,
+            and it does not require any planing or steps at all.
+            (plan segment MUST end with a planner slave UNLESS its done, if you made the whole plan then the plan is done.).
 
             You have 2 available strategies for planning: strategy 1 - Recurse, strategy 2 - Incrementality. 
 
             Strategy 2 - Incrementality: 
                 You decompose the master instruction into slaves (atomic self contained Reason + Act operations) incrementally,
-                end each incremental step with a planner slave, and thus complete the task.
+                end each incremental step with a planner slave,
+                and thus completing the task via a bunch of plan segments for incrementality. 
+                Incrementality is done to prevent the results diverging from expected outcome, which happens with static long plans, wich is why this strategy requires incremental generation.
             Strategy 1 - Recurse:
-                You split the task into major steps, and declare them as masters, and build the plan out of masters.
+                You split the task into major steps, and declare them as masters,
+                and build the complete plan out of masters.
                 Masters can achive complex tasks, while Slaves are only for atomic operations. 
 
             When to choose wich strategy:

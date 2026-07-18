@@ -74,9 +74,32 @@ RETURNS TRIGGER AS $$
             p_master_addr := NEW.addr, 
             p_instruction := ' Your task is to create a plan for the following instruction OR IF the task is simple, directly write a result via result.add_master_result tool. Master instruction: "
             ' || NEW.instruction || '" 
-            You can add slaves via "goal.add_slave" tool. Slaves are steps in the plan, which is called master. A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all. (plan MUST end with a planner slave UNLESS its done).
-            YOU MUST OUTPUT A JSON ARRAY OF TOOL CALLS!!! DO NOT TRY TO MAKE THE ENTIRE PLAN AT ONCE, leave it to be incrementally produced via further planner slaves.',
+            You can add slaves via "goal.add_slave" tool.
+            You can add masters via "goal.add_master" tool.
+            Slaves are atomic self contained signle Reason + Act steps in the plan.
+            A master instruction quallifies as simple if you can directly write a full answer to it with the tools you currently have, and it does not require any planing or steps at all.
+            (plan segment MUST end with a planner slave UNLESS its done).
+
+            You have 2 available strategies for planning: strategy 1 - Recurse, strategy 2 - Incrementality. 
+
+            Strategy 2 - Incrementality: 
+                You decompose the master instruction into slaves (atomic self contained Reason + Act operations) incrementally,
+                end each incremental step with a planner slave, and thus complete the task.
+            Strategy 1 - Recurse:
+                You split the task into major steps, and declare them as masters, and build the plan out of masters.
+                Masters can achive complex tasks, while Slaves are only for atomic operations. 
+
+            When to choose wich strategy:
+            Pick strategy 2 if the task can be broken down into atomic ReAct steps directly with high certanty of correctness and low hurdle. 
+            Pick stragegy 1 if the task cant be broken down into atomic ReAct steps directly, or it is highly complex or just broad and big.
+
+            If the task is trivial, just directly give the result. Result of the master_instruction must end up in master_result.
+            '
             p_name := 'planner_'||nextval('global_planner_serial')::TEXT,
+            --- TODO : Add a step to this,
+            --- where there available rmts are evaluated on the propability of them being usefull 
+            --- to the task, and then embedded into the prompt as possibilities of executing functions
+            --- directly insdead of planning stuff.
             p_slave_scope := 'task'
         );
     RETURN NEW;

@@ -57,7 +57,7 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 
 
 
-@register_tool("K.edit", ['general', 'context'])
+@register_tool("K.edit", ['general', 'context'], ["id"])
 def k_edit(_meta: _ExecToolMetaData,
            id: Addr|str,
            description_change: SearchAndReplaceBlock|None = None,
@@ -189,7 +189,7 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 
 
 
-@register_tool("tool.edit", ['general', 'context'])
+@register_tool("tool.edit", ['general', 'context'], ['id'])
 def edit_tool(_meta: _ExecToolMetaData,
               id: str|Addr,
               header_change: SearchAndReplaceBlock|None = None,
@@ -811,6 +811,10 @@ def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name
     return f"Created rmt from master {master_id if isinstance(master_id, str) else 'No Name'}@{m_addr} under the identifiers {name if name else 'No name'}@{addr}."
 
 
+
+## FIXME : The current signature makes no sense, the thing to be checked is the rmt template
+## But its not required here, so that is just stupid.
+## Maybe add the rmt template addr and check if node id in template ?
 @register_tool("rmt.edit.delete_node", ['task'])
 def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
     """
@@ -830,7 +834,7 @@ def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: b
     return f"Deleted node {node_id} from the rmt."
 
 
-@register_tool("rmt.edit.insert_node", ['task'])
+@register_tool("rmt.edit.insert_node", ['task'], ['rmt_id'])
 def rmt_insert_node(_meta: _ExecToolMetaData,
                 rmt_id: Addr|Name,
                 instruction: str,
@@ -868,7 +872,7 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
 
     return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
 
-
+## FIXME : The same as above fixme. Signature makes no sense to this framework.
 @register_tool("rmt.edit.instruction", ['task'])
 def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
     """
@@ -878,7 +882,7 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
     edit_instruction(node_id, sr_block, conn)
     return f"Edited instruction of rmt node {node_id}"
 
-
+## FIXME : The same as above fixme. Signature makes no sense to this framework.
 @register_tool("rmt.edit.scope", ['task'])
 def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
     """

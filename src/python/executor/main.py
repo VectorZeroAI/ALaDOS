@@ -5,12 +5,12 @@ from types import FunctionType
 from typing import Sequence
 import traceback
 
-from python.sceduler.goal_stack.types import LoadsData
+from ..sceduler.goal_stack.types import LoadsData
 
 from ..utils.config_handlers import load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import execute_tool
+from ..executor.execute_tool import execute_tool, extract_ids
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
@@ -184,24 +184,23 @@ Transitions:
 
             case ExecuteState():
                 curr = state
+
+                items_to_edit = extract_ids(curr.tool_calls)
+
+                items_versions_fetch = conn.execute("""
+                SELECT addr, version FROM vector_ops WHERE addr = ANY(%s)
+                             """, (items_to_edit,)).fetchall()
                 
-                items = []
-                for i in curr.tool_calls:
-                    if 'edit' in i.tool:
-                        items.append(ID_EXTRACTOR[i.tool](i.args))
-
-
-                conn.execute("""
-                SELECT version FROM vector_ops WHERE addr = ANY(%s)
-                             """, (,))
-
-                items_versions = []
+                items_versions = {}
+                for i in items_versions_fetch:
+                    items_versions[i[0]] = i[1]
 
                 metadata_c = _ExecToolMetaData(
                         curr.instr.master_addr,
                         conn,
                         curr.instr.slave_addr,
-                        config.get('context_limit', 40000)
+                        config.get('context_limit', 40000),
+                        items_versions
                     )
 
                 results = []

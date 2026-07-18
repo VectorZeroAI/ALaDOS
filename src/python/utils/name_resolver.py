@@ -47,7 +47,7 @@ def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str], conn: Conn) -> 
 
     try:
         addrs = conn.executemany("SELECT resolve_name(%s)", [(i,) for i in str_deps], returning=True)
-        addrs = [a.fetchone()[0] for a in addrs]
+        addrs = [a[0] for a in addrs]
     except Exception as e:
         log_json({
             'type': 'util',

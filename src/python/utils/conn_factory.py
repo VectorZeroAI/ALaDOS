@@ -17,7 +17,7 @@ class Conn(psycopg.Connection):
     def execute_fetchval(self, querry: SQL|LiteralString, params: Sequence = []) -> Any: ...
 
     @overload
-    def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[True]) -> Iterator[psycopg.Cursor[TupleRow]]: ...
+    def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[True]) -> list[TupleRow]: ...
 
     @overload
     def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: Literal[False]) -> None: ...
@@ -38,11 +38,14 @@ def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = 
         raise RuntimeError("Database returned no answer to the querry!")
 
 
-def _execute_many(self: Conn, querry, params_seq, returning = False):
+def _execute_many(self: Conn, querry, params_seq, returning = False) -> list[TupleRow]|None:
     with self.cursor() as cur:
         cur.executemany(querry, params_seq, returning=returning)
         if returning:
-            return cur.results()
+            rows = []
+            for subcur in cur.results():
+                rows.extend(subcur.fetchall())
+            return rows
         else:
             return None
 

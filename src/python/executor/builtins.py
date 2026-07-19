@@ -15,7 +15,7 @@ import subprocess
 import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
-from .exceptions import ConcurrencyError, ParadoxDetected
+from .exceptions import ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem

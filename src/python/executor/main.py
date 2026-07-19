@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import datetime
 import threading
 import tomllib
 from types import FunctionType
@@ -10,7 +11,7 @@ from ..sceduler.goal_stack.types import LoadsData
 from ..utils.config_handlers import load_apis_from_text
 
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import execute_tool, extract_ids
+from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
@@ -147,7 +148,7 @@ Transitions:
 
                 str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
-                set_next_state(ApiCallsState(str_instr, instr, finish=True))
+                set_next_state(ApiCallsState(str_instr, instr, datetime.now(), finish=True))
 
             case ApiCallsState():
                 curr = state
@@ -179,28 +180,18 @@ Transitions:
                     })
                     tool_calls = fix_llm_response(curr.instr, llm_output)
 
-                set_next_state(ExecuteState(tool_calls, curr.instr, finish=curr.finish))
+                set_next_state(ExecuteState(tool_calls, curr.instr, curr.occ_timestamp, finish=curr.finish))
 
 
             case ExecuteState():
                 curr = state
-
-                items_to_edit = extract_ids(curr.tool_calls)
-
-                items_versions_fetch = conn.execute("""
-                SELECT addr, version FROM vector_ops WHERE addr = ANY(%s)
-                             """, (items_to_edit,)).fetchall()
-                
-                items_versions = {}
-                for i in items_versions_fetch:
-                    items_versions[i[0]] = i[1]
 
                 metadata_c = _ExecToolMetaData(
                         curr.instr.master_addr,
                         conn,
                         curr.instr.slave_addr,
                         config.get('context_limit', 40000),
-                        items_versions
+                        curr.occ_timestamp
                     )
 
                 results = []

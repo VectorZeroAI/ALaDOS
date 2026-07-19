@@ -25,6 +25,13 @@ Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
 ActionConfirmation: TypeAlias = str
 
+class ConcurrencyError(Exception):
+    def __init__(self, new_item_content: str) -> None:
+        self.item_content = new_item_content
+    def __str__(self) -> str:
+        return f"The item was changed after the context generation state, wich means the edit is not directly applicable to the item. Please review the edit compared to the new contents of the item to determine if its still applicable, and in what form. New item contents: {self.item_content}"
+
+
 ALL = get_args(SlaveScope)
 
 searcher_obj = SearxngSearcher()
@@ -57,7 +64,7 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 
 
 
-@register_tool("K.edit", ['general', 'context'], ["id"])
+@register_tool("K.edit", ['general', 'context'])
 def k_edit(_meta: _ExecToolMetaData,
            id: Addr|str,
            description_change: SearchAndReplaceBlock|None = None,
@@ -75,15 +82,14 @@ def k_edit(_meta: _ExecToolMetaData,
 
     addr = resolve_to_addr(id, conn)
 
-    try:
-        flag_ownership = conn.execute_fetchval("""
-        SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                      """, (addr, _meta.master_id))
-    except NoValue:
-        flag_ownership = False
-
-    if not flag_ownership:
-        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
+    last_changed = conn.execute_fetchval("""
+    SELECT updated_at FROM vector_ops WHERE addr = %s
+                                         """, (addr,))
+    if last_changed > _meta.occ_last_change:
+        new_item_content_and_description = conn.execute_fetchval("""
+        SELECT k.content, v.description FROM knowledge k JOIN vector_ops v ON k.addr = v.addr WHERE k.addr = %s;
+                                                 """, (addr,))
+        raise ConcurrencyError(f"<item_content>{new_item_content_and_description[0]}</item_content><item_description>{new_item_content_and_description[1]}</item_description>")
 
     if content_change is not None:
         old_k = conn.execute_fetchval("""
@@ -189,7 +195,7 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 
 
 
-@register_tool("tool.edit", ['general', 'context'], ['id'])
+@register_tool("tool.edit", ['general', 'context'])
 def edit_tool(_meta: _ExecToolMetaData,
               id: str|Addr,
               header_change: SearchAndReplaceBlock|None = None,
@@ -221,16 +227,15 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     addr = resolve_to_addr(id, conn)
 
-    try:
-        flag_ownership = conn.execute_fetchval("""
-            SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                  """, (addr, _meta.master_id))
-    except NoValue:
-        flag_ownership = False
-
-    if not flag_ownership:
-        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
-
+    last_edited = conn.execute_fetchval("""
+    SELECT updated_at FROM vector_ops WHERE addr = %s;
+                                        """, (addr, ))
+    if last_edited > _meta.occ_last_change:
+        executable_data = conn.execute_fetchval("""
+        SELECT e.body, e.header, v.description FROM executables e JOIN vector_ops v ON e.addr = v.addr WHERE e.addr = %s;
+                                          """, (addr,))
+        raise ConcurrencyError(f"<body>{executable_data[0]}</body><header>{executable_data[1]}</header><description>{executable_data[2]}</description>")
+        
 
     if new_description is not None:
         conn.execute("""
@@ -812,9 +817,6 @@ def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name
 
 
 
-## FIXME : The current signature makes no sense, the thing to be checked is the rmt template
-## But its not required here, so that is just stupid.
-## Maybe add the rmt template addr and check if node id in template ?
 @register_tool("rmt.edit.delete_node", ['task'])
 def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
     """
@@ -872,7 +874,6 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
 
     return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
 
-## FIXME : The same as above fixme. Signature makes no sense to this framework.
 @register_tool("rmt.edit.instruction", ['task'])
 def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
     """
@@ -882,7 +883,6 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
     edit_instruction(node_id, sr_block, conn)
     return f"Edited instruction of rmt node {node_id}"
 
-## FIXME : The same as above fixme. Signature makes no sense to this framework.
 @register_tool("rmt.edit.scope", ['task'])
 def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
     """

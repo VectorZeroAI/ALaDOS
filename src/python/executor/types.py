@@ -58,7 +58,7 @@ class _ExecToolMetaData:
     conn: Conn 
     slave_id: int
     context_limit: int
-    start_timestamp: datetime
+    occ_last_change: datetime
     _embedder_queue: Uqueue = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):

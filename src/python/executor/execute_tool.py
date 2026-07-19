@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 
-import traceback
-from typing import Callable, ParamSpec, TypeAlias, TypeVar, get_args
+from typing import Callable, ParamSpec, TypeVar, get_args
 
-from python.types import ReferenceTo
 from ..executor.types import ToolCall
 import inspect
 import re
-from .types import _ExecToolMetaData, JsonSerializable, SlaveScope_, SlaveScopesList, ToolCallsBlock
-
-IdExtractor: TypeAlias = Callable[[dict[str, JsonSerializable]], ReferenceTo|None]
+from .types import _ExecToolMetaData, SlaveScope_, SlaveScopesList
 
 TOOL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
-IDS_ARGNAMES: dict[str, list[str]] = {}
 
 TOOL_USAGE_INSTRUCTION = """
 You should output tool calls. Otherwise your response will be treated as plaintext result. 
@@ -62,10 +57,9 @@ P = ParamSpec('P')
 R = TypeVar('R')
 
 
-def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'], id_names: list[str] = []):
+def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         TOOL_REGISTRY[name or func.__name__] = func
-        IDS_ARGNAMES[name or func.__name__] = id_names
         header = _construct_header(func, name)
         for i in scope:
             HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
@@ -78,27 +72,6 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'], i
 
 def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
-
-
-
-def extract_ids(tool_calls: ToolCallsBlock) -> list[ReferenceTo]:
-    """
-    Extracts the addrs that will be edited by the functions and returns them in a list.
-    Used for OCC in core. 
-    """
-    addrs = []
-    try:
-        for i in tool_calls:
-            addr_ids = IDS_ARGNAMES[i.tool]
-            for j in addr_ids:
-                candidate = i.args[j]
-                if not isinstance(candidate, int):
-                    raise ValueError(f"ONE OF THE IDS IS NOT INT, gotten {candidate} from args {i.args} from tool {i.tool}, expected int.")
-                addrs.append(candidate)
-    except KeyError as e:
-        raise ValueError(f"KEY ERROR {e} with traceback {traceback.format_exception(e)}.")
-    return addrs
-
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

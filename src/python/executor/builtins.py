@@ -15,24 +15,16 @@ import subprocess
 import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
-from .exceptions import ParadoxDetected
+from .exceptions import ConcurrencyError, ParadoxDetected
 from .cronjobs.parser import CronjobActions, parse
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
 from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
 from ..rmt.main import activate_as_master, change_scope, create_from_range, create_from_serial, delete_node, edit_instruction, insert_node, serialize, create_from_master
 
-
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
 ActionConfirmation: TypeAlias = str
-
-class ConcurrencyError(Exception):
-    def __init__(self, new_item_content: str) -> None:
-        self.item_content = new_item_content
-    def __str__(self) -> str:
-        return f"The item was changed after the context generation state, wich means the edit is not directly applicable to the item. Please review the edit compared to the new contents of the item to determine if its still applicable, and in what form. New item contents: {self.item_content}"
-
 
 ALL = get_args(SlaveScope)
 

@@ -3,10 +3,9 @@
 from datetime import datetime
 from typing import Callable
 
-from python.executor.builtins import ConcurrencyError
-from python.types import ReferenceTo
-from python.utils.conn_factory import Conn
-
+from ..executor.exceptions import ConcurrencyError
+from ..types import ReferenceTo
+from ..utils.conn_factory import Conn
 
 def update_timestamp(item_addr: ReferenceTo, conn: Conn) -> None:
     """

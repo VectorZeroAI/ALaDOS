@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS vector_ops(
     addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k)) STORED,
     position NUMERIC UNIQUE NOT NULL,
     description TEXT NOT NULL,
-    version INT DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT NOW(),
     type TEXT GENERATED ALWAYS AS (CASE
         WHEN addr_exe IS NOT NULL THEN 'executable'
         WHEN addr_k IS NOT NULL THEN 'knowledge'

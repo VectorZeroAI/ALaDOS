@@ -6,6 +6,7 @@ from typing import Sequence, get_args
 from psycopg.errors import DataError
 from python.executor.types import SlaveScope, SlaveScope_
 from python.utils.name_resolver import resolve_to_addrs, resolve_to_addr
+from python.utils.occ_functions import update_timestamp
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
@@ -496,7 +497,7 @@ def edit_instruction(node_id: ReferenceTo, sr_block: SearchAndReplaceBlock, conn
     WHERE addr = %s
         """, (instruction, node_id))
 
-def change_scope(node_id: ReferenceTo, new_scope: SlaveScope, conn: Conn) -> None:
+def change_scope(rmt_slave_addr: ReferenceTo, new_scope: SlaveScope, conn: Conn) -> None:
 
     if new_scope not in get_args(SlaveScope):
         raise ValueError(f"given new scope {new_scope} not in allowed scopes {get_args(SlaveScope)}")
@@ -504,6 +505,5 @@ def change_scope(node_id: ReferenceTo, new_scope: SlaveScope, conn: Conn) -> Non
     conn.execute("""
     UPDATE rmt_slaves
         SET scope = %s
-    WHERE addr = %s
-                 """, (new_scope, node_id))
-
+    WHERE addr = %s;
+                 """, (new_scope, rmt_slave_addr))

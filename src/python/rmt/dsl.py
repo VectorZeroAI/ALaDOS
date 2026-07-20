@@ -193,7 +193,7 @@ def validate_value(value: str) -> bool:
 
 
 
-def serialise(addr: int, conn: Conn = conn_factory()) -> str:
+def serialise(addr: int, conn: Conn) -> str:
     """
     Serialises an reusable master template into its DSL form.
     """

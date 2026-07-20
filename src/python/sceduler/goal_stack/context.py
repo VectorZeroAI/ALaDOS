@@ -110,9 +110,9 @@ def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
     req_results_str_list = []
     for i in fetch:
         if not i[1]:
-            req_results_str_list.append(f"(information required by your insturction '{i[0]} ', with metadata: '{i[2]}')")
+            req_results_str_list.append(f"(information required by your instruction '{i[0]} ', with metadata: '{i[2]}')")
             continue
-        req_results_str_list.extend(f"(previous step instruction: '{i[1]}', result it produced: {i[0]})")
+        req_results_str_list.append(f"(previous step instruction: '{i[1]}', result it produced: {i[0]})")
 
     req_results_str = "\n".join(req_results_str_list)
 

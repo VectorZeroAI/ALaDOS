@@ -91,20 +91,20 @@ CREATE TABLE IF NOT EXISTS executables (
 CREATE TABLE IF NOT EXISTS vector_ops(
     addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k)) STORED,
-    position NUMERIC UNIQUE NOT NULL,
+    addr_rmt BIGINT REFERENCES reusable_master_template(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
     description TEXT NOT NULL,
+    position NUMERIC UNIQUE NOT NULL,
     updated_at TIMESTAMP DEFAULT NOW(),
     type TEXT GENERATED ALWAYS AS (CASE
         WHEN addr_exe IS NOT NULL THEN 'executable'
         WHEN addr_k IS NOT NULL THEN 'knowledge'
+        WHEN addr_rmt IS NOT NULL THEN 'rmt'
     END) VIRTUAL,
     emb vector(768),
-    CONSTRAINT addr_or_exe_ref_not_both_not_none CHECK (NOT
-        ((addr_exe IS NOT NULL AND addr_k IS NOT NULL)
-        OR
-        (addr_exe IS NULL AND addr_k IS NULL))
-    ),
+    CONSTRAINT an_addr_exists_vector_ops_check CHECK (
+        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NONE
+    )
     PRIMARY KEY (addr)
 );
 

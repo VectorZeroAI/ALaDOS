@@ -35,7 +35,7 @@ def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str)
         checkpoint()
         try:
             llm_result = llm_call(api_spec, prompt)
-            print("got llm result!!!")
+            print("\n\n\n FULL LLM OUTPUT", llm_result, "\n\n\n")
             checkpoint()
         except httpx.HTTPStatusError as e:
             print(e, e.response, e.response.status_code)

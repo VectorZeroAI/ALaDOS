@@ -98,6 +98,7 @@ RETURNS TRIGGER AS $$
             Pick stragegy 1 if the task cant be broken down into atomic ReAct steps directly, or it is highly complex or just broad and big.
 
             If the task is trivial, just directly give the result. Result of the master_instruction must end up in master_result.
+            If the task is asking for factual information, or requires up to date information, it is not trivial, and you must create a plan for it, wich must include searching the web.
             ',
             p_name := 'planner_'||nextval('global_planner_serial')::TEXT,
             --- TODO : Add a step to this,

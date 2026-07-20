@@ -109,6 +109,7 @@ class ContextShortState:
 class ParadoxState:
     paradox_e: ParadoxDetected
     instr: Instr
+    time: datetime
     tag: Literal[Cs.PARADOX] = Cs.PARADOX
 
 @dataclass(slots=True)

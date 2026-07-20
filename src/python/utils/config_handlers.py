@@ -8,16 +8,22 @@ from ..executor.types import Api
 
 def load_apis(file_path: str) -> Sequence[Api]:
     """ Loads the APIS from the config file """
-    with open(file_path, 'r') as f:
+    with open(file_path, 'rb') as f:
         raw_config = tomllib.load(f)
 
     apis = []
     for i in raw_config['apis']:
-        apis.append(Api(
+        a = Api(
             url=i['url'],
             key=i['key'],
             model=i['model'],
-        ))
+        )
+        if i.get('claude'):
+            a.claude = True
+        if i.get('max_tokens'):
+            a.max_tokens = i['max_tokens']
+
+        apis.append(a)
 
     return apis
 

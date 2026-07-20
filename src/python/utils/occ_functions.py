@@ -13,7 +13,7 @@ def update_timestamp(item_addr: ReferenceTo, conn: Conn) -> None:
     """
     conn.execute("""
     UPDATE vector_ops
-        SET updated_at = NOW();
+        SET updated_at = NOW()
     WHERE addr = %s;
                  """, (item_addr, ))
 

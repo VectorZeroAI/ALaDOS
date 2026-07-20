@@ -6,7 +6,6 @@ import pytest
 from ALaDOS.src.python.executor.builtins import (
     add_cronjob,
     add_slave,
-    claim_item,
     context_add,
     context_window_land_by_addr,
     context_window_size_change,
@@ -19,7 +18,6 @@ from ALaDOS.src.python.executor.builtins import (
     k_read,
     master_result_add,
     move_window_anchor,
-    release_item,
     report_paradoxal_information,
     result_write,
     rmt_activate_as_master,
@@ -63,6 +61,7 @@ def create_test_meta(conn: Conn) -> _ExecToolMetaData:
         conn=conn,
         slave_id=slave_addr,
         context_limit=10000,
+        occ_last_change=0
     )
 
 # ----------------------------------------------------------------------
@@ -104,7 +103,6 @@ def test_k_edit(meta):
     name = unique_name("knowledge_edit")
     k_create(content="old content", description="old desc", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
-    claim_item(item_id=addr, _meta=meta)
     sr_block = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
     k_edit(id=name, content_change=sr_block, _meta=meta)
     content = meta.conn.execute_fetchval("SELECT content FROM knowledge WHERE addr=%s", (addr,))
@@ -232,7 +230,6 @@ def test_tool_edit(meta):
     name = unique_name("tool_edit")
     create_tool(description="edit tool", header="old header", body="old body", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
-    claim_item(item_id=addr, _meta=meta)
     sr_block = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
     edit_tool(id=name, header_change=sr_block, body_change=sr_block, _meta=meta)
     header = meta.conn.execute_fetchval("SELECT header FROM executables WHERE addr=%s", (addr,))
@@ -261,10 +258,8 @@ def test_claim_and_release(meta):
     name = unique_name("owned")
     k_create(content="owned content", description="desc", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
-    claim_item(item_id=addr, _meta=meta)
     owner = meta.conn.execute_fetchval("SELECT owner FROM ownership WHERE addr=%s", (addr,))
     assert owner == meta.master_id
-    release_item(item_id=addr, _meta=meta)
     count = meta.conn.execute_fetchval("SELECT count(*) FROM ownership WHERE addr=%s", (addr,))
     assert count == 0
 

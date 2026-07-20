@@ -6,6 +6,7 @@ from typing import Sequence, get_args
 from psycopg.errors import DataError
 from python.executor.types import SlaveScope, SlaveScope_
 from python.utils.name_resolver import resolve_to_addrs, resolve_to_addr
+from python.utils.occ_functions import update_timestamp
 from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from ..utils.conn_factory import Conn
 from ..types import ReferenceTo
@@ -251,7 +252,7 @@ def create_from_range(
     
 
 
-def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) -> None:
+def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> None:
     """
     Deletes a node from an rmt, via the addr or name.
     
@@ -272,8 +273,6 @@ def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) 
     """
     
     with conn.transaction():
-        node_id = resolve_to_addr(node_id, conn)
-
         reqired_by = conn.execute("""
         SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);
                                   """, (node_id,)).fetchall()
@@ -310,7 +309,7 @@ def delete_node(node_id: ReferenceTo|str, conn: Conn, concatenate: bool = True) 
 
 
 
-def insert_node(rmt_id: ReferenceTo|str,
+def insert_node(rmt_id: ReferenceTo,
                 instruction: str,
                 conn: Conn,
                 name: str|None = None,
@@ -319,9 +318,6 @@ def insert_node(rmt_id: ReferenceTo|str,
                 required_by: Sequence[ReferenceTo|str] = []
                 ) -> ReferenceTo:
     """ Inserts a node into the rmt DAG. """
-
-    if isinstance(rmt_id, str):
-        rmt_id = conn.execute_fetchval("SELECT resolve_name(%s);", (rmt_id,))
 
     depends_on = resolve_to_addrs(depends_on, conn)
     required_by = resolve_to_addrs(required_by, conn)
@@ -485,10 +481,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
     )
 
 
-def edit_instruction(node_id: str|int, sr_block: SearchAndReplaceBlock, conn: Conn) -> None:
-    
-    if isinstance(node_id, str):
-        node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (node_id, ))
+def edit_instruction(node_id: ReferenceTo, sr_block: SearchAndReplaceBlock, conn: Conn) -> None:
 
     instruction = conn.execute_fetchval("SELECT instruction FROM rmt_slaves WHERE addr = %s", (node_id,))
     
@@ -504,10 +497,7 @@ def edit_instruction(node_id: str|int, sr_block: SearchAndReplaceBlock, conn: Co
     WHERE addr = %s
         """, (instruction, node_id))
 
-def change_scope(node_id: str|int, new_scope: SlaveScope, conn: Conn) -> None:
-
-    if isinstance(node_id, str):
-        node_id = conn.execute_fetchval("SELECT resolve_name(%s)", (node_id,))
+def change_scope(rmt_slave_addr: ReferenceTo, new_scope: SlaveScope, conn: Conn) -> None:
 
     if new_scope not in get_args(SlaveScope):
         raise ValueError(f"given new scope {new_scope} not in allowed scopes {get_args(SlaveScope)}")
@@ -515,6 +505,5 @@ def change_scope(node_id: str|int, new_scope: SlaveScope, conn: Conn) -> None:
     conn.execute("""
     UPDATE rmt_slaves
         SET scope = %s
-    WHERE addr = %s
-                 """, (new_scope, node_id))
-
+    WHERE addr = %s;
+                 """, (new_scope, rmt_slave_addr))

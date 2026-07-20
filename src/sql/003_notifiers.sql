@@ -98,7 +98,7 @@ RETURNS TRIGGER AS $$
             Pick stragegy 1 if the task cant be broken down into atomic ReAct steps directly, or it is highly complex or just broad and big.
 
             If the task is trivial, just directly give the result. Result of the master_instruction must end up in master_result.
-            '
+            ',
             p_name := 'planner_'||nextval('global_planner_serial')::TEXT,
             --- TODO : Add a step to this,
             --- where there available rmts are evaluated on the propability of them being usefull 

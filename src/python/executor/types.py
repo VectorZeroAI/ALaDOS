@@ -5,6 +5,7 @@ import threading
 from typing import Literal, Sequence, TypeAlias, get_args, Union
 from enum import Enum, auto
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from pydantic import JsonValue
 
@@ -57,6 +58,7 @@ class _ExecToolMetaData:
     conn: Conn 
     slave_id: int
     context_limit: int
+    occ_last_change: datetime
     _embedder_queue: Uqueue = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):
@@ -83,6 +85,7 @@ class ContextGetState:
 class ApiCallsState:
     str_instr: str
     instr: Instr
+    occ_timestamp: datetime
     finish: bool = False
     tag: Literal[Cs.API_CALLS] = Cs.API_CALLS
 
@@ -90,6 +93,7 @@ class ApiCallsState:
 class ExecuteState:
     tool_calls: ToolCallsBlock
     instr: Instr
+    occ_timestamp: datetime
     error_count: int = 0
     finish: bool = False
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
@@ -105,6 +109,7 @@ class ContextShortState:
 class ParadoxState:
     paradox_e: ParadoxDetected
     instr: Instr
+    time: datetime
     tag: Literal[Cs.PARADOX] = Cs.PARADOX
 
 @dataclass(slots=True)

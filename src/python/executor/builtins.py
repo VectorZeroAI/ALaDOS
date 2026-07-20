@@ -4,10 +4,12 @@ import os
 from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
 
 from numpy import ndarray
+from functools import partial
 import psycopg
 from psycopg.types.json import Jsonb
 from python.utils.conn_factory import NoValue
 from python.utils.name_resolver import resolve_to_addr, resolve_to_addrs
+from python.utils.occ_functions import occ_check, update_timestamp
 from .execute_tool import register_tool
 import subprocess
 import json
@@ -19,7 +21,6 @@ from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
 from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
 from ..rmt.main import activate_as_master, change_scope, create_from_range, create_from_serial, delete_node, edit_instruction, insert_node, serialize, create_from_master
-
 
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
@@ -75,15 +76,15 @@ def k_edit(_meta: _ExecToolMetaData,
 
     addr = resolve_to_addr(id, conn)
 
-    try:
-        flag_ownership = conn.execute_fetchval("""
-        SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                      """, (addr, _meta.master_id))
-    except NoValue:
-        flag_ownership = False
+    def get_new_content() -> str:
+        k_data = conn.execute("""
+        SELECT k.content, v.description FROM knowledge k JOIN vector_ops v ON k.addr = v.addr WHERE k.addr = %s;
+                                                 """, (addr,)).fetchone()
+        assert k_data is not None
 
-    if not flag_ownership:
-        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
+        return f"<item_content>{k_data[0]}</item_content><item_description>{k_data[1]}</item_description>"
+
+    occ_check(_meta.occ_last_change, addr, conn, get_new_content)
 
     if content_change is not None:
         old_k = conn.execute_fetchval("""
@@ -106,6 +107,8 @@ def k_edit(_meta: _ExecToolMetaData,
                      """, (new_d, addr))
 
         _meta._embedder_queue.put(addr)
+
+    update_timestamp(addr, conn)
 
     return f"Edited the knowledge item {id if isinstance(id, str) else "Nameless"}@{addr}"
 
@@ -218,20 +221,17 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     conn = _meta.conn
 
-
     addr = resolve_to_addr(id, conn)
 
-    try:
-        flag_ownership = conn.execute_fetchval("""
-            SELECT TRUE FROM ownership WHERE addr = %s AND owner = %s
-                                  """, (addr, _meta.master_id))
-    except NoValue:
-        flag_ownership = False
+    def get_new_content() -> str:
+        executable_data = conn.execute("""
+        SELECT e.body, e.header, v.description FROM executables e JOIN vector_ops v ON e.addr = v.addr WHERE e.addr = %s;
+                                          """, (addr,)).fetchone()
+        assert executable_data is not None
+        return f"<body>{executable_data[0]}</body><header>{executable_data[1]}</header><description>{executable_data[2]}</description>"
 
-    if not flag_ownership:
-        raise RuntimeError(f"Item at addr {addr} is not claimed by you, wich means you cant edit it. Claim the item first before editing.")
-
-
+    occ_check(_meta.occ_last_change, addr, conn, get_new_content)
+        
     if new_description is not None:
         conn.execute("""
         UPDATE vector_ops SET description = %s WHERE addr = %s;
@@ -264,6 +264,8 @@ def edit_tool(_meta: _ExecToolMetaData,
         conn.execute("""
         UPDATE executables SET header = %s WHERE addr = %s;
                      """, (new_header, addr))
+
+    update_timestamp(addr, conn)
 
     return f"Applied the edits to the tool {id if isinstance(id, str) else 'No_Name'}@{addr}"
 
@@ -700,40 +702,6 @@ def create_master(instruction: str,
 
     return f"Created master with instruction '{instruction}'."
 
-@register_tool("claim_item", ['general', 'context'])
-def claim_item(_meta: _ExecToolMetaData, item_id: Addr|str) -> ActionConfirmation:
-    """
-    Before editing an item, you must claim it with this function.
-    You can only suply item_name OR item_addr, not both, not none.
-    This function claims you to be the owner of the item, so only you can edit the file.
-    """
-    conn = _meta.conn
-    item_addr = resolve_to_addr(item_id, conn)
-
-    conn.execute("""
-    INSERT INTO ownership(addr, owner) VALUES(%s, %s)
-                 """, (item_addr, _meta.master_id))
-
-    return f"Claimed the item at address {item_addr}."
-
-
-@register_tool("release_item", ['general', 'context'])
-def release_item(_meta: _ExecToolMetaData, item_id: Addr|str) -> ActionConfirmation:
-    """
-    Function to release the file, allowing others to edit the file, after you no longer need the item. Make sure to release the items you claimed when you no longer need them.
-    """
-    conn = _meta.conn
-
-    item_addr = resolve_to_addr(item_id, conn)
-
-    conn.execute("""
-    DELETE FROM ownership WHERE addr = %s AND owner = %s;
-                 """, (item_addr,_meta.master_id))
-
-    return f"Released the item at addr {item_addr}"
-
-
-
 @register_tool("rmt.create.from_range", ['task'])
 def rmt_create_from_range(_meta: _ExecToolMetaData, start_id: Addr|str, end_id: Addr|str, name: str|None = None) -> ActionConfirmation:
     """
@@ -811,8 +779,9 @@ def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name
     return f"Created rmt from master {master_id if isinstance(master_id, str) else 'No Name'}@{m_addr} under the identifiers {name if name else 'No name'}@{addr}."
 
 
+
 @register_tool("rmt.edit.delete_node", ['task'])
-def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
+def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
     """
     Deletes a node from rmt.
     concatenate is a boolean flag that tells if it should concatenate the resulting DAG or not.
@@ -826,8 +795,17 @@ def rmt_delete_node(_meta: _ExecToolMetaData, node_id: Addr|Name, concatenate: b
     It deletes the node regardless of the rmt template the node belongs to, because it can, so be carefull to remove correct nodes. (Addr and Name are unique, but dont mistype them.)
     """
     conn = _meta.conn
-    delete_node(node_id, conn, concatenate)
-    return f"Deleted node {node_id} from the rmt."
+    
+    addr = resolve_to_addr(rmt_slave_id, conn)
+    template_addr = resolve_to_addr(template_id, conn)
+    
+    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, template_addr, conn))
+
+    delete_node(addr, conn, concatenate)
+
+    update_timestamp(addr, conn)
+
+    return f"Deleted node {rmt_slave_id if isinstance(rmt_slave_id, str) else 'No name'}@{addr} from the rmt."
 
 
 @register_tool("rmt.edit.insert_node", ['task'])
@@ -844,8 +822,15 @@ def rmt_insert_node(_meta: _ExecToolMetaData,
     """
 
     conn = _meta.conn
-    addr = insert_node(rmt_id, instruction, conn, name, scope, depends_on, required_by)
     
+    rmt_addr = resolve_to_addr(rmt_id, conn)
+
+    occ_check(_meta.occ_last_change, rmt_addr, conn, partial(serialize, rmt_addr, conn))
+
+    addr = insert_node(rmt_addr, instruction, conn, name, scope, depends_on, required_by)
+    
+    update_timestamp(rmt_addr, conn)
+
     return f"Inserted rmt node {name if name else 'No name'}@{addr} into rmt template {rmt_id}."
 
 
@@ -868,16 +853,22 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
 
     return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
 
-
 @register_tool("rmt.edit.instruction", ['task'])
 def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
     """
-    Edits the rmt instruction.
+    Edits an rmt_slave's instruction.
     """
     conn = _meta.conn
-    edit_instruction(node_id, sr_block, conn)
-    return f"Edited instruction of rmt node {node_id}"
+    
+    addr = resolve_to_addr(node_id, conn)
 
+    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+
+    edit_instruction(addr, sr_block, conn)
+
+    update_timestamp(addr, conn)
+
+    return f"Edited instruction of rmt slave {node_id if isinstance(node_id, str) else 'No name'}@{addr}"
 
 @register_tool("rmt.edit.scope", ['task'])
 def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
@@ -885,5 +876,13 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
     Updates the new_scope
     """
     conn = _meta.conn
-    change_scope(node_id, new_scope, conn)
+
+    addr = resolve_to_addr(node_id, conn)
+
+    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+
+    change_scope(addr, new_scope, conn)
+
+    update_timestamp(addr, conn)
+
     return f"Updated instruction of rmt node {node_id}"

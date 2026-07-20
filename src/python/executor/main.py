@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+from datetime import datetime
 import threading
 import tomllib
 from types import FunctionType
 from typing import Sequence
 import traceback
 
-from python.sceduler.goal_stack.types import LoadsData
+from ..sceduler.goal_stack.types import LoadsData
 
 from ..utils.config_handlers import load_apis_from_text
 
@@ -70,7 +71,7 @@ Transitions:
     7 -> 6
     8 -> 6
 
-    NOT YET DONE
+Further documentation of the states inlined as docstrings in the match statement. 
 
     """
 
@@ -124,10 +125,19 @@ Transitions:
 
         match state:
             case GetSlaveState():
+                """ This is just the state of awaiting next task. """
                 slave_addr = queue.get()
                 set_next_state(ContextGetState(slave_addr))
 
             case ContextGetState():
+                """
+                This state gets the context using the slave_addr_to_instr method from the context stack. 
+
+                Sets the occ_timestamp AND the finish flag and passes them on.
+                The core idea is that if the API calls state or Execution state were called on a different
+                path from the normal execution path, the finish would be false,
+                and thus anouther path for that very same slave can be achieved.
+                """
                 curr = state
                 try:
                     with conn.transaction():
@@ -147,9 +157,14 @@ Transitions:
 
                 str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
-                set_next_state(ApiCallsState(str_instr, instr, finish=True))
+                set_next_state(ApiCallsState(str_instr, instr, datetime.now(), finish=True))
 
             case ApiCallsState():
+                """
+                This is the API calls state, that just calls API and creates the tool calls block.
+                Passes occ_timestamp through. 
+                Passes the finish flag through.
+                """
                 curr = state
                 try:
                     llm_output, next_state = call_llm(curr.str_instr, curr.instr)
@@ -179,16 +194,23 @@ Transitions:
                     })
                     tool_calls = fix_llm_response(curr.instr, llm_output)
 
-                set_next_state(ExecuteState(tool_calls, curr.instr, finish=curr.finish))
+                set_next_state(ExecuteState(tool_calls, curr.instr, curr.occ_timestamp, finish=curr.finish))
 
 
             case ExecuteState():
+                """
+                This is the execution state, it executes the tool calls block,
+                and has a big retry mashine.
+                occ_timestamp gets passed through from the GetContextState.
+                """
                 curr = state
+
                 metadata_c = _ExecToolMetaData(
                         curr.instr.master_addr,
                         conn,
                         curr.instr.slave_addr,
-                        config.get('context_limit', 40000)
+                        config.get('context_limit', 40000),
+                        curr.occ_timestamp
                     )
 
                 results = []
@@ -204,8 +226,8 @@ Transitions:
 
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
-                            set_next_state(ParadoxState(paradox_e, curr.instr))
-                            continue
+                            set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now()))
+                            break
 
                         except Exception as e:
                             log_json({
@@ -227,7 +249,7 @@ Transitions:
                                     'state': str(state.tag)
                                 })
                                 set_error_state(ErrorState(curr.instr.slave_addr))
-                                continue
+                                break
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
                             Your task is to figure out what went wrong there, and create a working tool call.
@@ -237,8 +259,8 @@ Transitions:
 
                             n_llm_out, n_state = call_llm(prompt, curr.instr)
                             if n_state:
-                                state = n_state
-                                continue
+                                set_next_state(n_state)
+                                break
                             try:
                                 n_tool_calls = llm_to_json(n_llm_out)
                             except ValueError:
@@ -251,11 +273,14 @@ Transitions:
                                 n_tool_calls = fix_llm_response(curr.instr, n_llm_out)
                             for j, ntc in enumerate(n_tool_calls, 1):
                                 curr.tool_calls.insert(i+j, ntc)
-                         # NOTE : This inserts the new tool calls in,
-                         # wich is way better then repeating all the mashienery of execution.
-
-                if curr.finish:
-                    set_next_state(FinishState(results, metadata_c, curr.instr))
+                         ## NOTE : This inserts the new tool calls in,
+                         ## wich is way better then repeating all the mashienery of execution.
+                    else:
+                        ## NOTE : This only happens if the for-loop wasnt broken out,
+                        ## Wich means that all the routes that go to entirely different states actually
+                        ## work without this one finishing prepaturely. 
+                        if curr.finish:
+                            set_next_state(FinishState(results, metadata_c, curr.instr))
 
 
             case FinishState():
@@ -277,19 +302,17 @@ Transitions:
 
             case ContextShortState():
                 curr = state
-                set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr))
+                set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr, datetime.now()))
                 add_state(ContextGetState(curr.instr.slave_addr))
                 """
                 This means that first it will execute the entire chain of the context shortening tool calls and API calls,
                 and then it will execute the normal path again from ContextGetState.
                 """
 
-                continue
-
             case ParadoxState():
-                # TODO : When reusable master templates are implemented
-                # Turn this into a reusable master template
-                # With all the required logic for a robust paradox resolver.
+                ## TODO : When reusable master templates are implemented
+                ## Turn this into a reusable master template
+                ## With all the required logic for a robust paradox resolver.
 
                 curr = state
 
@@ -315,9 +338,8 @@ Transitions:
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """
 
-                set_next_state(ApiCallsState(prompt, curr.instr))
+                set_next_state(ApiCallsState(prompt, curr.instr, curr.time))
                 add_state(ContextGetState(curr.instr.slave_addr))
-                continue
 
             case ErrorState():
                 curr = state

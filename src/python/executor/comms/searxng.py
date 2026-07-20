@@ -155,7 +155,7 @@ class SearxngSearcher:
         for _ in range(len(result_str_pre)):
             if len(result_str) > max_len_char:
                 removed_items += 1
-                result_str = "\n\n".join(result_str_pre[len(result_str_pre) -1:])
+                result_str = "\n\n".join(result_str_pre[len(result_str_pre) - removed_items:])
 
         return result_str + f"NOTE: removed {removed_items} amount of items due to overreach of result size limit."
 

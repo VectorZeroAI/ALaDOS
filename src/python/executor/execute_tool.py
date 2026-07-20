@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 from typing import Callable, ParamSpec, TypeVar, get_args
+
 from ..executor.types import ToolCall
 import inspect
 import re
 from .types import _ExecToolMetaData, SlaveScope_, SlaveScopesList
 
-TOOL_REGISTRY = {}
-HEADERS_REGISTRY = {}
+TOOL_REGISTRY: dict[str, Callable] = {}
+HEADERS_REGISTRY: dict[str, str] = {}
 
 TOOL_USAGE_INSTRUCTION = """
 You should output tool calls. Otherwise your response will be treated as plaintext result. 
@@ -56,7 +57,7 @@ P = ParamSpec('P')
 R = TypeVar('R')
 
 
-def register_tool(name: str|None = None, scope: SlaveScopesList = ['general'] ):
+def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         TOOL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)

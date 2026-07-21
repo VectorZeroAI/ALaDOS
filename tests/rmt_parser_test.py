@@ -56,7 +56,7 @@ def clean_db():
         "master_req", "slave_req", "master_load", "master_context",
         "rmt_slaves", "reusable_master_templates",
         "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge", "logs", "ownership", "addrs",
+        "executables", "knowledge", "logs", "addrs",
         "cronjob_once", "cronjob_loop",
     ]
     with conn.transaction():

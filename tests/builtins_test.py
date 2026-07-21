@@ -252,18 +252,6 @@ def test_tool_execute(meta):
     assert data["res"] == json.dumps({"key": "value"})
 
 # ----------------------------------------------------------------------
-# Claim / release
-# ----------------------------------------------------------------------
-def test_claim_and_release(meta):
-    name = unique_name("owned")
-    k_create(content="owned content", description="desc", name=name, _meta=meta)
-    addr = resolve_to_addr(name, meta.conn)
-    owner = meta.conn.execute_fetchval("SELECT owner FROM ownership WHERE addr=%s", (addr,))
-    assert owner == meta.master_id
-    count = meta.conn.execute_fetchval("SELECT count(*) FROM ownership WHERE addr=%s", (addr,))
-    assert count == 0
-
-# ----------------------------------------------------------------------
 # Web search / communication
 # ----------------------------------------------------------------------
 @patch('ALaDOS.src.python.executor.builtins.searcher_obj.search_website_content', return_value="mock fulltext")

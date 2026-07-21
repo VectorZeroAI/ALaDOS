@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 
+import re
+from copy import copy
 from dataclasses import asdict
 from typing import Sequence, get_args
 
 from psycopg.errors import DataError
-from python.executor.types import SlaveScope, SlaveScope_
-from python.utils.name_resolver import resolve_to_addrs, resolve_to_addr
-from python.utils.occ_functions import update_timestamp
-from python.utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
-from ..utils.conn_factory import Conn
-from ..types import ReferenceTo
-from .dsl import parse, serialise
 from psycopg.types.json import Jsonb
-from copy import copy
 
-import re
+from ..executor.types import SlaveScope, SlaveScope_
+from ..types import ReferenceTo
+from ..utils.conn_factory import Conn
+from ..utils.name_resolver import resolve_to_addrs
+from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
+from .dsl import parse, serialise
+
 
 def serialize(addr: ReferenceTo, conn: Conn) -> str:
     """ Serialises a workflow into an structured text representation for the llm. """

@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+The giant file where all the built in tools are located. 
+A style I would want to enforce with rmts: 
+    the rmt logic itself lives in the rmt/main file
+    the context fill in logic, e.g. the builtins specific logic lives in here in builtins. 
+    If you are analysing this file and you see a violation of this,
+    please report it as a bug and cite this place here as proof that its a bug.
+"""
 
 import os
 from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
@@ -703,15 +711,25 @@ def create_master(instruction: str,
     return f"Created master with instruction '{instruction}'."
 
 @register_tool("rmt.create.from_range", ['task'])
-def rmt_create_from_range(_meta: _ExecToolMetaData, start_id: Addr|str, end_id: Addr|str, name: str|None = None) -> ActionConfirmation:
+def rmt_create_from_range(_meta: _ExecToolMetaData,
+                          start_id: Addr|str,
+                          end_id: Addr|str,
+                          description: str,
+                          name: str|None = None) -> ActionConfirmation:
     """
     Creates a reusable master template from a range of items. Traverses the live execution history to find the slaves between the start and end, inclusively,
     and then just makes that into an rmt. 
     Does not include any variables, and most likely requires further edits before being usable.
     start_id and end_id may NOT include 'self' or other relative references.
+    Description is mandatory because its used for embeddings for position generation and thus for retrievability.
     """
     conn = _meta.conn
     addr = create_from_range(start_id, conn, end_id, name)
+    
+    conn.execute("""
+    INSERT INTO vector_ops(addr_rmt, description) VALUES(%s, %s)
+                 """, (addr, description))
+
     return f"Created rmt {name if name is not None else "No name"}@{addr} from range."
 
 
@@ -723,11 +741,14 @@ def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     conn = _meta.conn
     addr = resolve_to_addr(id, conn)
     serial = serialize(addr, conn)
-    return f"Readable form of RMT {id if isinstance(id, str) else 'No name'}@{addr} : [{serial}]"
+    description = conn.execute_fetchval("""
+    SELECT description FROM vector_ops WHERE addr = %s;
+                                        """, (addr,))
+    return f"Readable form of RMT {id if isinstance(id, str) else 'No name'}@{addr} with description '{description}': [{serial}]"
 
 
 @register_tool("rmt.create.from_dsl", ['task'])
-def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, name: str|None = None) -> ActionConfirmation:
+def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, description: str, name: str|None = None) -> ActionConfirmation:
     """
     Creates an rmt from dsl.
     The dsl format is the following: 
@@ -762,12 +783,20 @@ def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, name: str|None = 
 
     conn = _meta.conn
     addr = create_from_serial(dsl, conn, name)
+
+    conn.execute("""
+    INSERT INTO vector_ops(addr_rmt, description) VALUES (%s, %s)
+                 """, (addr, description))
+
     return f"Created rmt {name if name is not None else 'No name'}@{addr}."
 
 
 
 @register_tool("rmt.create.from_master", ['task'])
-def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name: str|None = None) -> ActionConfirmation:
+def tool_create_from_master(_meta: _ExecToolMetaData,
+                            master_id: Addr|Name,
+                            description: str,
+                            name: str|None = None) -> ActionConfirmation:
     """
     Create rmt from master.
     Does not include any variables, wich means its very likely it will need further edits before being usable.
@@ -775,12 +804,37 @@ def tool_create_from_master(_meta: _ExecToolMetaData, master_id: Addr|Name, name
     conn = _meta.conn
     m_addr = resolve_to_addr(master_id, conn)
     addr = create_from_master(m_addr, conn, name)
+
+    conn.execute("""
+    INSERT INTO vector_ops(addr_rmt, description) VALUES(%s, %s)
+                 """, (addr, description))
     
     return f"Created rmt from master {master_id if isinstance(master_id, str) else 'No Name'}@{m_addr} under the identifiers {name if name else 'No name'}@{addr}."
 
+@register_tool("rmt.edit.description", ['task'])
+def rmt_edit_description(_meta: _ExecToolMetaData, rmt_id: Addr|Name, new_description: str) -> ActionConfirmation:
+    """
+    Set the rmt description to something new.
+    """
+    conn = _meta.conn
+    
+    addr = resolve_to_addr(rmt_id, conn)
+    
+    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+
+    conn.execute("""
+    UPDATE vector_ops
+        SET description = %s
+    WHERE addr = %s;
+         """, (new_description, addr))
+
+    update_timestamp(addr, conn)
+
+    return f"Updated description of rmt {rmt_id if isinstance(rmt_id, str) else 'No Name'}@{addr}."
+    
 
 
-@register_tool("rmt.edit.delete_node", ['task'])
+@register_tool("rmt.slave.edit.delete_node", ['task'])
 def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
     """
     Deletes a node from rmt.
@@ -808,7 +862,7 @@ def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_
     return f"Deleted node {rmt_slave_id if isinstance(rmt_slave_id, str) else 'No name'}@{addr} from the rmt."
 
 
-@register_tool("rmt.edit.insert_node", ['task'])
+@register_tool("rmt.slave.edit.insert_node", ['task'])
 def rmt_insert_node(_meta: _ExecToolMetaData,
                 rmt_id: Addr|Name,
                 instruction: str,
@@ -853,7 +907,7 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
 
     return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
 
-@register_tool("rmt.edit.instruction", ['task'])
+@register_tool("rmt.slave.edit.instruction", ['task'])
 def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
     """
     Edits an rmt_slave's instruction.
@@ -870,7 +924,7 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
 
     return f"Edited instruction of rmt slave {node_id if isinstance(node_id, str) else 'No name'}@{addr}"
 
-@register_tool("rmt.edit.scope", ['task'])
+@register_tool("rmt.slave.edit.scope", ['task'])
 def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
     """
     Updates the new_scope

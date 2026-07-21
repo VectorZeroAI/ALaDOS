@@ -10,14 +10,14 @@ from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 def resolve_context(slave_obj: SlaveObj, conn: Conn):
 
-    window_data: Any = conn.execute("""
+    window_data = conn.execute("""
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
                  """, (slave_obj.master_addr,)).fetchone()
     if window_data is not None:
         
         if not (window_data[0] is None and window_data[1] is None):
 
-            window_data_python = WindowData(
+            window_data = WindowData(
                 slave_obj.master_addr,
                 Anchor(
                     window_data[0] if window_data[0] is not None else window_data[1],
@@ -26,14 +26,8 @@ def resolve_context(slave_obj: SlaveObj, conn: Conn):
                 window_data[3],
                 window_data[2]
             )
-            window_data_validator = TypeAdapter(WindowData)
-            try:
-                window_data_valid = window_data_validator.validate_python(window_data_python)
-            except ValidationError as e:
-                print(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
-                raise RuntimeError(f"context resolution failed, the context fetched from DB is: {window_data_python}, but validator says: {e}")
 
-            window_context = resolve_window(window_data_valid, conn)
+            window_context = resolve_window(window_data, conn)
         else:
             window_context = "VIEW WINDOW DOES NOT YET EXIST"
     else:
@@ -45,23 +39,15 @@ def resolve_context(slave_obj: SlaveObj, conn: Conn):
 
     if len(load_data) != 0:
 
-        loads_data_python = LoadsData(
+        loads_data = LoadsData(
             [addr[0] for addr in load_data]
         )
-        loads_data_validator = TypeAdapter(LoadsData)
-        try:
-            loads_data_valid = loads_data_validator.validate_python(loads_data_python)
-        except ValidationError as e:
-            print(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
-            raise RuntimeError(f"context resolution failed, the context fetched from DB is: {loads_data_python}, but validator says: {e}")
 
-        load_context = resolve_loads(loads_data_valid, conn)
+        load_context = resolve_loads(loads_data, conn)
     else:
         load_context = "NO ITEMS LOADED YET"
 
     results_context = resolve_req_results(slave_obj, conn)
-
-    claimed_items = resolve_claimed_items(slave_obj, conn)
 
     TOOL_HEADERS = HEADERS_REGISTRY[slave_obj.scope]
 
@@ -70,26 +56,7 @@ def resolve_context(slave_obj: SlaveObj, conn: Conn):
                           f"Previous steps results are: [{results_context}]",
                           f"Tool headers are: [{TOOL_HEADERS}]",
                           f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
-                          f"Currently claimed items are: [{claimed_items}], please release those items when you no longer require them."
                           ])
-
-
-def resolve_claimed_items(slave_obj: SlaveObj, conn: Conn) -> str:
-    """
-    Resolved the claimed items to remind the AI of them, so it doesnt forget it has them claimed.
-    """
-
-    addrs_fetch = conn.execute("""
-    SELECT addr FROM ownership WHERE owner = %s;
-                 """, (slave_obj.master_addr,)).fetchall()
-
-    addrs = [a[0] for a in addrs_fetch]
-
-    result = "\n".join([f"You currently hold exclusive ownership over item at address {a}. " for a in addrs])
-    return result
-    
-
-
 
 
 

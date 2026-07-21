@@ -22,42 +22,9 @@ def resolve_context(slave_obj: SlaveObj, conn: Conn) -> str:
     Prompt enginiering subject to improvement.
     """
 
-    window_data = conn.execute("""
-    SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
-                 """, (slave_obj.master_addr,)).fetchone()
-    if window_data is not None:
-        
-        if not (window_data[0] is None and window_data[1] is None):
+    window_context = resolve_window(slave_obj.master_addr, conn)
 
-            window_data = WindowData(
-                slave_obj.master_addr,
-                Anchor(
-                    window_data[0] if window_data[0] is not None else window_data[1],
-                    "executables" if window_data[0] is not None else "knowledge"
-                ),
-                window_data[3],
-                window_data[2]
-            )
-
-            window_context = resolve_window(window_data, conn)
-        else:
-            window_context = "VIEW WINDOW DOES NOT YET EXIST"
-    else:
-        window_context = "VIEW WINDOW DOES NOT YET EXIST."
-
-    load_data = conn.execute("""
-    SELECT item_addr FROM master_load WHERE master_addr = %s;
-                             """, (slave_obj.master_addr,)).fetchall()
-
-    if len(load_data) != 0:
-
-        loads_data = LoadsData(
-            [addr[0] for addr in load_data]
-        )
-
-        load_context = resolve_loads(loads_data, conn)
-    else:
-        load_context = "NO ITEMS LOADED YET"
+    load_context = resolve_loads(slave_obj.master_addr, conn)
 
     results_context = resolve_req_results(slave_obj, conn)
 
@@ -130,8 +97,21 @@ def _executables_item_resolve(addr: int, conn: Conn) -> str:
 
     return result
 
-def resolve_loads(loads_data: LoadsData, conn: Conn) -> str:
-    """ Resolves loads raw data to context string """
+def resolve_loads(master_addr: ReferenceTo, conn: Conn) -> str:
+    """
+    Resolved loads data for a master based on master addr. Returned a string.
+    """
+
+    load_data = conn.execute("""
+    SELECT item_addr FROM master_load WHERE master_addr = %s;
+                             """, (master_addr,)).fetchall()
+
+    if len(load_data) < 1:
+        return 'No items are loaded.'
+
+    loads_data = LoadsData(
+        [addr[0] for addr in load_data]
+    )
 
     result_str: list[str] = []
     for addr in loads_data.items_addrs:
@@ -319,8 +299,31 @@ def _logs_item_resolve(addr: int, conn: Conn) -> str:
     result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
     return result
 
-def resolve_window(window_data: WindowData, conn: Conn) -> str:
-    """ This function resolves a window from raw window data from the DB. It resolves to a context string. """
+def resolve_window(master_addr: ReferenceTo, conn: Conn) -> str:
+    """
+    This function gets the master addr and conn and resolves stuff to window data.
+    If window data is None, it short returns to "WINDOW DOES NOT EXIST YET."
+    """
+    
+    window_data_fetch = conn.execute("""
+    SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
+                 """, (master_addr,)).fetchone()
+    if window_data_fetch is None:
+        return "WINDOW DOES NOT EXIST YET."
+        
+    if window_data_fetch[0] is None and window_data_fetch[1] is None:
+        raise ValueError(f"Invalid viewing window. Viewing window fetch: {window_data_fetch}, expected position 0 or 1 to have an addr.")
+
+    window_data = WindowData(
+        master_addr,
+        Anchor(
+            window_data_fetch[0] if window_data_fetch[0] is not None else window_data_fetch[1],
+            "executables" if window_data_fetch[0] is not None else "knowledge"
+        ),
+        window_data_fetch[3],
+        window_data_fetch[2]
+    )
+
     anchor_pos = conn.execute("""
     SELECT position FROM vector_ops WHERE addr = %s 
                  """, (window_data.window_position.ref_addr, )).fetchone()

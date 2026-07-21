@@ -251,7 +251,15 @@ CREATE OR REPLACE VIEW addrs_tables AS
     UNION ALL
     SELECT addr, 'slaves' AS type FROM slaves
     UNION ALL
-    SELECT addr, 'results' AS type FROM results;
+    SELECT addr, 'results' AS type FROM results
+    UNION ALL
+    SELECT addr, 'reusable_master_templates' AS type FROM reusable_master_templates
+    UNION ALL
+    SELECT addr, 'rmt_slaves' AS type FROM rmt_slaves
+    UNION ALL
+    SELECT addr, 'cronjob_once' AS type FROM cronjob_once
+    UNION ALL
+    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;
 
 CREATE TABLE IF NOT EXISTS cronjob_once(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY

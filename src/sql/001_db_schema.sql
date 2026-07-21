@@ -229,17 +229,6 @@ CREATE TABLE IF NOT EXISTS master_req (
     PRIMARY KEY (master_addr, req_addr)
 );
 
-CREATE TABLE IF NOT EXISTS ownership(
-    addr BIGINT PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
-    owner BIGINT NOT NULL
-        REFERENCES masters(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE
-);
-
 CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'knowledge' AS type FROM knowledge
     UNION ALL

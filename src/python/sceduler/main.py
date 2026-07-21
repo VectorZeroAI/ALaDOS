@@ -12,12 +12,12 @@ Tracks which tasks are already being executed, and executes all the other tasks.
 import threading
 
 from pydantic import TypeAdapter
-from python.sceduler.goal_stack.types import SlaveObj
+from ..sceduler.goal_stack.types import SlaveObj
 
 from ..executor.queue import executor_queue
 from ..executor.types import Instr
 from ..utils.conn_factory import Conn, conn_factory
-from .goal_stack.context import resolve_context
+from ..context.main import resolve_context
 
 instr_json_validator = TypeAdapter(Instr)
 

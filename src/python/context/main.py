@@ -7,11 +7,11 @@ And also split this file.
 At some point. 
 """
 
-from python.rmt.main import serialize
-from python.types import ReferenceTo
+from ..rmt.main import serialize
+from ..types import ReferenceTo
 
-from ...executor.execute_tool import HEADERS_REGISTRY
-from ...utils.conn_factory import Conn
+from ..executor.execute_tool import HEADERS_REGISTRY
+from ..utils.conn_factory import Conn
 from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 

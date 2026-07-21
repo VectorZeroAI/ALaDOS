@@ -14,7 +14,7 @@ from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
-from ..sceduler.goal_stack.context import HEADERS_REGISTRY, resolve_loads
+from ..context.main import HEADERS_REGISTRY, resolve_loads
 from ..sceduler.main import slave_addr_to_instr
 from ..utils.config_dir_resolver import config_dir_resolver
 from ..utils.conn_factory import Conn, conn_factory

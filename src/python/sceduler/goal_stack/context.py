@@ -1,14 +1,26 @@
 #!/usr/bin/env python3
-from typing import Any
+"""
+Context file, the file that handles the entirety of context resolution,
+for some reason, in this completely illogically named place. 
+I will definetly refactor this crappy directory structure.
+And also split this file.
+At some point. 
+"""
 
-from pydantic import TypeAdapter, ValidationError
+from python.rmt.main import serialize
+from python.types import ReferenceTo
 
 from ...executor.execute_tool import HEADERS_REGISTRY
 from ...utils.conn_factory import Conn
 from .types import Anchor, LoadsData, SlaveObj, WindowData
 
 
-def resolve_context(slave_obj: SlaveObj, conn: Conn):
+def resolve_context(slave_obj: SlaveObj, conn: Conn) -> str:
+    """
+    The main resolve context function that returns the entire context for a slave. 
+    Resolves all the crap you would ever need and slaps into a single blob of text. 
+    Prompt enginiering subject to improvement.
+    """
 
     window_data = conn.execute("""
     SELECT window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l FROM master_context WHERE addr = %s;
@@ -51,24 +63,28 @@ def resolve_context(slave_obj: SlaveObj, conn: Conn):
 
     TOOL_HEADERS = HEADERS_REGISTRY[slave_obj.scope]
 
-    return "\n\n\n".join([f"Current viewing window is: [{window_context}]",
-                          f"Currently loaded items are: [{load_context}]",
-                          f"Previous steps results are: [{results_context}]",
-                          f"Tool headers are: [{TOOL_HEADERS}]",
-                          f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
-                          ])
+    return "\n\n\n".join([
+        f"Current viewing window is: [{window_context}]",
+        f"Currently loaded items are: [{load_context}]",
+        f"Previous steps results are: [{results_context}]",
+        f"Tool headers are: [{TOOL_HEADERS}]",
+        f"Your current type is '{slave_obj.scope}'. Other slave types will have other tools available."
+    ])
 
 
 
 def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
-    """ resolves the required results of a slave to their content_strings concated all into a single string blob. """
+    """
+    Resolves the required results of a slave to their
+    content_strings concated all into a single string blob.
+    """
     req_results_addrs = conn.execute("""
     SELECT req_addr FROM slave_req WHERE slave_addr = %s;
                              """, (slave_obj.addr, )).fetchall()
     
     list_req_results_addrs = [addr[0] for addr in req_results_addrs]
     if len(list_req_results_addrs) < 1:
-        return "NO REQUIRED RESULTS PRESENT"
+        return "NO REQUIRED RESULTS PRESENT" # TODO : Insdead of saying no ... present maybe just ignore that?
 
     
     fetch = conn.execute("""
@@ -77,7 +93,7 @@ def resolve_req_results(slave_obj: SlaveObj, conn: Conn):
     req_results_str_list = []
     for i in fetch:
         if not i[1]:
-            req_results_str_list.append(f"(information required by your instruction '{i[0]} ', with metadata: '{i[2]}')")
+            req_results_str_list.append(f"(information required by your instruction '{i[0]} ', with metadata: '{i[2]}')") ## TODO: Make this prompt enginiering not suck. This sucks. 
             continue
         req_results_str_list.append(f"(previous step instruction: '{i[1]}', result it produced: {i[0]})")
 
@@ -132,17 +148,90 @@ def resolve_loads(loads_data: LoadsData, conn: Conn) -> str:
                 result_str.append(_logs_item_resolve(addr, conn))
             case 'masters':
                 result_str.append(_masters_item_resolve(addr, conn))
-
             case 'slaves':
                 result_str.append(_slaves_item_resolve(addr, conn))
             case 'results':
                 result_str.append(_result_item_resolve(addr, conn))
+            case 'reusable_master_templates':
+                result_str.append(_rmt_item_resolve(addr, conn))
+            case 'rmt_slaves':
+                result_str.append(_rmt_slaves_item_resolve(addr, conn))
+            case 'cronjob_once':
+                result_str.append(_cronjob_once_item_resolve(addr, conn))
+            case 'cronjob_loop':
+                result_str.append(_cronjob_loop_item_resolve(addr, conn))
             case _:
                 raise ValueError(f"Database returned a non existant or invalid table name. Returned {table}, but its not a valid table name. If it is, please add that tables case to the above handler.")
 
     return "".join(result_str)
 
-def _result_item_resolve(addr: int, conn: Conn):
+
+def _cronjob_loop_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
+    item = conn.execute("""
+    SELECT cj.body cj.args cj.execute_every, cj.last_ran, cj.error, cj.error_text, n.name
+    FROM cronjob_loop cj
+        LEFT JOIN names n ON n.addr = cj.addr
+    WHERE cj.addr = %s
+                        """, (addr, )).fetchone()
+    if item is None:
+        return f"Item at address {addr} with type cronjob_once does not exist!"
+
+    return f"Cronjob_loop at {item[7] if item[7] is not None else 'No name'}@{addr} With body: '{item[0]}', args: '{item[1]}', execute_every: '{item[2]}', last_ran: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
+    ## TODO : Refactor this long ass string into something that makes more sense,
+    ## together with fixing all of the prompt enginiering going on here
+    ## This place fucking sucks!
+
+
+def _cronjob_once_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
+    item = conn.execute("""
+    SELECT cj.body, cj.args, cj.start_after, cj.finished, cj.error, cj.error_text, n.name
+    FROM cronjob_once cj
+        LEFT JOIN names n ON n.addr = cj.addr
+    WHERE cj.addr = %s
+                        """, (addr, )).fetchone()
+    if item is None:
+        return f"Item at address {addr} with type cronjob_once does not exist!"
+
+    return f"Cronjob_once at {item[6] if item[6] is not None else 'No name'}@{addr} With body: '{item[0]}', args: '{item[1]}', start_after: '{item[2]}', finished: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
+    ## TODO : Refactor this long ass string into something that makes more sense,
+    ## together with fixing all of the prompt enginiering going on here
+    ## This place fucking sucks!
+
+
+
+
+def _rmt_slaves_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
+    item = conn.execute("""
+    SELECT rmt_s.instruction, rmt_s.addr, n.name, rmt_s.deps
+    FROM rmt_slaves rmt_s
+        LEFT JOIN names n ON n.addr = rmt_s.addr
+    WHERE rmt_s.addr = %s;
+                        """, (addr, )).fetchone()
+
+    if item is None:
+        return f"Item at address {addr} does not exist." 
+    ## TODO : Make it auto remove from context in the DB possibly?
+    ## Make an issue on that.
+
+    return f"RMT slave {item[2]}@{item[1]} with instruction: '{item[0]}', dependancies: '{item[3]}'."
+
+
+def _rmt_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
+    item_meta = conn.execute("""
+    SELECT n.name, v.description, rmt.addr
+    FROM reusable_master_templates rmt
+        LEFT JOIN names n ON n.addr = rmt.addr
+        INNER JOIN vector_ops v ON v.addr = rmt.addr
+    WHERE rmt.addr = %s
+                             """, (addr, )).fetchone()
+    assert item_meta is not None
+
+    serial = serialize(addr, conn)
+    
+    return f"Reusable Master Template {item_meta[0] if item_meta[0] is not None else 'No name'}@{item_meta[2]} with description '{item_meta[1]}': content [{serial}]."
+
+
+def _result_item_resolve(addr: int, conn: Conn) -> str:
     item = conn.execute("""
     SELECT n.name, 
         r.content_str,
@@ -154,7 +243,7 @@ def _result_item_resolve(addr: int, conn: Conn):
     if item is None:
         return f"DOES NOT EXIST@{addr}"
 
-    result = "@".join((item[0], f"{addr}"))
+    result = "@".join((item[0], f"{addr}")) # TODO : LEGIT FIX THIS SHIT MAN ! THIS PROMPT ENGINIERING SUCKS ASS !
     result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
     return result
 
@@ -271,5 +360,6 @@ def resolve_window(window_data: WindowData, conn: Conn) -> str:
     for d, a, p in zip(descriptions, addrs, positions):
         context_str = context_str + "@".join((addr_name_map.get(a, "Nameless"), f"pos: {p}", f"addr: {a}"))
         context_str = "\n".join((context_str, d, " ", " "))
+        ## TODO : FIX. THIS SHIT SUCKS MAN, make the context look nicer!
 
     return context_str

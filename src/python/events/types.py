@@ -6,8 +6,11 @@ The file where all the types are.
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Coroutine, TypeAlias
 import nats
 from nats.aio.client import Client
+
+EventConsumer: TypeAlias = Coroutine[None, None, None]
 
 async def connect_nats() -> Client:
     return await nats.connect()

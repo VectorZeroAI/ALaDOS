@@ -1,42 +1,44 @@
 #!/usr/bin/env python3
-from datetime import datetime
 import threading
 import tomllib
+import traceback
+from datetime import datetime
 from types import FunctionType
 from typing import Sequence
-import traceback
 
-from ..sceduler.goal_stack.types import LoadsData
-
-from ..utils.config_handlers import load_apis_from_text
-
+from ..context.main import HEADERS_REGISTRY, resolve_loads
+from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
 from ..executor.execute_tool import execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
-from ..context.main import HEADERS_REGISTRY, resolve_loads
 from ..sceduler.main import slave_addr_to_instr
 from ..utils.config_dir_resolver import config_dir_resolver
+from ..utils.config_handlers import load_apis_from_text
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
 from ..utils.uqueue import Uqueue
+from ..utils.name_resolver import resolve_to_addrs
 from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
+from .helpers import fix_llm_response, prepare_context_shortening_prompt
 from .queue import embedder_queue, executor_interrupt_queue, executor_queue
-from .types import (Api, Instr,
-                    _ExecToolMetaData,
-                    ApiCallsState,
-                    ContextGetState,
-                    ContextShortState,
-                    GetSlaveState,
-                    ErrorState,
-                    ExecuteState,
-                    FinishState,
-                    ParadoxState, 
-                    State)
-from .helpers import prepare_context_shortening_prompt, fix_llm_response
+from .types import (
+    Api,
+    ApiCallsState,
+    ContextGetState,
+    ContextShortState,
+    ErrorState,
+    ExecuteState,
+    FinishState,
+    GetSlaveState,
+    Instr,
+    ParadoxState,
+    State,
+    _ExecToolMetaData,
+)
 
 config_dir = config_dir_resolver()
 config_file = config_dir / "executor.toml"
@@ -316,24 +318,18 @@ Further documentation of the states inlined as docstrings in the match statement
 
                 curr = state
 
-                items = list(curr.paradox_e.items)
-                n_items =  []
-                for i in reversed(items):
-                    if isinstance(i, str):
-                        n_items.append(i)
-                        items.remove(i)
+                items = curr.paradox_e.items
+                addrs_items = resolve_to_addrs(items, conn)
 
-                assert items is list[int]
-
-                addrs_items: list[int] = items
-                for i in n_items:
-                     addrs_items.append(conn.execute_fetchval("SELECT resolve_name(%s);", (i,)))
+                addrs_types = conn.execute("""
+                SELECT addr, type FROM addrs_tables WHERE addr = ANY(%s);
+                             """, (addrs_items,)).fetchall()
 
                 prompt = f"""
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
-                ITEMS: {resolve_loads(LoadsData(addrs_items), conn)} ITEMS END.
+                ITEMS: {[load_item(a[0], a[1], conn) for a in addrs_types]} ITEMS END.
                 PARADOX: {curr.paradox_e.paradox} PARADOX END.
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """

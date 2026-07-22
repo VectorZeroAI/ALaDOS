@@ -4,13 +4,32 @@
 The file where all the types are.
 """
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
+import nats
+from nats.aio.client import Client
+
+async def connect_nats() -> Client:
+    return await nats.connect()
 
 @dataclass(slots=True)
 class Event:
     event_path: str
     payload: str
+    __client: Client = field()
+    __loop: asyncio.AbstractEventLoop = field()
     
+    def __init__(self) -> None:
+        self.__loop = asyncio.get_event_loop()
+        self.__client = self.__loop.run_until_complete(connect_nats())
+
     def send(self) -> None:
-        print("SEND NOT YET IMPLEMENTED IN THE EVENT CLASS!")
-        raise NotImplementedError("SEND NOT YET IMPLEMENTED IN THE EVENT CLASS!")
+        self.__loop.run_until_complete(
+            self.__client.publish(
+                self.event_path,
+                self.payload.encode()
+            )
+        )
+
+    async def send_async(self) -> None:
+        await self.__client.publish(self.event_path, self.payload.encode())

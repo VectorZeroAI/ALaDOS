@@ -169,7 +169,7 @@ def _rmt_slaves_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
 @register_item_loader('cronjob_once')
 def _cronjob_once_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     item = conn.execute("""
-    SELECT cj.body, cj.args, cj.start_after, cj.finished, cj.error, cj.error_text, n.name
+    SELECT cj.name, cj.args, cj.start_after, cj.finished, cj.error, cj.error_text, n.name
     FROM cronjob_once cj
         LEFT JOIN names n ON n.addr = cj.addr
     WHERE cj.addr = %s
@@ -177,7 +177,7 @@ def _cronjob_once_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     if item is None:
         return f"Item at address {addr} with type cronjob_once does not exist!"
 
-    return f"Cronjob_once at {item[6] if item[6] is not None else 'No name'}@{addr} With body: '{item[0]}', args: '{item[1]}', start_after: '{item[2]}', finished: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
+    return f"Cronjob_once at {item[6] if item[6] is not None else 'No name'}@{addr} With name: '{item[0]}', args: '{item[1]}', start_after: '{item[2]}', finished: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
     ## TODO : Refactor this long ass string into something that makes more sense,
     ## together with fixing all of the prompt enginiering going on here
     ## This place fucking sucks!
@@ -186,7 +186,7 @@ def _cronjob_once_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
 @register_item_loader('cronjob_loop')
 def _cronjob_loop_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     item = conn.execute("""
-    SELECT cj.body cj.args cj.execute_every, cj.last_ran, cj.error, cj.error_text, n.name
+    SELECT cj.name, cj.args, cj.execute_every, cj.last_ran, cj.error, cj.error_text, n.name
     FROM cronjob_loop cj
         LEFT JOIN names n ON n.addr = cj.addr
     WHERE cj.addr = %s
@@ -194,7 +194,7 @@ def _cronjob_loop_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     if item is None:
         return f"Item at address {addr} with type cronjob_once does not exist!"
 
-    return f"Cronjob_loop at {item[7] if item[7] is not None else 'No name'}@{addr} With body: '{item[0]}', args: '{item[1]}', execute_every: '{item[2]}', last_ran: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
+    return f"Cronjob_loop at {item[7] if item[7] is not None else 'No name'}@{addr} With name: '{item[0]}', args: '{item[1]}', execute_every: '{item[2]}', last_ran: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
     ## TODO : Refactor this long ass string into something that makes more sense,
     ## together with fixing all of the prompt enginiering going on here
     ## This place fucking sucks!

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING, ParamSpec
 from functools import partial
 
 if TYPE_CHECKING:
     from ...executor.cronjobs.main import SysState
 
-CRONJOB_REGISTRY = {}
+P = ParamSpec('P')
 
-def register_cronjob(name: str) -> Callable:
-    def decorator(func: Callable):
+CRONJOB_REGISTRY: dict[str, Callable[..., None]] = {}
+
+def register_cronjob(name: str):
+    def decorator(func: Callable[P, None]) -> Callable[P, None]:
         CRONJOB_REGISTRY[name or func.__name__] = func
         return func
     return decorator

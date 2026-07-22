@@ -363,7 +363,7 @@ def test_cronjob_do_this_later(app_process, db_conn):
     # Insert a cronjob that runs once after 5 seconds
     db_conn.execute(
         """
-        INSERT INTO cronjob_once (body, start_after, args)
+        INSERT INTO cronjob_once (name, start_after, args)
         VALUES ('ai_perform_action_later', %s, '{"ai_instruction": "create a knowledge item with content ''cronjob success'' and description ''cronjob test''"}'::jsonb)
         """,
         (time.time() + 10,),  # give enough time for the test to wait

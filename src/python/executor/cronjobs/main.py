@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import threading
 import time
-from dataclasses import dataclass
 
 import psycopg
 from ...interrupts.main import InterruptInvokation
@@ -9,11 +8,7 @@ from ...interrupts.main import InterruptInvokation
 from ...utils.conn_factory import Conn, conn_factory
 from .cronjob_registry import prepare_cronjob
 from ...queue import global_interrupt_queue
-
-
-@dataclass(slots=True)
-class SysState:
-    conn: Conn 
+from .types import SysState
 
 def setup():
     threading.Thread(target=cronjob_executor, daemon=True).start()
@@ -39,10 +34,8 @@ def cronjob_executor():
     while True:
 
         cronjob_fetch = conn.execute("""
-    SELECT addr, body, run_at, type, params FROM cronjobs_to_run LIMIT 1
+    SELECT addr, name, run_at, type, params FROM cronjobs_to_run LIMIT 1
                      """).fetchone() # cronjobs_to_run is a view, wich includes order ba ASC.
-        ## TODO : Rename body into name. Makes 0 sense with body, but actually fairly okay with name.
-        ## Also redo the parsing shenanigans, insdead just make it pass in name: str and args: dict[str, Any] and thats it.
 
         if cronjob_fetch is None:
             cronjob_changed.wait()

@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    body TEXT NOT NULL,
+    name TEXT NOT NULL,
     args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE,
@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    body TEXT NOT NULL,
+    name TEXT NOT NULL,
     args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
     last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch
@@ -292,9 +292,9 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
 );
 
 CREATE OR REPLACE VIEW cronjobs_to_run AS 
-    SELECT addr, body, start_after AS run_at, 'cronjob_once' AS type, args AS params FROM cronjob_once WHERE finished = FALSE AND error = FALSE
+    SELECT addr, name, start_after AS run_at, 'cronjob_once' AS type, args AS params FROM cronjob_once WHERE finished = FALSE AND error = FALSE
     UNION ALL
-    SELECT addr, body, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type, args AS params FROM cronjob_loop WHERE error = FALSE
+    SELECT addr, name, (last_ran + execute_every) as run_at, 'cronjob_loop' AS type, args AS params FROM cronjob_loop WHERE error = FALSE
     ORDER BY run_at ASC;
 
 

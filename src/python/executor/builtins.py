@@ -24,7 +24,7 @@ import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
 from .exceptions import ParadoxDetected
-from .cronjobs.parser import CronjobActions, parse
+from .cronjobs.parser import CronjobActions, insert_cronjob
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
 from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
@@ -565,7 +565,7 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
     ]
     
     """
-    parse({
+    insert_cronjob({
         "action": cronjob_action,
         "cronjob_type": cronjob_type,
         "params": params,

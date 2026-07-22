@@ -318,3 +318,29 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
             ON UPDATE CASCADE,
     deps BIGINT[]
 );
+
+CREATE TABLE IF NOT EXISTS event_consumers(
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    event_path TEXT NOT NULL,
+    action_type ENUM('call_rmt', 'execute_slave') NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_call_rmt(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    rmt_addr BIGINT REFERENCES reusable_master_templates(addr) NOT NULL,
+    args JSONB
+);
+
+CREATE TABLE IF NOT EXISTS event_call_execute_slave(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    instruction TEXT NOT NULL,
+    scope slave_scope
+);
+
+

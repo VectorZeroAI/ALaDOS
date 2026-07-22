@@ -24,7 +24,8 @@ import json
 from .embedder import embedder
 from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
 from .exceptions import ParadoxDetected
-from .cronjobs.parser import CronjobActions, insert_cronjob
+from .cronjobs.types import CronjobActions, Cronjob
+from .cronjobs.parser import insert_cronjob
 from .comms.searxng import SearxngSearcher
 from .comms import httpsystem
 from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
@@ -550,13 +551,13 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
 
 @register_tool("goal.add_cron_job", ['task', 'general'])
 def add_cronjob(cronjob_type: Literal['once', 'loop'],
-                cronjob_action: CronjobActions,
+                action: CronjobActions,
                 time_between_runs: int,
                 params: dict[str, Any],
                 _meta: _ExecToolMetaData) -> ActionConfirmation:
     """
     Spawns a cronjob. The cronjobs can run ether once, if cronjob type is "once", after time_between_runs seconds, or in a loop every time_between_runs seconds indefinetly.
-    cronjob_action is the action that the cronjob should take, out of all the available options.
+    action is the action that the cronjob should take, out of all the available options.
     params are the params required by the given cronjob_action. The required cronjob_types per action are:
     [
         'do_this_later': {
@@ -565,14 +566,16 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
     ]
     
     """
-    insert_cronjob({
-        "action": cronjob_action,
-        "cronjob_type": cronjob_type,
-        "params": params,
-        "run_after_or_every_s": time_between_runs
-    }, _meta.conn)
+    insert_cronjob(Cronjob(
+            action,
+            params,
+            cronjob_type,
+            time_between_runs
+        ),
+        _meta.conn
+    )
 
-    return f"Added a cronjob doing {cronjob_action}"
+    return f"Added a cronjob that does {action}."
 
 
 

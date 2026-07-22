@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 
-import asyncio
 from types import FunctionType
 import functools
+from typing import Any
+from dataclasses import dataclass, field
 
 from ..utils.uqueue import Uqueue
 
-INTERRUPT_TABLE = {}
+@dataclass(slots=True, frozen=True)
+class InterruptInvokation:
+    name: str
+    args: dict[str, Any] = field(default_factory=dict)
+
+INTERRUPT_TABLE: dict[str, FunctionType] = {}
 
 def interrupt(name: str|None = None) -> FunctionType:
     """
@@ -18,7 +24,7 @@ def interrupt(name: str|None = None) -> FunctionType:
         return func
     return decorator
 
-def interruptable(*q: Uqueue[str]) -> FunctionType:
+def interruptable(*q: Uqueue[InterruptInvokation]) -> FunctionType:
     """
     @interruptible(queue1, queue2)
     """
@@ -33,9 +39,9 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
                         continue
 
                     interrupt_found = True
-                    interrupt_handler = INTERRUPT_TABLE.get(interrupt)
+                    interrupt_handler = INTERRUPT_TABLE.get(InterruptInvokation.name)
                     if interrupt_handler:
-                        interrupt_handler()
+                        interrupt_handler(**InterruptInvokation.args)
                 if not interrupt_found:
                     break
 
@@ -46,4 +52,4 @@ def interruptable(*q: Uqueue[str]) -> FunctionType:
         return wrapper
     return decorator
 
-from ..interrupts import interrupts as _srgiusbeftsdrgfb # NOTE : This is valid and works. Dont ask why. No one knows (python quirks)
+from ..interrupts import interrupts as _srgiusbeftsdrgfb # NOTE : DONT FUCKING TOUCH! #noqa #pyright: ignore

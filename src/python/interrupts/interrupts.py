@@ -7,3 +7,8 @@ import time
 def wait_for_rate_limit():
     print("Sleeping !!!")
     time.sleep(12)
+
+
+@interrupt("execute_cronjob")
+def execute_cronjob():
+    ...

@@ -342,5 +342,3 @@ CREATE TABLE IF NOT EXISTS event_call_execute_slave(
     instruction TEXT NOT NULL,
     scope slave_scope
 );
-
-

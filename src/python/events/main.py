@@ -4,7 +4,7 @@ The main file of the event suite.
 """
 import asyncio
 import threading
-from .event_recievers_registry import EVENT_PRODUCERS
+from .event_gens_registry import EVENT_PRODUCERS
 
 def event_recieving_thread() -> None:
     loop = asyncio.new_event_loop()

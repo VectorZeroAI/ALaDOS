@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 
 import asyncio
+from functools import partial
 import re
+from typing import Callable, Coroutine
+
+from nats.aio.client import Client
+from psycopg.rows import TupleRow
+from ..types import ReferenceTo
 
 from ..rmt.main import activate_as_master
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
-from .types import EventConsumer, connect_nats
+from .types import Event, EventConsumer, connect_nats
 
 def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[EventConsumer]:
     """
@@ -35,47 +41,48 @@ def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[Ev
     nt = loop.run_until_complete(connect_nats())
 
     for consumer in event_consumers_fetch:
-        match consumer[1]:
-            case 'call_rmt':
-                async def the_event_consumer() -> None:
-                    sub = await nt.subscribe(consumer[0])
-                    async for event in sub.messages:
-                        conn = conn_factory()
-                        consumer[4]['data'] = event.data.decode()
-                        consumer[4]['subject'] = event.subject
-                        with conn.transaction():
-                            activate_as_master(consumer[2], conn, inputs=consumer[4])
-                        log_json({
-                            'type': 'proactivity',
-                            'subtype': 'consumer',
-                            'event_path': event.subject,
-                            'data': event.data.decode(),
-                            'status': 'normal'
-                        })
+        result.append(
+            create_consumer(consumer, nt)
+        )
 
-                result.append(the_event_consumer())
+    return result
 
-            case 'execute_slave':
-                async def the_event_consumer() -> None:
-                    sub = await nt.subscribe(consumer[0])
-                    async for event in sub.messages:
-                        conn = conn_factory()
-                        
-                        instruction = consumer[3]
-                        instruction = re.sub(re.escape('${{data}}'), event.data.decode(), instruction, flags=re.DOTALL)
-                        instruction = re.sub(re.escape('${{subject}}'), event.subject, instruction, flags=re.DOTALL)
 
-                        with conn.transaction():
-                            conn.execute("""
-                    PERFORM new_slave(NULL, %s, p_slave_scope := %s);
-                                         """, (instruction, consumer[4]))
-                        
-                        log_json({
-                            'type': 'proactivity',
-                            'subtype': 'consumer',
-                            'event_path': event.subject,
-                            'data': event.data.decode(),
-                            'status': 'normal'
-                        })
+async def consumer_outer(consumer_in: Callable[[Event, TupleRow], None],
+                         consumer_data: TupleRow,
+                         nt: Client) -> None:
+    sub = await nt.subscribe(consumer_data[0])
+    async for event in sub.messages:
+        event = Event(event.subject, event.data.decode())
+        consumer_in(event, consumer_data)
+        log_json({})
 
-                result.append(the_event_consumer())
+def call_rmt(event: Event, consumer_data: TupleRow) -> None:
+    conn = conn_factory()
+    consumer_data[4]['data'] = event.payload
+    consumer_data[4]['subject'] = event.event_path
+    with conn.transaction():
+        activate_as_master(consumer_data[3], conn, inputs=consumer_data[4])
+
+def execute_slave(event: Event, consumer_data: TupleRow) -> None:
+    conn = conn_factory()
+
+    instruction = consumer_data[3]
+    instruction = re.sub(re.escape('${{data}}'), event.payload, instruction, flags=re.DOTALL)
+    instruction = re.sub(re.escape('${{subject}}'), event.event_path, instruction, flags=re.DOTALL)
+
+    with conn.transaction():
+        conn.execute("""
+    PERFORM new_slave(NULL, %s, p_slave_scope := %s);
+                     """, (instruction, consumer_data[4]))
+
+def create_consumer(consumer_data: TupleRow, nt: Client) -> Coroutine[None, None, None]:
+    match consumer_data[0]:
+        case 'execute_slave':
+            consumer_in = execute_slave
+        case 'call_rmt':
+            consumer_in = call_rmt
+        case _:
+            raise ValueError(f"Action type unknown. Action type {consumer_data[0]} is not found.")
+    return partial(consumer_outer, consumer_in, consumer_data, nt)()
+

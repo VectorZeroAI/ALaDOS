@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import asyncio
-from functools import partial
 import re
+from functools import partial
 from typing import Callable, Coroutine
 
 from nats.aio.client import Client
@@ -11,7 +11,15 @@ from psycopg.rows import TupleRow
 from ..rmt.main import activate_as_master
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
-from .types import ConsumerCallRmt, ConsumerData, ConsumerExecuteSlave, Event, EventConsumer, connect_nats
+from .types import (
+    ConsumerCallRmt,
+    ConsumerData,
+    ConsumerExecuteSlave,
+    Event,
+    EventConsumer,
+    connect_nats,
+)
+
 
 def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[EventConsumer]:
     """

@@ -6,12 +6,11 @@ The file where all the types are.
 
 import asyncio
 from dataclasses import dataclass, field
-from types import UnionType
-from typing import Callable, Coroutine, Literal, TypeAlias, Union
+from functools import partial
+from os import PathLike
+from typing import Coroutine, Literal, TypeAlias, Union
 import nats
 from nats.aio.client import Client
-from psycopg.rows import TupleRow
-from python.utils import conn_factory
 from ..types import ReferenceTo
 from ..executor.types import SlaveScope
 
@@ -59,3 +58,7 @@ class ConsumerExecuteSlave:
     scope: SlaveScope
 
 ConsumerData: TypeAlias = Union[ConsumerCallRmt, ConsumerExecuteSlave]
+
+@dataclass(slots=True)
+class EventsConfig:
+    filesystem_watch_dirs: list[PathLike]

@@ -18,7 +18,7 @@ def register_event_generator(name: str):
             async for event in func():
                 event.send()
 
-        EVENT_PRODUCERS.append(producer())
+        EVENT_PRODUCERS.append(producer()) ## TODO : Make it also track the docstring for the explanation of the event usage.
         return func
 
     return decorator

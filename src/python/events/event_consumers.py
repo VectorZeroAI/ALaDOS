@@ -7,6 +7,7 @@ from typing import Callable, Coroutine
 
 from nats.aio.client import Client
 from psycopg.rows import TupleRow
+from ..types import ReferenceTo
 
 from ..rmt.main import activate_as_master
 from ..utils.conn_factory import Conn, conn_factory
@@ -118,3 +119,11 @@ def create_consumer(consumer_data: ConsumerData, nt: Client) -> Coroutine[None, 
             raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
     return partial(consumer_outer, consumer_in, consumer_data, nt)()
 
+
+
+def create_result_via_event(event_path: str) -> ReferenceTo:
+    """
+    Creates a result that will be filled out with the event and a consumer to fill that event in.
+    """
+    raise NotImplementedError("CREATE RESULT VIA EVENT IS NOT YET IMPLEMENTED!")
+    # TODO : Make.

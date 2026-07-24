@@ -37,7 +37,7 @@ def build_event(*parts: P, payload: str, converter: Callable[[P], str]) -> Event
 @register_event_generator("filesystem.fanotify")
 async def filesystem_gen() -> AsyncGenerator[Event, None]:
     """
-    Event structure: filesystem.delete|create|modify.path.to.file  .
+    Event structure: filesystem.path.to.file.delete|create|modify .
     """
 
     def converter(input: str) -> str:
@@ -66,5 +66,4 @@ async def filesystem_gen() -> AsyncGenerator[Event, None]:
                     'message': 'event.name is None.'
                 })
                 continue
-            yield build_event('filesystem', event.mask.name, event.path.as_posix(), payload='', converter=converter)
-
+            yield build_event('filesystem', event.path.as_posix(), event.mask.name, payload='', converter=converter)

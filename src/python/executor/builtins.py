@@ -8,28 +8,39 @@ A style I would want to enforce with rmts:
     please report it as a bug and cite this place here as proof that its a bug.
 """
 
-import os
-from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
-
-from numpy import ndarray
-from functools import partial
-import psycopg
-from psycopg.types.json import Jsonb
-from python.utils.conn_factory import NoValue
-from python.utils.name_resolver import resolve_to_addr, resolve_to_addrs
-from python.utils.occ_functions import occ_check, update_timestamp
-from .execute_tool import register_tool
-import subprocess
 import json
-from .embedder import embedder
-from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
-from .exceptions import ParadoxDetected
-from .cronjobs.types import CronjobActions, Cronjob
-from .cronjobs.parser import insert_cronjob
-from .comms.searxng import SearxngSearcher
+import os
+import subprocess
+from functools import partial
+from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args, overload
+
+import psycopg
+from numpy import ndarray
+from psycopg.types.json import Jsonb
+
+from ..rmt.main import (
+    activate_as_master,
+    change_scope,
+    create_from_master,
+    create_from_range,
+    create_from_serial,
+    delete_node,
+    edit_instruction,
+    insert_node,
+    serialize,
+)
+from ..utils.conn_factory import NoValue
+from ..utils.name_resolver import resolve_to_addr, resolve_to_addrs
+from ..utils.occ_functions import occ_check, update_timestamp
+from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from .comms import httpsystem
-from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
-from ..rmt.main import activate_as_master, change_scope, create_from_range, create_from_serial, delete_node, edit_instruction, insert_node, serialize, create_from_master
+from .comms.searxng import SearxngSearcher
+from .cronjobs.parser import insert_cronjob
+from .cronjobs.types import Cronjob, CronjobActions
+from .embedder import embedder
+from .exceptions import ParadoxDetected
+from .execute_tool import register_tool
+from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
@@ -943,3 +954,37 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
     update_timestamp(addr, conn)
 
     return f"Updated instruction of rmt node {node_id}"
+
+@overload
+def register_reaction(*,
+                      _meta: _ExecToolMetaData,
+                      event_path: str,
+                      rmt_id: Addr|Name,
+                      args: dict[str, str],
+                      instruction: None = None,
+                      slave_scope: None = None) -> ActionConfirmation:
+    ...
+
+@overload
+def register_reaction(*,
+                      _meta: _ExecToolMetaData,
+                      event_path: str,
+                      instruction: str,
+                      slave_scope: SlaveScope,
+                      rmt_id: None = None,
+                      args: None = None) -> ActionConfirmation:
+    ...
+
+
+def register_reaction(*,
+                      _meta,
+                      event_path,
+                      instruction: str|None = None,
+                      slave_scope: SlaveScope|None = None,
+                      rmt_id: Addr|Name|None = None,
+                      args: dict[str, str]|None = None) -> ActionConfirmation:
+    """
+    The function that reegisters a reaction to an event via an action. 
+    """
+    ...
+

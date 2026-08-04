@@ -273,11 +273,11 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
     """
     
     with conn.transaction():
-        reqired_by = conn.execute("""
+        required_by = conn.execute("""
         SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);
                                   """, (node_id,)).fetchall()
 
-        reqired_by = [r[0] for r in reqired_by]
+        required_by = [r[0] for r in required_by]
 
         if concatenate:
             requirements = conn.execute_fetchval("""
@@ -287,13 +287,19 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
                 requirements = []
 
             
-            for i in reqired_by:
-                for j in requirements:
-                    conn.execute("""
-                        UPDATE rmt_slaves
-                            SET deps = array_append(deps, %s)
-                        WHERE addr = %s
-                                 """, (j, i))
+            conn.execute("""
+                UPDATE rmt_slaves
+                    SET deps = array_cat(
+                        COALESCE(deps, ARRAY[]::TEXT[]),
+                        (
+                            SELECT array_agg(DISTINCT requirement)
+                            FROM unnest(%s) AS required_by, unnest(%s) AS requirement
+                            WHERE i = rmt_slaves.addr
+                                AND requirement <> ALL(COALESCE(deps, ARRAY[]::TEXT[]))
+                        )
+                    )
+                WHERE addr = ANY(%s)
+                         """, (required_by, requirements, required_by))
 
         conn.execute("""
         DELETE FROM addrs WHERE addr = %s
@@ -304,7 +310,7 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
             UPDATE rmt_slaves
                 SET deps = array_remove(deps, %s)
             WHERE addr = ANY(%s)
-                     """, (node_id, reqired_by))
+                     """, (node_id, required_by))
 
 
 

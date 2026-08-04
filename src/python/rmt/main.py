@@ -290,12 +290,12 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
             conn.execute("""
                 UPDATE rmt_slaves
                     SET deps = array_cat(
-                        COALESCE(deps, ARRAY[]::TEXT[]),
+                        COALESCE(deps, ARRAY[]::BIGINT[]),
                         (
                             SELECT array_agg(DISTINCT requirement)
                             FROM unnest(%s) AS required_by, unnest(%s) AS requirement
-                            WHERE i = rmt_slaves.addr
-                                AND requirement <> ALL(COALESCE(deps, ARRAY[]::TEXT[]))
+                            WHERE required_by = rmt_slaves.addr
+                                AND requirement <> ALL(COALESCE(deps, ARRAY[]::BIGINT[]))
                         )
                     )
                 WHERE addr = ANY(%s)

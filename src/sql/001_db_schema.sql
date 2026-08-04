@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS vector_ops(
     addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
     addr_rmt BIGINT REFERENCES reusable_master_template(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
+    addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
     description TEXT NOT NULL,
     position NUMERIC UNIQUE NOT NULL,
     updated_at TIMESTAMP DEFAULT NOW(),
@@ -105,7 +105,6 @@ CREATE TABLE IF NOT EXISTS vector_ops(
     CONSTRAINT an_addr_exists_vector_ops_check CHECK (
         COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NULL
     )
-    PRIMARY KEY (addr)
 );
 
 
@@ -335,8 +334,7 @@ CREATE TABLE IF NOT EXISTS event_call_fill_result(
         ON UPDATE CASCADE,
     result_addr BIGINT NOT NULL REFERENCES results(addr),
     result_str TEXT NOT NULL
-)
-
+);
 
 CREATE OR REPLACE VIEW addrs_tables AS
     SELECT addr, 'knowledge' AS type FROM knowledge

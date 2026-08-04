@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS vector_ops(
     END) VIRTUAL,
     emb vector(768),
     CONSTRAINT an_addr_exists_vector_ops_check CHECK (
-        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NONE
+        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NULL
     )
     PRIMARY KEY (addr)
 );
@@ -319,12 +319,18 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
     deps BIGINT[]
 );
 
+DO $$
+    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'event_consumers_action_types') THEN
+        CREATE TYPE event_consumers_action_types AS ENUM('call_rmt', 'execute_slave', 'fill_result');
+    END IF;
+$$;
+
 CREATE TABLE IF NOT EXISTS event_consumers(
     addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
     event_path TEXT NOT NULL,
-    action_type ENUM('call_rmt', 'execute_slave', 'fill_result') NOT NULL
+    action_type event_consumers_action_types NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS event_call_rmt(

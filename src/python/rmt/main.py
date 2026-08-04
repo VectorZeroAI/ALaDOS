@@ -371,15 +371,15 @@ def activate_as_master(rmt_addr: ReferenceTo,
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
-            SELECT new_addr();
-                                            """)
+        SELECT new_addr();
+            """)
 
         conn.execute("""
-    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+        INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
                      """, (master_addr,))
 
         conn.execute("""
-    SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
+        SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
                      """, (depends_on, master_addr))
 
     master_result_addr = conn.execute_fetchval("""
@@ -387,7 +387,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
                                       """, (master_addr,))
 
     curr = conn.cursor()
-    if len(required_by) < 1:
+    if len(required_by) > 0:
         curr.executemany("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
                         """, [(i, master_result_addr) for i in required_by])

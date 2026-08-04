@@ -27,22 +27,25 @@ def interrupt(name: str|None = None) -> FunctionType:
 def interruptable(*q: Uqueue[InterruptInvokation]) -> FunctionType:
     """
     @interruptible(queue1, queue2)
+
+    Makes the function interruptable with the interrupt queues serving as the sources of th interrupts.  
+    Interrupts themself are simply functions to be executed.
     """
     def decorator(input_func):
-        def checkpoint() -> None: 
+        def checkpoint() -> None:
             while True:
-                interrupt_found = False
+                found = False
                 for i in q:
                     interrupt = i.get_nowait()
                     
                     if not interrupt:
                         continue
 
-                    interrupt_found = True
-                    interrupt_handler = INTERRUPT_TABLE.get(InterruptInvokation.name)
-                    if interrupt_handler:
-                        interrupt_handler(**InterruptInvokation.args)
-                if not interrupt_found:
+                    found = True
+                    handler = INTERRUPT_TABLE.get(interrupt.name)
+                    if handler:
+                        handler(**interrupt.args)
+                if not found:
                     break
 
         
@@ -52,4 +55,4 @@ def interruptable(*q: Uqueue[InterruptInvokation]) -> FunctionType:
         return wrapper
     return decorator
 
-from ..interrupts import interrupts as _srgiusbeftsdrgfb # NOTE : DONT FUCKING TOUCH! #noqa #pyright: ignore
+from ..interrupts import interrupts as _srgiusbeftsdrgfb ## NOTE : DONT FUCKING TOUCH! #noqa #pyright: ignore

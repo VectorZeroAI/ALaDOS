@@ -1,5 +1,6 @@
 from unittest.mock import patch
 import json
+import datetime
 
 import pytest
 
@@ -61,7 +62,7 @@ def create_test_meta(conn: Conn) -> _ExecToolMetaData:
         conn=conn,
         slave_id=slave_addr,
         context_limit=10000,
-        occ_last_change=0
+        occ_last_change=datetime.date.fromtimestamp(0)
     )
 
 # ----------------------------------------------------------------------

@@ -88,24 +88,6 @@ CREATE TABLE IF NOT EXISTS executables (
     body TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE TABLE IF NOT EXISTS vector_ops(
-    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_rmt BIGINT REFERENCES reusable_master_template(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
-    description TEXT NOT NULL,
-    position NUMERIC UNIQUE NOT NULL,
-    updated_at TIMESTAMP DEFAULT NOW(),
-    type TEXT GENERATED ALWAYS AS (CASE
-        WHEN addr_exe IS NOT NULL THEN 'executable'
-        WHEN addr_k IS NOT NULL THEN 'knowledge'
-        WHEN addr_rmt IS NOT NULL THEN 'rmt'
-    END) VIRTUAL,
-    emb vector(768),
-    CONSTRAINT an_addr_exists_vector_ops_check CHECK (
-        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NULL
-    )
-);
 
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -334,6 +316,25 @@ CREATE TABLE IF NOT EXISTS event_call_fill_result(
         ON UPDATE CASCADE,
     result_addr BIGINT NOT NULL REFERENCES results(addr),
     result_str TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vector_ops(
+    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_rmt BIGINT REFERENCES reusable_master_templates(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
+    description TEXT NOT NULL,
+    position NUMERIC UNIQUE NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    type TEXT GENERATED ALWAYS AS (CASE
+        WHEN addr_exe IS NOT NULL THEN 'executable'
+        WHEN addr_k IS NOT NULL THEN 'knowledge'
+        WHEN addr_rmt IS NOT NULL THEN 'rmt'
+    END) VIRTUAL,
+    emb vector(768),
+    CONSTRAINT an_addr_exists_vector_ops_check CHECK (
+        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NULL
+    )
 );
 
 CREATE OR REPLACE VIEW addrs_tables AS

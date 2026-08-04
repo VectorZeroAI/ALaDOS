@@ -229,26 +229,6 @@ CREATE TABLE IF NOT EXISTS master_req (
     PRIMARY KEY (master_addr, req_addr)
 );
 
-CREATE OR REPLACE VIEW addrs_tables AS
-    SELECT addr, 'knowledge' AS type FROM knowledge
-    UNION ALL
-    SELECT addr, 'executables' AS type FROM executables
-    UNION ALL
-    SELECT addr, 'logs' AS type FROM logs
-    UNION ALL
-    SELECT addr, 'masters' AS type FROM masters
-    UNION ALL
-    SELECT addr, 'slaves' AS type FROM slaves
-    UNION ALL
-    SELECT addr, 'results' AS type FROM results
-    UNION ALL
-    SELECT addr, 'reusable_master_templates' AS type FROM reusable_master_templates
-    UNION ALL
-    SELECT addr, 'rmt_slaves' AS type FROM rmt_slaves
-    UNION ALL
-    SELECT addr, 'cronjob_once' AS type FROM cronjob_once
-    UNION ALL
-    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;
 
 CREATE TABLE IF NOT EXISTS cronjob_once(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
@@ -356,3 +336,25 @@ CREATE TABLE IF NOT EXISTS event_call_fill_result(
     result_addr BIGINT NOT NULL REFERENCES results(addr),
     result_str TEXT NOT NULL
 )
+
+
+CREATE OR REPLACE VIEW addrs_tables AS
+    SELECT addr, 'knowledge' AS type FROM knowledge
+    UNION ALL
+    SELECT addr, 'executables' AS type FROM executables
+    UNION ALL
+    SELECT addr, 'logs' AS type FROM logs
+    UNION ALL
+    SELECT addr, 'masters' AS type FROM masters
+    UNION ALL
+    SELECT addr, 'slaves' AS type FROM slaves
+    UNION ALL
+    SELECT addr, 'results' AS type FROM results
+    UNION ALL
+    SELECT addr, 'reusable_master_templates' AS type FROM reusable_master_templates
+    UNION ALL
+    SELECT addr, 'rmt_slaves' AS type FROM rmt_slaves
+    UNION ALL
+    SELECT addr, 'cronjob_once' AS type FROM cronjob_once
+    UNION ALL
+    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;

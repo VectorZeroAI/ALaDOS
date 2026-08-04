@@ -18,6 +18,7 @@ from .event_gens_registry import EVENT_PRODUCERS
 def event_producer_thread() -> None:
     """
     The event producer thread with its own asyncio loop of event generators.
+    Each gen is its own asyncio task.
     IDK if its right or wrong to use the asyncio loop per thread pattern, but who the fuck cares.
     """
     loop = asyncio.new_event_loop()
@@ -29,14 +30,18 @@ def event_producer_thread() -> None:
 def event_consumer_thread() -> None:
     """
     The event consumer thread with its own asyncio loop.
+    Each event consumer is its own asyncio task.
     IDK if its right or wrong to use the asyncio loop per thread pattern, but who the fuck cares.
     """
     loop = asyncio.new_event_loop()
     conn = conn_factory()
-    asyncio.gather(*load_event_consumers(conn, loop))
+    for consumer in load_event_consumers(conn, loop):
+        loop.create_task(consumer)
     loop.run_forever()
 
 def startup() -> None:
     threading.Thread(target=event_producer_thread, daemon=True).start()
     threading.Thread(target=event_consumer_thread, daemon=True).start()
     print("Startup of the event based proactivity system finished.")
+## TODO : Keep track of all the threads to be able to join them for gracefull shutdown 
+## insdead of crashing everything.

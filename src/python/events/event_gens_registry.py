@@ -19,10 +19,11 @@ def register_event_generator(name: str):
             async for event in func():
                 event.send()
 
-        EVENT_PRODUCERS.append(producer()) # TODO : Make it also track the docstring for the explanation of the event usage.
+        EVENT_PRODUCERS.append(producer())
         EVENT_DOCS.append(func.__doc__ if func.__doc__ else '')
         return func
 
     return decorator
 
-EVENT_DOCS.__str__ = lambda: "\n\n".join(EVENT_DOCS) # Why ever the hell I did it. I guess its nicer this way.
+EVENT_DOCS.__str__ = lambda: "\n\n".join(EVENT_DOCS) # Makes the print out nicer. 
+# TODO : make printout nicer in more places using this kind of technique.

@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS event_consumers(
         ON DELETE CASCADE
         ON UPDATE CASCADE,
     event_path TEXT NOT NULL,
-    action_type ENUM('call_rmt', 'execute_slave') NOT NULL
+    action_type ENUM('call_rmt', 'execute_slave', 'fill_result') NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS event_call_rmt(
@@ -342,3 +342,11 @@ CREATE TABLE IF NOT EXISTS event_call_execute_slave(
     instruction TEXT NOT NULL,
     scope slave_scope
 );
+
+CREATE TABLE IF NOT EXISTS event_call_fill_result(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    result_addr BIGINT NOT NULL REFERENCES results(addr),
+    result_str TEXT NOT NULL
+)

@@ -19,16 +19,12 @@ EventConsumer: TypeAlias = Coroutine[None, None, None]
 async def connect_nats() -> Client:
     return await nats.connect()
 
-@dataclass(slots=True)
+@dataclass
 class Event:
     event_path: str
     payload: str
-    __client: Client = field()
-    __loop: asyncio.AbstractEventLoop = field()
     
-    def __init__(self, event_path: str, payload: str) -> None:
-        self.event_path = event_path
-        self.payload = payload
+    def __post_init__(self) -> None:
         self.__loop = asyncio.get_event_loop()
         self.__client = self.__loop.run_until_complete(connect_nats())
 
@@ -42,6 +38,7 @@ class Event:
 
     async def send_async(self) -> None:
         await self.__client.publish(self.event_path, self.payload.encode())
+
 
 @dataclass(slots=True)
 class ConsumerCallRmt:
@@ -57,7 +54,20 @@ class ConsumerExecuteSlave:
     instruction: str
     scope: SlaveScope
 
-ConsumerData: TypeAlias = Union[ConsumerCallRmt, ConsumerExecuteSlave]
+@dataclass(slots=True)
+class ConsumerFillResult:
+    event_path: str
+    action_type: Literal['fill_result']
+    result_addr: int
+    result_str: str
+
+ConsumerData: TypeAlias = Union[ConsumerCallRmt, ConsumerExecuteSlave, ConsumerFillResult]
+"""
+The consumer data needs to be updated with each new Consumer* dataclass.
+Each Consumer* has to have event_path as str and action_type as its action_type literal. 
+    TODO: reason if it actually does need that, and if false, remove it, since its kinda uselles actually,
+    cause type is known from datatype directly, so its redundant information.
+"""
 
 @dataclass(slots=True)
 class EventsConfig:

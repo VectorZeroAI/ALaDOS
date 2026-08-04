@@ -16,6 +16,7 @@ from .types import (
     ConsumerCallRmt,
     ConsumerData,
     ConsumerExecuteSlave,
+    ConsumerFillResult,
     Event,
     EventConsumer,
     connect_nats,
@@ -32,17 +33,22 @@ def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[Ev
 
     ${{data}} will be replaced with the payload at activation time, while 
     ${{subject}} will be replaced with the full event path at activation path.
+
+    The actual consumer data object loading uses the build_consumer_data function,
+        !!! thus argument order in event_consumers_fetch MUST match the expected one by the function !!!
     """
 
     event_consumers_fetch = conn.execute("""
     SELECT ec.event_path,
            ec.action_type,
-           COALESCE(evr.rmt_addr, evc.instruction),
-           COALESCE(evr.args, evs.scope)
+           COALESCE(evr.rmt_addr, evc.instruction, evfr.result_addr),
+           COALESCE(evr.args, evs.scope, evfr.result_str)
     FROM event_consumers ec
         LEFT JOIN event_call_rmt evr ON ec.addr = evr.addr
         LEFT JOIN event_call_execute_slave evs ON ec.addr = evs.addr
+        LEFT JOIN event_call_fill_result evfr ON ec.addr = evfr.addr
                  """).fetchall()
+    ## NOTE : NEVER EVER CHANGE ORDER WITHOUT CHANGING THE build_consumer_data FUNCTION!!!
     
     result: list[EventConsumer] = []
 
@@ -73,17 +79,21 @@ def build_consumer_data(row: TupleRow) -> ConsumerData:
             return ConsumerExecuteSlave(
                 *[r for r in row]
             )
+        case "fill_result":
+            return ConsumerFillResult(
+                *[r for r in row]
+            )
         case _:
             raise ValueError(f"Unknown action type {row[1]}.")
 
 
-async def consumer_outer(consumer_in: Callable[[Event, ConsumerData], None],
+async def consumer_outer(consumer_inner: Callable[[Event, ConsumerData], None],
                          consumer_data: ConsumerData,
                          nt: Client) -> None:
     sub = await nt.subscribe(consumer_data.event_path)
     async for event in sub.messages:
         event = Event(event.subject, event.data.decode())
-        consumer_in(event, consumer_data)
+        consumer_inner(event, consumer_data)
         log_json({
             'type': 'event',
             'subtype': 'consumer',
@@ -96,34 +106,70 @@ def call_rmt(event: Event, consumer_data: ConsumerCallRmt) -> None: # TODO : Ref
     consumer_data.args['subject'] = event.event_path
     with conn.transaction():
         activate_as_master(consumer_data.rmt_id, conn, inputs=consumer_data.args)
+    conn.close()
 
 def execute_slave(event: Event, consumer_data: ConsumerExecuteSlave) -> None:
     conn = conn_factory()
 
     instruction = consumer_data.instruction
-    instruction = re.sub(re.escape('${{data}}'), event.payload, instruction, flags=re.DOTALL)
-    instruction = re.sub(re.escape('${{subject}}'), event.event_path, instruction, flags=re.DOTALL)
+    instruction = instruction.replace('${{data}}', event.payload)
+    instruction = instruction.replace('${{subject}}', event.event_path)
 
     with conn.transaction():
         conn.execute("""
     PERFORM new_slave(NULL, %s, p_slave_scope := %s);
                      """, (instruction, consumer_data.scope))
+    conn.close() # TODO: Read psycopg docs on how to close connections correctly.
+
+def fill_result(event: Event, consumer_data: ConsumerFillResult) -> None:
+    conn = conn_factory()
+
+    result_str = consumer_data.result_str 
+    result_str = result_str.replace("${{data}}", event.payload)
+    result_str = result_str.replace("${{event}}", event.event_path)
+
+    with conn.transaction():
+        conn.execute("""
+        PERFORM new_result(%s, %s)
+                     """, (result_str, consumer_data.result_addr))
+
+    conn.close()
+
 
 def create_consumer(consumer_data: ConsumerData, nt: Client) -> Coroutine[None, None, None]:
+    """
+    Higher order function that constructs the coroutine of the consumer
+    from the respective consumer_inner action, which is one of the functions above, and consumer outer.
+    """
     match type(consumer_data):
         case ConsumerExecuteSlave():
-            consumer_in = execute_slave
+            consumer_inner = execute_slave
         case ConsumerCallRmt():
-            consumer_in = call_rmt
+            consumer_inner = call_rmt
         case _:
             raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
-    return partial(consumer_outer, consumer_in, consumer_data, nt)()
+    return consumer_outer(consumer_inner, consumer_data, nt)
 
 
 
-def create_result_via_event(event_path: str) -> ReferenceTo:
+def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> ReferenceTo:
     """
     Creates a result that will be filled out with the event and a consumer to fill that event in.
+    Does not handle wiring that result into the DAG, only handles the creation of the result itself. 
+    Returns result addr.
     """
-    raise NotImplementedError("CREATE RESULT VIA EVENT IS NOT YET IMPLEMENTED!")
-    # TODO : Make.
+
+    event_consumers_addr = conn.execute_fetchval("""
+    INSERT INTO event_consumers(event_path, action_type) VALUES(%s, 'fill_result') RETURNING addr
+                 """, (event_path,))
+    result_addr = conn.execute_fetchval("""
+    INSERT INTO results DEFAULT VALUES RETURNING addr;
+                                        """)
+
+    # NOTE: Optimise into a single SQL querry with BEGIN END and DECLARE for speed, maybe.
+
+    conn.execute("""
+    INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s, %s)
+                 """, (event_consumers_addr, result_addr, result_str))
+
+    return event_consumers_addr

@@ -50,6 +50,11 @@ def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> N
 The executor core, handles the execution of tasks.
 Interruptable to handle more prioritised tasks then the task currently being handled.
 
+!!! IMPORTANT !!!
+ALL STATES THAT ARE DEVIATING FROM STANDART PATH MUST LEAD BACK TO STANDART PATH AT SOME POINT.
+THAT MEANS ADDING THE ContextGen STATE.
+!!! IMPORTANT !!!
+
 Architecture of states:
     1. GET_SLAVE
     2. CONTEXT_GEN
@@ -340,11 +345,11 @@ Further documentation of the states inlined as docstrings in the match statement
                 curr = state
                 with conn.transaction():
                     conn.execute("""
-            UPDATE results
-                SET status = 'error'
-            FROM slaves s
-            WHERE s.addr = %s
-                AND results.addr = s.result_addr;
+                    UPDATE results
+                        SET status = 'error'
+                    FROM slaves s
+                    WHERE s.addr = %s
+                        AND results.addr = s.result_addr;
                                  """, (curr.slave_addr,))
                 set_next_state(GetSlaveState())
 

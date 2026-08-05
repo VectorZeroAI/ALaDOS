@@ -43,7 +43,7 @@ def start_console():
                     print("shutdown initiated")
                     sys.exit(0)
                 case "add", "task", *_:
-                    print(f"adding task {" ".join(command[2:])} as a master goal") # TODO: use slicing insdead of raw "2"
+                    print(f"adding task {" ".join(command[2:])} as a master goal")
                     add_master(command[2:], conn)
                 case "start", "webui", *_:
                     start_webui(command[2])

@@ -34,6 +34,12 @@ def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = 
         try:
             return tuple_row[0]
         except KeyError as e:
+            """
+            This case is here for legacy reasons.
+            There were bugs with different psycopg return methods around,
+            and since then this thing is here.
+            Dont touch, its uselles but just dont. 
+            """
             try:
                 return list(tuple_row)[0]
             except Exception as e2:

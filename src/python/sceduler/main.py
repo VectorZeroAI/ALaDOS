@@ -88,7 +88,7 @@ def new_slave_listener_thread():
     print("sceduler thread exited!")
                
 
-def setup():
+def setup() -> None:
     threading.Thread(target=new_slave_listener_thread, daemon=True).start()
 
     conn = conn_factory()

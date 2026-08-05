@@ -31,7 +31,7 @@ embedder = SentenceTransformer("msmarco-distilbert-base-tas-b")
 if config_file_emb_f.exists():
     apis = load_apis_from_text(config_file_emb_f.read_text())
 
-def setup():
+def setup() -> None:
     """ Set up the embeder threads """
     for _ in range(config_file_exe['cores_number']):
         threading.Thread(target=embedder_thread, daemon=True, ).start()

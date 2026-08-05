@@ -9,7 +9,7 @@ ItemLoader: TypeAlias = Callable[[ReferenceTo, Conn], str]
 
 ITEMS_LOADERS: dict[str, ItemLoader] = {}
 
-def register_item_loader(tablename: str):
+def register_item_loader(tablename: str) -> Callable[[ItemLoader], ItemLoader]:
     """
     The decorator to register the Item Loader for a given tablename.
     """

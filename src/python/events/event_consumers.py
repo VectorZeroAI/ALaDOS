@@ -20,7 +20,6 @@ from nats.aio.client import Client
 from psycopg.rows import TupleRow
 
 from ..rmt.main import activate_as_master
-from ..types import ReferenceTo
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
 from .types import (
@@ -102,16 +101,17 @@ async def consumer_outer(consumer_inner: Callable[[Event, ConsumerData], None],
                          consumer_data: ConsumerData,
                          nt: Client) -> None:
     sub = await nt.subscribe(consumer_data.event_path)
+    loop = asyncio.get_running_loop()
     async for event in sub.messages:
         event = Event(event.subject, event.data.decode())
-        consumer_inner(event, consumer_data)
+        loop.run_in_executor(None, consumer_inner, event, consumer_data)
         log_json({
             'type': 'event',
             'subtype': 'consumer',
             'event_path': consumer_data.action_type
         })
 
-def call_rmt(event: Event, consumer_data: ConsumerCallRmt) -> None: # TODO : Refactor these into async.
+def call_rmt(event: Event, consumer_data: ConsumerCallRmt) -> None:
     conn = conn_factory()
     consumer_data.args['data'] = event.payload
     consumer_data.args['subject'] = event.event_path

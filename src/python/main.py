@@ -15,7 +15,7 @@ from .utils.conn_factory import conn_factory_raw
 from .utils.logger import startup as l_startup
 
 
-def main():
+def main() -> None:
     """
     The main function that starts everything 
     Connects to the DB, reads the config, starts the executor cores, and starts the user interface. 

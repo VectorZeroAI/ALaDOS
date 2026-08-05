@@ -160,21 +160,21 @@ def create_from_range(
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
     backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
-    print(f"forwards_nodes: {forwards_nodes}")
-    print(f"backwards nodes: {backwards_nodes}")
+#    print(f"forwards_nodes: {forwards_nodes}")
+#    print(f"backwards nodes: {backwards_nodes}")
 
     forwards_nodes = [r for r in forwards_nodes]
     backwards_nodes = [r for r in backwards_nodes]
 
-    print(f"forwards_nodes as list: {forwards_nodes}")
-    print(f"backwards nodes as list: {backwards_nodes}")
+#    print(f"forwards_nodes as list: {forwards_nodes}")
+#    print(f"backwards nodes as list: {backwards_nodes}")
 
     forwards_nodes = set(forwards_nodes)
     backwards_nodes = set(backwards_nodes)
 
     intersection: set[int] = forwards_nodes & backwards_nodes # NOTE : This weird sign here is doing the intersection detection work.
-    print("intersection addresses:", intersection )
-    print("intersection as list: ", [ a for a in intersection])
+#    print("intersection addresses:", intersection )
+#    print("intersection as list: ", [ a for a in intersection])
 
     if len(intersection) < 2:
         raise ValueError("Items do not intersect!")
@@ -203,14 +203,14 @@ def create_from_range(
     
     slaves_deps = {}
 
-    print(f"Deps fetch : {deps}")
+#    print(f"Deps fetch : {deps}")
 
     for s in slaves:
-        print(f"initing slaves_deps[{s[ADDR]}]")
+#        print(f"initing slaves_deps[{s[ADDR]}]")
         slaves_deps[s[ADDR]] = []
 
     for d in deps:
-        print(f"sorting {d[0]} to {d[1]}")
+#        print(f"sorting {d[0]} to {d[1]}")
         slaves_deps[d[1]].append(d[0])
 
     slaves = [[i for i in s] for s in slaves]
@@ -219,20 +219,20 @@ def create_from_range(
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
                  """)
 
-    print(f"slaves: {slaves}")
+#    print(f"slaves: {slaves}")
     for s in slaves:
         new_addr = conn.execute_fetchval("SELECT new_addr();")
-        print(f"new_addr: {new_addr}", f"slave: {s}")
-        print(f"slaves_deps.values : {slaves_deps.values()}, slave_deps.items : {slaves_deps.items()}")
+#        print(f"new_addr: {new_addr}", f"slave: {s}")
+#        print(f"slaves_deps.values : {slaves_deps.values()}, slave_deps.items : {slaves_deps.items()}")
         for k, sd in slaves_deps.items():
-            print(f"sd: {sd}, k: {k}")
+#            print(f"sd: {sd}, k: {k}")
             for indx, d in enumerate(sd):
-                print(f"indx, d: {indx}, {d}")
+#                print(f"indx, d: {indx}, {d}")
                 if d == s[ADDR]:
-                    print(f"replacing {d}, wich is {s[ADDR]} with {new_addr}")
+#                    print(f"replacing {d}, wich is {s[ADDR]} with {new_addr}")
                     slaves_deps[k][indx] = new_addr
 
-        print(f"reasigning deps from {s[ADDR]} to {new_addr}")
+#        print(f"reasigning deps from {s[ADDR]} to {new_addr}")
         slaves_deps[new_addr] = slaves_deps.get(s[ADDR])
         s[ADDR] = new_addr
     

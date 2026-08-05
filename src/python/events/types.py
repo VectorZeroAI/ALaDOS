@@ -20,6 +20,9 @@ async def connect_nats() -> Client:
     return await nats.connect()
 
 class Event:
+    """
+    The Event class, with the send method.
+    """
     event_path: str
     payload: str
 
@@ -28,7 +31,7 @@ class Event:
                        payload: str) -> None:
         self.event_path = event_path
         self.payload = payload
-        self.__client = await connect_nats()
+        self.__client = await connect_nats() ## TODO: Refactor so that there arent that many connections.
 
     async def send(self) -> None:
         await self.__client.publish(

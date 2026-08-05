@@ -12,7 +12,7 @@ import json
 import os
 import subprocess
 from functools import partial
-from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args, overload
+from typing import Any, Literal, Sequence, TypeAlias, get_args, overload
 
 import httpx
 import psycopg
@@ -41,7 +41,7 @@ from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
 from .execute_tool import register_tool
-from .types import JsonSerializable, ReferenceTo, SlaveScope, _ExecToolMetaData
+from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import asyncio
-import re
-from functools import partial
 from typing import Callable, Coroutine
 
 from nats.aio.client import Client
@@ -146,6 +144,8 @@ def create_consumer(consumer_data: ConsumerData, nt: Client) -> Coroutine[None, 
             consumer_inner = execute_slave
         case ConsumerCallRmt():
             consumer_inner = call_rmt
+        case ConsumerFillResult():
+            consumer_inner = fill_result
         case _:
             raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
     return consumer_outer(consumer_inner, consumer_data, nt)

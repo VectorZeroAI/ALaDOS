@@ -6,10 +6,9 @@ from datetime import datetime
 from types import FunctionType
 from typing import Sequence
 
-from ..context.main import HEADERS_REGISTRY, resolve_loads
 from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import execute_tool
+from ..executor.execute_tool import HEADERS_REGISTRY, execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.main import slave_addr_to_instr
@@ -18,8 +17,8 @@ from ..utils.config_handlers import load_apis_from_text
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
-from ..utils.uqueue import Uqueue
 from ..utils.name_resolver import resolve_to_addrs
+from ..utils.uqueue import Uqueue
 from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
@@ -102,7 +101,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     'status': 'fatal',
                     'message': str(e),
                     'state': str(state.tag),
-                    'traceback': traceback.format_exception(e)
+                    'traceback': str(traceback.format_exception(e))
                 })
                 return ('', ErrorState(instr.slave_addr))
 

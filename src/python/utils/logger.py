@@ -21,7 +21,7 @@ def _sanitize_for_json(obj):
             return [_sanitize_for_json(i) for i in obj]
         return "NOT JSON SERIALIZABLE"
 
-def log_json(content: dict) -> None:
+def log_json(content: dict[str, str]) -> None:
     _logger_queue.put(_sanitize_for_json(content))
 
 def _logger_thread() -> None:

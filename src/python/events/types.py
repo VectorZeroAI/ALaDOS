@@ -19,25 +19,22 @@ EventConsumer: TypeAlias = Coroutine[None, None, None]
 async def connect_nats() -> Client:
     return await nats.connect()
 
-@dataclass
 class Event:
     event_path: str
     payload: str
-    
-    def __post_init__(self) -> None:
-        self.__loop = asyncio.get_event_loop()
-        self.__client = self.__loop.run_until_complete(connect_nats())
 
-    def send(self) -> None:
-        self.__loop.run_until_complete(
-            self.__client.publish(
-                self.event_path,
-                self.payload.encode()
-            )
+    async def __init__(self,
+                       event_path: str,
+                       payload: str) -> None:
+        self.event_path = event_path
+        self.payload = payload
+        self.__client = await connect_nats()
+
+    async def send(self) -> None:
+        await self.__client.publish(
+            self.event_path,
+            self.payload.encode()
         )
-
-    async def send_async(self) -> None:
-        await self.__client.publish(self.event_path, self.payload.encode())
 
 
 @dataclass(slots=True)

@@ -14,6 +14,7 @@ import subprocess
 from functools import partial
 from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args, overload
 
+import httpx
 import psycopg
 from numpy import ndarray
 from psycopg.types.json import Jsonb
@@ -40,7 +41,7 @@ from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
 from .execute_tool import register_tool
-from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
+from .types import JsonSerializable, ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
@@ -660,14 +661,14 @@ def web_request(url: str,
                 _meta: _ExecToolMetaData,
                 timeout: int = 10,
                 return_type: Literal['extracted', 'raw'] = 'extracted',
-                headers: Sequence[Mapping[str, str]] = []) -> ActionConfirmation:
+                headers: dict[str, str] = {}) -> ActionConfirmation:
     """
     The GET http request onto the url.
     return_type specifies what you wish to get from that url.
     Extracted means only meaningfull content, and raw means raw response content as string. 
     """
     
-    result = httpsystem.get(url, headers, timeout) 
+    result = httpsystem.get(url, httpx.Headers(headers), timeout)
 
     return f"<website> content = [{result['text'] if return_type == "extracted" else result['content_raw']}], url = [{result["url"]}], status_code = [{result['status_code']}] </website>"
 
@@ -679,7 +680,7 @@ def web_post(url: str,
              _meta: _ExecToolMetaData,
              timeout: int = 10,
              return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
-             headers: Sequence[Mapping[str, str]] = [],
+             headers: dict[str, str] = {},
              payload: str = ""
              ) -> ActionConfirmation:
     """

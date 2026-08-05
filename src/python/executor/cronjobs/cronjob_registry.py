@@ -11,6 +11,11 @@ P = ParamSpec('P')
 CRONJOB_REGISTRY: dict[str, Callable[..., None]] = {}
 
 def register_cronjob(name: str):
+    """
+    Cronjob patterns documentation:
+        All the cronjobs should take in **kwargs and access their inputs through them.
+    Should they? Ill add an Issue on that. 
+    """
     def decorator(func: Callable[P, None]) -> Callable[P, None]:
         CRONJOB_REGISTRY[name or func.__name__] = func
         return func
@@ -18,7 +23,7 @@ def register_cronjob(name: str):
 
 def execute_cronjob(name: str, sys_state: SysState, args: dict[str, Any]) -> None:
     args['sys_state'] = sys_state
-    return CRONJOB_REGISTRY[name](**args)
+    CRONJOB_REGISTRY[name](**args)
 
 def prepare_cronjob(name: str, sys_state: SysState, args: dict[str, Any]) -> Callable[[], None]:
     args['sys_state'] = sys_state

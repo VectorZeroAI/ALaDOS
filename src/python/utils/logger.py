@@ -44,7 +44,7 @@ def _logger_thread() -> None:
         _log_curr.close()
 
 
-def startup():
+def startup() -> None:
     global _log_conn
     _log_conn = conn_factory()
 

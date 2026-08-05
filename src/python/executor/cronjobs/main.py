@@ -10,10 +10,10 @@ from .cronjob_registry import prepare_cronjob
 from ...queue import global_interrupt_queue
 from .types import SysState
 
-def setup():
+def setup() -> None:
     threading.Thread(target=cronjob_executor, daemon=True).start()
 
-def cronjob_executor():
+def cronjob_executor() -> None:
     conn = conn_factory()
     
     cronjob_conn = conn_factory()
@@ -23,7 +23,7 @@ def cronjob_executor():
 
     cronjob_changed = threading.Event()
 
-    def cronjob_changes_listener(conn: Conn):
+    def cronjob_changes_listener(conn: Conn) -> None:
         for n in conn.notifies():
             cronjob_changed.set()
 

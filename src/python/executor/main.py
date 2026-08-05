@@ -341,7 +341,11 @@ Further documentation of the states inlined as docstrings in the match statement
                 curr = state
                 with conn.transaction():
                     conn.execute("""
-            UPDATE results SET status = 'error' FROM slaves s WHERE s.addr = %s AND s.addr = s.result_addr;
+            UPDATE results
+                SET status = 'error'
+            FROM slaves s
+            WHERE s.addr = %s
+                AND results.addr = s.result_addr;
                                  """, (curr.slave_addr,))
                 set_next_state(GetSlaveState())
 

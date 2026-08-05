@@ -273,11 +273,11 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
     """
     
     with conn.transaction():
-        reqired_by = conn.execute("""
+        required_by = conn.execute("""
         SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);
                                   """, (node_id,)).fetchall()
 
-        reqired_by = [r[0] for r in reqired_by]
+        required_by = [r[0] for r in required_by]
 
         if concatenate:
             requirements = conn.execute_fetchval("""
@@ -287,13 +287,19 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
                 requirements = []
 
             
-            for i in reqired_by:
-                for j in requirements:
-                    conn.execute("""
-                        UPDATE rmt_slaves
-                            SET deps = array_append(deps, %s)
-                        WHERE addr = %s
-                                 """, (j, i))
+            conn.execute("""
+                UPDATE rmt_slaves
+                    SET deps = array_cat(
+                        COALESCE(deps, ARRAY[]::BIGINT[]),
+                        (
+                            SELECT array_agg(DISTINCT requirement)
+                            FROM unnest(%s) AS required_by, unnest(%s) AS requirement
+                            WHERE required_by = rmt_slaves.addr
+                                AND requirement <> ALL(COALESCE(deps, ARRAY[]::BIGINT[]))
+                        )
+                    )
+                WHERE addr = ANY(%s)
+                         """, (required_by, requirements, required_by))
 
         conn.execute("""
         DELETE FROM addrs WHERE addr = %s
@@ -304,7 +310,7 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
             UPDATE rmt_slaves
                 SET deps = array_remove(deps, %s)
             WHERE addr = ANY(%s)
-                     """, (node_id, reqired_by))
+                     """, (node_id, required_by))
 
 
 
@@ -371,15 +377,15 @@ def activate_as_master(rmt_addr: ReferenceTo,
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
-            SELECT new_addr();
-                                            """)
+        SELECT new_addr();
+            """)
 
         conn.execute("""
-    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+        INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
                      """, (master_addr,))
 
         conn.execute("""
-    SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
+        SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
                      """, (depends_on, master_addr))
 
     master_result_addr = conn.execute_fetchval("""
@@ -387,7 +393,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
                                       """, (master_addr,))
 
     curr = conn.cursor()
-    if len(required_by) < 1:
+    if len(required_by) > 0:
         curr.executemany("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
                         """, [(i, master_result_addr) for i in required_by])

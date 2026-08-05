@@ -17,7 +17,7 @@ def register_event_generator(name: str):
     def decorator(func: Callable[[], AsyncGenerator[Event, None]]) -> Callable[[], AsyncGenerator[Event, None]]:
         async def producer() -> None:
             async for event in func():
-                event.send()
+                await event.send()
 
         EVENT_PRODUCERS.append(producer())
         EVENT_DOCS.append(func.__doc__ if func.__doc__ else '')

@@ -29,8 +29,8 @@ def build_event(*parts: P, payload: str, converter: Callable[[P], str]) -> Event
     for i in parts: 
         parts_new.append(converter(i))
 
-    event_path = '.'.join(parts_new)
-    event_path.lower()
+    event_path = '.'.join(parts_new).lower()
+
     return Event(event_path, payload)
     
 

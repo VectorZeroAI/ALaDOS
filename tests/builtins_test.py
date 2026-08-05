@@ -1,5 +1,6 @@
 from unittest.mock import patch
 import json
+from datetime import datetime
 
 import pytest
 
@@ -48,22 +49,6 @@ def unique_name(prefix: str = "test") -> str:
     _unique_counter += 1
     return f"{prefix}_{_unique_counter}"
 
-def create_test_meta(conn: Conn) -> _ExecToolMetaData:
-    """Create a master+slave pair and return metadata for a tool call."""
-    master_addr = conn.execute_fetchval("SELECT new_master('test_master')")
-    # Add a dummy slave to satisfy some tools that need a slave context
-    slave_addr = conn.execute_fetchval(
-        "SELECT new_slave(%s, 'test_instruction', 'general')",
-        (master_addr,)
-    )
-    return _ExecToolMetaData(
-        master_id=master_addr,
-        conn=conn,
-        slave_id=slave_addr,
-        context_limit=10000,
-        occ_last_change=0
-    )
-
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
@@ -79,8 +64,20 @@ def conn():
 
 @pytest.fixture
 def meta(conn):
-    """Test metadata object, tied to the rollback transaction."""
-    return create_test_meta(conn)
+    """Create a master+slave pair and return metadata for a tool call."""
+    master_addr = conn.execute_fetchval("SELECT new_master('test_master')")
+    # Add a dummy slave to satisfy some tools that need a slave context
+    slave_addr = conn.execute_fetchval(
+        "SELECT new_slave(%s, 'test_instruction', 'general')",
+        (master_addr,)
+    )
+    return _ExecToolMetaData(
+        master_id=master_addr,
+        conn=conn,
+        slave_id=slave_addr,
+        context_limit=10000,
+        occ_last_change=datetime(1, 1, 1, 1, 1, 1, 1)
+    )
 
 # ----------------------------------------------------------------------
 # Knowledge item tests
@@ -103,6 +100,9 @@ def test_k_edit(meta):
     name = unique_name("knowledge_edit")
     k_create(content="old content", description="old desc", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
+
+    meta.occ_last_change = datetime.now()
+
     sr_block = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
     k_edit(id=name, content_change=sr_block, _meta=meta)
     content = meta.conn.execute_fetchval("SELECT content FROM knowledge WHERE addr=%s", (addr,))
@@ -230,6 +230,9 @@ def test_tool_edit(meta):
     name = unique_name("tool_edit")
     create_tool(description="edit tool", header="old header", body="old body", name=name, _meta=meta)
     addr = resolve_to_addr(name, meta.conn)
+
+    meta.occ_last_change = datetime.now()
+
     sr_block = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
     edit_tool(id=name, header_change=sr_block, body_change=sr_block, _meta=meta)
     header = meta.conn.execute_fetchval("SELECT header FROM executables WHERE addr=%s", (addr,))
@@ -322,7 +325,7 @@ def test_rmt_serialise(meta):
     conn = meta.conn
     dsl = "START -> (instruction='step1') -> (instruction='step2') -> END"
     name = unique_name("rmt_serial")
-    rmt_create_from_serial(dsl=dsl, name=name, _meta=meta)
+    rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="DESCRIPTION")
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (name,))
     serial = rmt_serialise(id=rmt_addr, _meta=meta)
     assert "step1" in serial
@@ -339,7 +342,7 @@ def test_rmt_create_from_master(meta):
     # Add a dummy slave that won't be filtered out (use named parameter for scope)
     conn.execute("SELECT new_slave(%s, 'keep_me', p_slave_scope := 'general')", (master_addr,))
     rmt_name = unique_name("rmt_from_master")
-    res = tool_create_from_master(master_id=master_addr, name=rmt_name, _meta=meta)
+    res = tool_create_from_master(master_id=master_addr, name=rmt_name, _meta=meta, description="DESCRIPTION")
     assert "Created rmt from master" in res
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (rmt_name,))
     count = conn.execute_fetchval(
@@ -352,7 +355,7 @@ def test_rmt_insert_and_delete_node(meta):
     conn = meta.conn
     dsl = "START -> (id='n1', instruction='initial') -> END"
     rmt_name = unique_name("rmt_edit")
-    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta, description="DESCRIPTION")
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (rmt_name,))
     # Get addr of the existing node by instruction
     node_addr = conn.execute_fetchval(
@@ -384,7 +387,7 @@ def test_rmt_activate_as_master(meta):
     conn = meta.conn
     dsl = "START -> (instruction='do work') -> END"
     rmt_name = unique_name("rmt_activate")
-    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta, description="DESCRIPTION")
     rmt_addr = conn.execute_fetchval("SELECT addr FROM names WHERE name=%s", (rmt_name,))
     rmt_activate_as_master(rmt_id=rmt_addr, inputs={}, _meta=meta)
     # The master created by activate_as_master has instruction 'NONE'.
@@ -399,7 +402,7 @@ def test_rmt_edit_instruction(meta):
     conn = meta.conn
     dsl = "START -> (id='editme', instruction='old text') -> END"
     rmt_name = unique_name("rmt_edit_instr")
-    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta, description="DESCRIPTION")
     node_addr = conn.execute_fetchval(
         "SELECT addr FROM rmt_slaves WHERE template_addr=(SELECT addr FROM names WHERE name=%s) AND instruction='old text'",
         (rmt_name,)
@@ -414,7 +417,7 @@ def test_rmt_change_scope(meta):
     conn = meta.conn
     dsl = "START -> (id='scope_node', instruction='test', scope='general') -> END"
     rmt_name = unique_name("rmt_scope")
-    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta)
+    rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta, description="DESCRIPTION")
     node_addr = conn.execute_fetchval(
         "SELECT addr FROM rmt_slaves WHERE template_addr=(SELECT addr FROM names WHERE name=%s) AND instruction='test'",
         (rmt_name,)

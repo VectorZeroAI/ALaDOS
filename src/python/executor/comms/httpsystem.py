@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Mapping, Sequence, TypedDict
+from typing import Sequence, TypedDict
 import httpx
 from trafilatura import extract
 
@@ -10,7 +10,7 @@ class ResponseObj(TypedDict):
     status_code: int
     content_raw: str
 
-def get(url: str, headers: Sequence[Mapping[str, str]], timeout: int) -> ResponseObj:
+def get(url: str, headers: httpx.Headers, timeout: int) -> ResponseObj:
     """
     GET http operation
     """
@@ -28,7 +28,7 @@ def get(url: str, headers: Sequence[Mapping[str, str]], timeout: int) -> Respons
     }
     return result
 
-def post(url: str, headers: Sequence, payload: str, timeout: int) -> ResponseObj:
+def post(url: str, headers: httpx.Headers, payload: str, timeout: int) -> ResponseObj:
     """ POST http operation """
     with httpx.Client(timeout=timeout) as client:
         response = client.post(

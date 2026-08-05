@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
+"""
+
+Event consumers, creation and loading. 
+
+Guide on how to add a new type of event consumer:
+    1: Add it to the DB. (HAS TO USE 2 collumns)
+    2: Add it to the Querry in Load.
+    3: Add the new dataclass
+    4: Add the new case to the build consumers function
+    5: Add the new inner consumer function
+    6: Add the new case to the create_consumer
+
+"""
 
 import asyncio
-import re
-from functools import partial
 from typing import Callable, Coroutine
 
 from nats.aio.client import Client
 from psycopg.rows import TupleRow
-from ..types import ReferenceTo
 
 from ..rmt.main import activate_as_master
+from ..types import ReferenceTo
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
 from .types import (
@@ -146,30 +157,11 @@ def create_consumer(consumer_data: ConsumerData, nt: Client) -> Coroutine[None, 
             consumer_inner = execute_slave
         case ConsumerCallRmt():
             consumer_inner = call_rmt
+        case ConsumerFillResult():
+            consumer_inner = fill_result
         case _:
             raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
     return consumer_outer(consumer_inner, consumer_data, nt)
 
 
 
-def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> ReferenceTo:
-    """
-    Creates a result that will be filled out with the event and a consumer to fill that event in.
-    Does not handle wiring that result into the DAG, only handles the creation of the result itself. 
-    Returns result addr.
-    """
-
-    event_consumers_addr = conn.execute_fetchval("""
-    INSERT INTO event_consumers(event_path, action_type) VALUES(%s, 'fill_result') RETURNING addr
-                 """, (event_path,))
-    result_addr = conn.execute_fetchval("""
-    INSERT INTO results DEFAULT VALUES RETURNING addr;
-                                        """)
-
-    # NOTE: Optimise into a single SQL querry with BEGIN END and DECLARE for speed, maybe.
-
-    conn.execute("""
-    INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s, %s)
-                 """, (event_consumers_addr, result_addr, result_str))
-
-    return event_consumers_addr

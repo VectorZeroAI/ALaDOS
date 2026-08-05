@@ -15,7 +15,7 @@ def register_cronjob(name: str):
     Cronjob patterns documentation:
         All the cronjobs should take in **kwargs and access their inputs through them.
     Should they? Ill add an Issue on that. 
-    """
+    """ # TODO : Add an issue on that.
     def decorator(func: Callable[P, None]) -> Callable[P, None]:
         CRONJOB_REGISTRY[name or func.__name__] = func
         return func

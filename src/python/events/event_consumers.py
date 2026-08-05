@@ -1,13 +1,26 @@
 #!/usr/bin/env python3
+"""
+
+Event consumers, creation and loading. 
+
+Guide on how to add a new type of event consumer:
+    1: Add it to the DB. (HAS TO USE 2 collumns)
+    2: Add it to the Querry in Load.
+    3: Add the new dataclass
+    4: Add the new case to the build consumers function
+    5: Add the new inner consumer function
+    6: Add the new case to the create_consumer
+
+"""
 
 import asyncio
 from typing import Callable, Coroutine
 
 from nats.aio.client import Client
 from psycopg.rows import TupleRow
-from ..types import ReferenceTo
 
 from ..rmt.main import activate_as_master
+from ..types import ReferenceTo
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
 from .types import (

@@ -25,6 +25,10 @@ class Conn(psycopg.Connection):
     def executemany(self, querry: SQL|LiteralString, params_seq: Sequence[Sequence], returning: bool = False) -> None|Any: ...
 
 def _execute_fetchval(self: Conn, querry: SQL|LiteralString, params: Sequence = []) -> Any:
+    """
+    Executes the querry and fetches a value, then returns the value. 
+    !!! Raises a RuntimeError if no answer was returned !!!
+    """
     tuple_row = self.execute(querry, params).fetchone()
     if tuple_row:
         try:

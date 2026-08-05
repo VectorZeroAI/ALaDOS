@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import psycopg
-from typing import Iterator, LiteralString, Sequence, cast, Any, overload, Literal
+from typing import LiteralString, Sequence, cast, Any, overload, Literal
 import types
 from psycopg.rows import TupleRow
 from psycopg.types import composite

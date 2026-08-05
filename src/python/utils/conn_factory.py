@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Any, Literal, LiteralString, Sequence, cast, overload
+from typing import Any, Literal, LiteralString, Sequence, overload
 
 import psycopg
 from psycopg.rows import TupleRow
@@ -65,12 +65,10 @@ def conn_factory() -> Conn:
 
     conn = register_all_the_composite_types(conn)
 
-    conn = cast(Conn, conn)
-
-    return cast(Conn, conn)
+    return conn
 
 
-def register_all_the_composite_types(conn: psycopg.Connection) -> psycopg.Connection:
+def register_all_the_composite_types(conn: Conn) -> Conn:
 
     rmt_node_info = composite.CompositeInfo.fetch(conn, "rmt_node")
     assert rmt_node_info is not None
@@ -78,10 +76,10 @@ def register_all_the_composite_types(conn: psycopg.Connection) -> psycopg.Connec
     conn.RmtNodeClass = RmtNodeClass # pyright: ignore
     return conn
 
-def conn_factory_raw() -> psycopg.Connection:
-    conn = psycopg.connect(
+def conn_factory_raw() -> Conn:
+    conn = Conn.connect(
         host='/data/data/com.termux/files/usr/tmp',
-        dbname='alados'
+        dbname='alados',
     )
     conn.autocommit = True
     return conn

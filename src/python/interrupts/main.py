@@ -2,8 +2,10 @@
 
 from types import FunctionType
 import functools
-from typing import Any
+from typing import Any, Callable
 from dataclasses import dataclass, field
+from ..utils.logger import log_json
+from traceback import format_exc, format_exception
 
 from ..utils.uqueue import Uqueue
 
@@ -12,7 +14,7 @@ class InterruptInvokation:
     name: str
     args: dict[str, Any] = field(default_factory=dict)
 
-INTERRUPT_TABLE: dict[str, FunctionType] = {}
+INTERRUPT_TABLE: dict[str, Callable[[], None]] = {}
 
 def interrupt(name: str|None = None) -> FunctionType:
     """
@@ -44,7 +46,18 @@ def interruptable(*q: Uqueue[InterruptInvokation]) -> FunctionType:
                     found = True
                     handler = INTERRUPT_TABLE.get(interrupt.name)
                     if handler:
-                        handler(**interrupt.args)
+                        try:
+                            handler(**interrupt.args)
+                        except Exception as e:
+                            log_json({
+                                'type': 'interrupt',
+                                'status': 'error',
+                                'subtype': 'handler execution',
+                                'handler_name': str(handler.__name__),
+                                'error': str(e),
+                                'traceback': str(format_exception(e))
+
+                            })
                 if not found:
                     break
 

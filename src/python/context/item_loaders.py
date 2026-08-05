@@ -194,7 +194,7 @@ def _cronjob_loop_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     if item is None:
         return f"Item at address {addr} with type cronjob_once does not exist!"
 
-    return f"Cronjob_loop at {item[7] if item[7] is not None else 'No name'}@{addr} With name: '{item[0]}', args: '{item[1]}', execute_every: '{item[2]}', last_ran: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
+    return f"Cronjob_loop at {item[6] if item[6] is not None else 'No name'}@{addr} With name: '{item[0]}', args: '{item[1]}', execute_every: '{item[2]}', last_ran: '{item[3]}', {f"error: '{item[4]}', with error message: " if item[4] is not None else ''}{f"'{item[5]}'" if item[5] is not None else ''}"
     ## TODO : Refactor this long ass string into something that makes more sense,
     ## together with fixing all of the prompt enginiering going on here
     ## This place fucking sucks!

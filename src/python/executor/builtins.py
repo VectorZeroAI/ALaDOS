@@ -690,7 +690,7 @@ def web_post(url: str,
     Extracted means only meaningfull content, raw means raw response content as string, status_means means no content, only status code.
     """
 
-    result = httpsystem.post(url, headers, payload, timeout)
+    result = httpsystem.post(url, httpx.Headers(headers), payload, timeout)
 
     match return_type:
         case 'status_code':

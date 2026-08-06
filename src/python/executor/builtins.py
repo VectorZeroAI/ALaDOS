@@ -175,13 +175,16 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     env = os.environ.copy()
     env["KWARGS"] = json.dumps(kwargs)
     
-    result = subprocess.run(["python3"],
-                                 input=body,
-                                 capture_output=True,
-                                 text=True,
-                                 timeout=timeout,
-                                 env=env
-                                 )
+    try:
+        result = subprocess.run(["python3"],
+                                     input=body,
+                                     capture_output=True,
+                                     text=True,
+                                     timeout=timeout,
+                                     env=env
+                                     )
+    except subprocess.TimeoutExpired as e:
+        return f"Tool timed out. Error msg: {e}."
 
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
@@ -875,11 +878,11 @@ def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_
     addr = resolve_to_addr(rmt_slave_id, conn)
     template_addr = resolve_to_addr(template_id, conn)
     
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, template_addr, conn))
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, template_addr, conn))
 
     delete_node(addr, conn, concatenate)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Deleted node {rmt_slave_id if isinstance(rmt_slave_id, str) else 'No name'}@{addr} from the rmt."
 
@@ -940,11 +943,15 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
     
     addr = resolve_to_addr(node_id, conn)
 
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+    template_addr = conn.execute_fetchval("""
+    SELECT template_addr FROM rmt_slaves WHERE addr = %s;
+                                          """, (addr, ))
+
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, addr, conn))
 
     edit_instruction(addr, sr_block, conn)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Edited instruction of rmt slave {node_id if isinstance(node_id, str) else 'No name'}@{addr}"
 
@@ -957,11 +964,16 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
 
     addr = resolve_to_addr(node_id, conn)
 
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+
+    template_addr = conn.execute_fetchval("""
+    SELECT template_addr FROM rmt_slaves WHERE addr = %s;
+                                          """, (addr, ))
+
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, addr, conn))
 
     change_scope(addr, new_scope, conn)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Updated instruction of rmt node {node_id}"
 

@@ -281,9 +281,11 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
 );
 
 DO $$
-    IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'event_consumers_action_types') THEN
-        CREATE TYPE event_consumers_action_types AS ENUM('call_rmt', 'execute_slave', 'fill_result');
-    END IF;
+    BEGIN
+        IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'event_consumers_action_types') THEN
+            CREATE TYPE event_consumers_action_types AS ENUM('call_rmt', 'execute_slave', 'fill_result');
+        END IF;
+    END;
 $$;
 
 CREATE TABLE IF NOT EXISTS event_consumers(

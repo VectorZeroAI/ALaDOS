@@ -21,3 +21,5 @@ def register_item_loader(tablename: str) -> Callable[[ItemLoader], ItemLoader]:
 def load_item(addr: ReferenceTo, tablename: str, conn: Conn) -> str:
     """ Dynamic load dispatcher for tablename and addr loading. """
     return ITEMS_LOADERS[tablename](addr, conn)
+
+from . import item_loaders as _oergnsorbgwsoureg # pyright: ignore # noqa

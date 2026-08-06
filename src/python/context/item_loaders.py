@@ -124,7 +124,7 @@ def _result_item_resolve(addr: int, conn: Conn) -> str:
     FROM results r
         LEFT JOIN names n ON n.addr = r.addr
     WHERE r.addr = %s;
-                        """, (addr, addr)).fetchone()
+                        """, (addr, )).fetchone()
     if item is None:
         return f"DOES NOT EXIST@{addr}"
 

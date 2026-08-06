@@ -7,12 +7,9 @@ And also split this file.
 At some point. 
 """
 
-from python.context.item_loaders_registry import load_item
-
-from ..rmt.main import serialize
-from ..types import ReferenceTo
-
+from ..context.item_loaders_registry import load_item
 from ..executor.execute_tool import HEADERS_REGISTRY
+from ..types import ReferenceTo
 from ..utils.conn_factory import Conn
 from .types import Anchor, LoadsData, SlaveObj, WindowData
 

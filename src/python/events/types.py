@@ -4,15 +4,15 @@
 The file where all the types are.
 """
 
-import asyncio
-from dataclasses import dataclass, field
-from functools import partial
+from dataclasses import dataclass
 from os import PathLike
 from typing import Coroutine, Literal, TypeAlias, Union
+
 import nats
 from nats.aio.client import Client
-from ..types import ReferenceTo
+
 from ..executor.types import SlaveScope
+from ..types import ReferenceTo
 
 EventConsumer: TypeAlias = Coroutine[None, None, None]
 
@@ -28,10 +28,12 @@ class Event:
 
     async def __init__(self,
                        event_path: str,
-                       payload: str) -> None:
+                       payload: str,
+                       nt: Client
+                       ) -> None:
         self.event_path = event_path
         self.payload = payload
-        self.__client = await connect_nats() ## TODO: Refactor so that there arent that many connections.
+        self.__client = nt
 
     async def send(self) -> None:
         await self.__client.publish(

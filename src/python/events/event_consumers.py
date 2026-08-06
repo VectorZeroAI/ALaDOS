@@ -103,7 +103,7 @@ async def consumer_outer(consumer_inner: Callable[[Event, ConsumerData], None],
     sub = await nt.subscribe(consumer_data.event_path)
     loop = asyncio.get_running_loop()
     async for event in sub.messages:
-        event = Event(event.subject, event.data.decode())
+        event = Event(event.subject, event.data.decode(), nt)
         loop.run_in_executor(None, consumer_inner, event, consumer_data)
         log_json({
             'type': 'event',

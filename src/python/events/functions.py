@@ -20,6 +20,7 @@ def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> Ref
     event_consumers_addr = conn.execute_fetchval("""
     INSERT INTO event_consumers(event_path, action_type) VALUES(%s, 'fill_result') RETURNING addr
                  """, (event_path,))
+
     result_addr = conn.execute_fetchval("""
     INSERT INTO results DEFAULT VALUES RETURNING addr;
                                         """)
@@ -33,7 +34,7 @@ def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> Ref
     return event_consumers_addr
 
 
-def register_reaction_rmt(event_path: str, rmt_addr: ReferenceTo, args: JsonSerializable, conn: Conn) -> ReferenceTo:
+def register_reaction_rmt(event_path: str, rmt_addr: ReferenceTo, args: dict[str, str], conn: Conn) -> ReferenceTo:
     """
     Register the event reaction as an RMT.
     All of the patterns are explained in the consumer load function docs and in builtins.

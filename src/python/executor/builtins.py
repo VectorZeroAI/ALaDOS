@@ -12,7 +12,7 @@ import json
 import os
 import subprocess
 from functools import partial
-from typing import Any, Literal, Sequence, TypeAlias, get_args, overload
+from typing import Any, Literal, Sequence, TypeAlias, get_args
 
 import httpx
 import psycopg
@@ -34,6 +34,11 @@ from ..utils.conn_factory import NoValue
 from ..utils.name_resolver import resolve_self, resolve_to_addr, resolve_to_addrs
 from ..utils.occ_functions import occ_check, update_timestamp
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
+from ..events.functions import (
+    create_result_via_event,
+    register_reaction_execute_slave,
+    register_reaction_rmt
+)
 from .comms import httpsystem
 from .comms.searxng import SearxngSearcher
 from .cronjobs.parser import insert_cronjob
@@ -960,36 +965,69 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
 
     return f"Updated instruction of rmt node {node_id}"
 
-@overload
-def register_reaction(*,
-                      _meta: _ExecToolMetaData,
-                      event_path: str,
-                      rmt_id: Addr|Name,
-                      args: dict[str, str],
-                      instruction: None = None,
-                      slave_scope: None = None) -> ActionConfirmation:
-    ...
-
-@overload
-def register_reaction(*,
-                      _meta: _ExecToolMetaData,
-                      event_path: str,
-                      instruction: str,
-                      slave_scope: SlaveScope,
-                      rmt_id: None = None,
-                      args: None = None) -> ActionConfirmation:
-    ...
 
 
-def register_reaction(*,
-                      _meta,
-                      event_path,
-                      instruction: str|None = None,
-                      slave_scope: SlaveScope|None = None,
-                      rmt_id: Addr|Name|None = None,
-                      args: dict[str, str]|None = None) -> ActionConfirmation:
+@register_tool("event.register_reaction.rmt", ['task'])
+def tool_register_event_reaction_rmt(_meta: _ExecToolMetaData,
+                                event_path: str,
+                                rmt_id: Addr|Name,
+                                args: dict[str, str]) -> ActionConfirmation:
     """
-    The function that reegisters a reaction to an event via an action. 
+    Executes an RMT as a callback to the given event.
+    "data" and "subject" arguments will be provided additionaly at event arrival time, and filled out with events payload and events full event_path respectfully.
+    The event_path provided to the tool is a NATS event subscribtion string.
     """
-    ...
+    conn = _meta.conn
 
+    addr = resolve_to_addr(rmt_id, conn)
+
+    register_reaction_rmt(event_path, addr, args, conn)
+
+    return f"Registered callback of rmt {rmt_id if isinstance(rmt_id, str) else 'No name'}@{addr} for event {event_path}."
+
+
+
+@register_tool("event.register_reaction.slave", ['task'])
+def tool_register_event_reaction_execute_slave(
+        _meta: _ExecToolMetaData,
+        event_path: str, ## TODO : Add handler name option or smt.
+        instruction: str, 
+        scope: SlaveScope
+        ) -> ActionConfirmation:
+    """
+    Creates a callback slave for the given event path, with the given instruction and given scope. 
+    Slaves instruction will have strings ${{data}} and ${{subject}} replaced with the events payload and event path respectfully. 
+    The event_path you provide into the tool is NATS event subscribtion string,
+    which means the actuall full event type will nearly never be the same you wrote into there.
+    """
+    conn = _meta.conn
+
+    register_reaction_execute_slave(event_path, instruction, scope, conn)
+
+    return f"Registered callback of slave for event  {event_path} with scope {scope}."
+
+
+
+@register_tool("event.create_result", ['task'])
+def tool_create_result_via_event(
+        _meta: _ExecToolMetaData,
+        event_path: str, 
+        result_str: str,
+        name: str|None = None
+        ) -> ActionConfirmation:
+    """
+    Creates a result that will be filled out with the event.
+    The keys ${{data}} and ${{event}} in the result string will be replaced via the events payload and full event path.
+    Event path you provide as an argument is NATS event subscribtion string,
+    which means it will nearly never be exactly the same as the actual event path.
+    """
+    conn = _meta.conn
+    
+    addr = create_result_via_event(event_path, result_str, conn)
+    
+    if name:
+        conn.execute("""
+        INSERT INTO names(addr, name) VALUES(%s, %s);
+                     """, (addr, name))
+    
+    return f"Created result {name if name is not None else "No Name"}@{addr} as result of an event."

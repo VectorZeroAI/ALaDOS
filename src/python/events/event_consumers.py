@@ -128,7 +128,7 @@ def execute_slave(event: Event, consumer_data: ConsumerExecuteSlave) -> None:
 
     with conn.transaction():
         conn.execute("""
-    PERFORM new_slave(NULL, %s, p_slave_scope := %s);
+        SELECT new_slave(NULL, %s, p_slave_scope := %s);
                      """, (instruction, consumer_data.scope))
     conn.close() # TODO: Read psycopg docs on how to close connections correctly.
 
@@ -141,7 +141,7 @@ def fill_result(event: Event, consumer_data: ConsumerFillResult) -> None:
 
     with conn.transaction():
         conn.execute("""
-        PERFORM new_result(%s, %s)
+        SELECT new_result(%s, %s)
                      """, (result_str, consumer_data.result_addr))
 
     conn.close()

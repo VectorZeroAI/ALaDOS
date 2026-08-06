@@ -31,7 +31,7 @@ from ..rmt.main import (
     serialize,
 )
 from ..utils.conn_factory import NoValue
-from ..utils.name_resolver import resolve_to_addr, resolve_to_addrs
+from ..utils.name_resolver import resolve_self, resolve_to_addr, resolve_to_addrs
 from ..utils.occ_functions import occ_check, update_timestamp
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from .comms import httpsystem
@@ -332,14 +332,10 @@ def add_slave(instruction: str,
 
     required_results_addrs = []
 
-    for i in required_results_ids:
-        if i == 'self':
-            self_addr = conn.execute_fetchval("SELECT result_addr FROM slaves WHERE addr = %s", (_meta.slave_id,))
-            required_results_addrs.append(self_addr)
-        else:
-            required_results_addrs.append(i)
-
-    required_results_addrs = resolve_to_addrs(required_results_addrs, conn)
+    required_results_addrs = resolve_to_addrs(
+        resolve_self(_meta.slave_id, required_results_ids, conn),
+        conn
+    )
     
     if slave_type == "planner":
         """ This is here as a fallback for a fairly common AI hallucination. Dont remove. """
@@ -709,10 +705,15 @@ def create_master(instruction: str,
                   result_name: str|None = None
                   ) -> ActionConfirmation:
     """
-    Creates a master goal, with the given instruction, depending on given results, outputting a given results name.
+    Creates a master goal,
+    with the given instruction,
+    depending on given results, outputting a given results name.
+    Can use "self" to specify the currently executed slave as one of the required_ids.
     """
 
     conn = _meta.conn
+
+    required_ids = resolve_self(_meta.slave_id, required_ids, conn)
 
     required_addrs = resolve_to_addrs(required_ids, conn)
 
@@ -918,6 +919,8 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
     """
     conn = _meta.conn
     addr = resolve_to_addr(rmt_id, conn)
+
+    depends_on = resolve_self(_meta.slave_id, depends_on, conn)
 
     activate_as_master(addr, conn, depends_on, required_by, inputs)
 

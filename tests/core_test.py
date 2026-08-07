@@ -93,7 +93,7 @@ class LLMMockServer:
                 return flask.jsonify({"error": "No mock response left"}), 500
             return flask.jsonify({"choices": [{"message": {"content": content}}]})
 
-    def start(self, port: int = 0) -> int:
+    def start(self, port: int = 8001) -> int:
         self.thread = threading.Thread(
             target=self.app.run,
             kwargs={"port": port, "debug": False, "use_reloader": False},
@@ -201,8 +201,12 @@ def executor_test(cls):
                 )
 
     # Give the wrapper a nice name for pytest output
-    TestWrapper.__name__ = cls.__name__
-    TestWrapper.__qualname__ = cls.__qualname__
+    TestWrapper.__name__ = "Test" + cls.__name__
+    TestWrapper.__qualname__ = "Test" + cls.__qualname__
+    
+    globals()[TestWrapper.__name__] = TestWrapper
+    globals()[TestWrapper.__qualname__] = TestWrapper
+
     return TestWrapper
 
 
@@ -213,7 +217,7 @@ def global_setup():
     _patch_connection_factories()
 
     mock_llm = LLMMockServer()
-    port = mock_llm.start(port=0)
+    port = mock_llm.start()
     api = Api(
         url=f"http://127.0.0.1:{port}/v1/chat/completions",
         key="test",
@@ -327,3 +331,19 @@ class CreateAndReadKnowledge:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+"""
+CREATE OR REPLACE FUNCTION notify_result_ready()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.ready AND NOT OLD.ready THEN
+        PERFORM pg_notify('result_ready', NEW.addr::TEXT);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_result_ready
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+"""

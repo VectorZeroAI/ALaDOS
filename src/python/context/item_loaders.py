@@ -19,7 +19,7 @@ def _resolve_knowledge_item(addr: int, conn: Conn) -> str:
         return f"DOES NOT EXIST@{addr}"
 
     result = ""
-    result = "@".join((item[0], f"{addr}", "knowledge"))
+    result = "@".join((str(item[0]), f"{addr}", "knowledge"))
     result = "\n".join(("", result, item[1], "", "", ""))
     return result
 
@@ -32,7 +32,7 @@ def _executables_item_resolve(addr: int, conn: Conn) -> str:
     if item is None:
         return f"DOES NOT EXIST@{addr}"
     result = ""
-    result = "@".join((item[0], f"{addr}", "executable"))
+    result = "@".join((str(item[0]), f"{addr}", "executable"))
     result = "\n".join(("", "", result, f"header: {item[1]}", f"body: {item[2]}", "", "", ""))
 
     return result
@@ -48,7 +48,7 @@ def _logs_item_resolve(addr: int, conn: Conn) -> str:
     if item is None:
         return f"DOES NOT EXIST@{addr}"
 
-    result = "@".join((item[0], f"{addr}", "log_item"))
+    result = "@".join((str(item[0]), f"{addr}", "log_item"))
     result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
     return result
 
@@ -70,7 +70,7 @@ def _masters_item_resolve(addr: int, conn: Conn) -> str:
         return f"DOES NOT EXIST@{addr}"
 
     if name is None:
-        name = ("None",)
+        name = ["None",]
 
     slave_str_list: list[str] = []
     result_str = "@".join((*name, f"{addr}", "master_goal"))
@@ -105,7 +105,7 @@ def _slaves_item_resolve(addr: int, conn: Conn) -> str:
     if fetch is None:
         return f"DOES NOT EXIST@{addr}"
 
-    result = "@".join((fetch[0], f"{addr}", "slave_goal"))
+    result = "@".join((str(fetch[0]), f"{addr}", "slave_goal"))
     result = "\n".join(("", "", result,
                         f"master_addr: {fetch[1]}",
                         f"instruction: {fetch[2]}",
@@ -128,7 +128,7 @@ def _result_item_resolve(addr: int, conn: Conn) -> str:
     if item is None:
         return f"DOES NOT EXIST@{addr}"
 
-    result = "@".join((item[0], f"{addr}")) # TODO : LEGIT FIX THIS SHIT MAN ! THIS PROMPT ENGINIERING SUCKS ASS !
+    result = "@".join((str(item[0]), str(addr))) # TODO : LEGIT FIX THIS SHIT MAN ! THIS PROMPT ENGINIERING SUCKS ASS !
     result = "\n".join(("", "", result, f"content: {item[1]}", f"ready?: {item[2]}"))
     return result
 
@@ -163,7 +163,7 @@ def _rmt_slaves_item_resolve(addr: ReferenceTo, conn: Conn) -> str:
     ## TODO : Make it auto remove from context in the DB possibly?
     ## Make an issue on that.
 
-    return f"RMT slave {item[2]}@{item[1]} with instruction: '{item[0]}', dependancies: '{item[3]}'."
+    return f"RMT slave {item[2] if item[2] is not None else "No Name"}@{item[1]} with instruction: '{item[0]}', dependancies: '{item[3]}'."
 
 
 @register_item_loader('cronjob_once')

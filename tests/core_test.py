@@ -1,30 +1,18 @@
 #!/usr/bin/env python3
 """
-Declarative integration tests for the ALaDOS executor core.
-Uses a real database, a real executor thread, a real scheduler,
-and a Flask mock for the LLM API.
+My core testing framework.
+Uses a decorator to turn classes with steps: list[ExecutorStep] into actual tests
+and runs them against actual executor thread. 
 
-Tests are defined as simple class‑based scenarios with a list of steps.
-Each step specifies what the LLM should return and what assertions to
-perform on the completed slave's result.
+Usage doc:
+    ExecutorStep fields are self explanatory.
+    Multiple LLM outputs are allowed when required, as that property is a list of strings.
+    Each Step is its own Slave to be executed.
+    Each class is its own test case to be executed. 
+    You are not required to name classes with Test...
+    DB is cleared between classes, e.g. test cases, not between individual Steps. 
 
-The database sends NOTIFY when a result becomes ready,
-so we wait with LISTEN instead of polling.
-
-Run once against your test DB:
-    CREATE OR REPLACE FUNCTION notify_result_ready()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        IF NEW.ready AND NOT OLD.ready THEN
-            PERFORM pg_notify('result_ready', NEW.addr::TEXT);
-        END IF;
-        RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-
-    CREATE TRIGGER trg_result_ready
-    AFTER UPDATE ON results
-    FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+!!! RUN THE SQL AT THE BOTTOM AGAINST THE alados_test DB YOURSELF ELSE EVERYTHING TIMES OUT. !!!
 """
 
 import threading

@@ -75,8 +75,8 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
     INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s);
                  """, (addr, description))
 
-    if name is not None:
-        conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
+    if name:
+        conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr, name))
 
     _meta._embedder_queue.put(addr)
 
@@ -561,6 +561,9 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     FROM slaves s
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
+
+    # FIXME: The paradox label is never removed. That is wrong after the fact of handling it.
+
     raise ParadoxDetected(paradox, items)
 
 

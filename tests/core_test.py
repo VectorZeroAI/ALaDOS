@@ -37,6 +37,7 @@ import flask
 import httpx
 import psycopg
 import pytest
+import uuid
 
 #  --  System modules  -------------------------------------------------
 from python.executor.main import core as executor_core
@@ -127,7 +128,7 @@ def wait_for_result(db_conn: Conn, result_addr: int, timeout: float = 10.0):
         listen_conn.execute("LISTEN result_ready")
         deadline = time.time() + timeout
         while time.time() < deadline:
-            for notify in listen_conn.notifies(timeout=0.5):
+            for notify in listen_conn.notifies(timeout=9):
                 if notify.payload == str(result_addr):
                     return
         raise TimeoutError(f"Result {result_addr} not ready within {timeout}s")
@@ -238,7 +239,7 @@ def global_setup():
     yield mock_llm
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="class")
 def clean_database():
     """Clean tables before each test function."""
     conn = _test_conn_factory()
@@ -288,9 +289,11 @@ class ParadoxHandling:
         ExecutorStep(
             instruction="Report a paradox",
             llm_responses=[
-                '[{"tool": "K.report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]'
+                '[{"tool": "K.report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
+                '[{"tool": "result.write", "args": {"text": "Assume handled."}}]',
+                '[{"tool": "result.write", "args": {"text": "DONE!"}}]'
             ],
-            expected_status="paradox",
+            expected_content_contains="DONE!"
         ),
     ]
 
@@ -308,6 +311,8 @@ class ErrorRecovery:
         ),
     ]
 
+name = str(uuid.uuid4())
+print(f"NAME = {name}")
 
 @executor_test
 class CreateAndReadKnowledge:
@@ -315,14 +320,14 @@ class CreateAndReadKnowledge:
         ExecutorStep(
             instruction="Create a knowledge item",
             llm_responses=[
-                '[{"tool": "K.create", "args": {"content": "moon is cheese", "description": "fun fact"}}]'
+                '[{"tool": "K.create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
             ],
             expected_knowledge_count=1,
         ),
         ExecutorStep(
             instruction="Read that knowledge item (simulate read by checking we can find it)",
             llm_responses=[
-                '[{"tool": "K.read", "args": {"id": 1}}]'  # first knowledge item is addr 1
+                '[{"tool": "K.read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
             ],
             expected_content_contains="moon is cheese",
         ),

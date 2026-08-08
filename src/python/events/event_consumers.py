@@ -51,7 +51,7 @@ def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[Ev
     event_consumers_fetch = conn.execute("""
     SELECT ec.event_path,
            ec.action_type,
-           COALESCE(evr.rmt_addr, evc.instruction, evfr.result_addr),
+           COALESCE(evr.rmt_addr, evs.instruction, evfr.result_addr),
            COALESCE(evr.args, evs.scope, evfr.result_str)
     FROM event_consumers ec
         LEFT JOIN event_call_rmt evr ON ec.addr = evr.addr

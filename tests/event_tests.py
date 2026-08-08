@@ -10,7 +10,7 @@ Covers:
       register_reaction_execute_slave (pure DB read/write logic)
     - event_consumers.py: load_event_consumers's query + build_consumer_data,
       the three consumer_inner functions (call_rmt/execute_slave/fill_result),
-      and create_consumer's dispatch
+      and consumer_outer's per-message dispatch
     - event_gens.py: build_event's path -> NATS-subject conversion
     - types.py: Event.send delegates to the NATS client correctly
 
@@ -38,7 +38,7 @@ from python.events.event_consumers import (
     call_rmt,
     execute_slave,
     fill_result,
-    create_consumer,
+    consumer_outer,
 )
 from python.events.event_gens import build_event
 from python.events.functions import (
@@ -219,75 +219,94 @@ class TestBuildConsumerData:
 # ----------------------------------------------------------------------
 class TestLoadEventConsumersQuery:
     """
-    These exercise the actual SQL join in load_event_consumers against a real DB,
+    Exercises the actual SQL join in load_event_consumers against a real DB,
     with connect_nats mocked out so no live NATS server is required.
 
-    KNOWN SOURCE BUG: the query's COALESCE(evr.rmt_addr, evs.instruction,
-    evfr.result_addr) mixes a bigint column (rmt_addr) with a text column
-    (instruction) in the same COALESCE. Postgres requires all COALESCE
-    branches to share a type, so this raises DatatypeMismatch any time a
-    matching row exists to actually evaluate the join. Fix needs to
-    restructure the query (e.g. separate queries per action_type, or cast
-    to a common type and reconstruct in Python) rather than a single
-    three-way COALESCE across differently-typed columns.
+    load_event_consumers now builds each ConsumerData row and wraps it
+    directly via consumer_outer(consumer, nt) -- it no longer goes through a
+    separate create_consumer step, and consumer_outer's own dispatch (the
+    match on consumer_data) only runs once messages actually arrive on the
+    NATS subscription, not at load time. So load_event_consumers itself
+    should just succeed and return one coroutine per consumer row, regardless
+    of action_type -- there's nothing here to dispatch yet.
 
-    Below: the empty-table case genuinely passes today since the COALESCE
-    is never evaluated against a mismatched row. Every other case fails
-    and is asserted as failing, so this suite tells the truth about
-    current behavior with no xfail masking.
+    Each returned item is an unawaited/unscheduled coroutine (consumer_outer
+    was called but never awaited), so we close() them after counting to
+    avoid "coroutine was never awaited" warnings -- this suite isn't
+    responsible for verifying the coroutines actually run correctly here;
+    that's covered separately in TestConsumerOuterDispatch below.
     """
 
     def _fake_loop(self):
+        """
+        A stand-in event loop whose run_until_complete actually drives the
+        passed-in coroutine to completion (closing it if unused), instead of
+        leaving connect_nats()'s coroutine dangling.
+        """
         loop = MagicMock()
-        loop.run_until_complete = MagicMock(return_value=MagicMock())
+
+        def _run_until_complete(coro):
+            try:
+                coro.send(None)
+            except StopIteration as e:
+                return e.value
+            else:
+                coro.close()
+                return MagicMock()
+
+        loop.run_until_complete = _run_until_complete
         return loop
 
+    @staticmethod
+    def _close_all(consumers):
+        for c in consumers:
+            c.close()
+
     def test_no_consumers_returns_empty_list(self, db):
-        """The only load_event_consumers case that currently works end-to-end."""
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
             consumers = load_event_consumers(db, self._fake_loop())
 
         assert consumers == []
 
-    def test_fill_result_consumer_raises_coalesce_type_mismatch(self, db):
+    def test_loads_fill_result_consumer(self, db):
         create_result_via_event("evt.one", "payload text", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            with pytest.raises(Exception) as excinfo:
-                load_event_consumers(db, self._fake_loop())
+            consumers = load_event_consumers(db, self._fake_loop())
 
-        assert "COALESCE" in str(excinfo.value)
+        assert len(consumers) == 1
+        self._close_all(consumers)
 
-    def test_call_rmt_consumer_raises_coalesce_type_mismatch(self, db):
+    def test_loads_call_rmt_consumer(self, db):
         rmt_addr = insert_rmt(db)
         register_reaction_rmt("evt.two", rmt_addr, {"a": "b"}, db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            with pytest.raises(Exception) as excinfo:
-                load_event_consumers(db, self._fake_loop())
+            consumers = load_event_consumers(db, self._fake_loop())
 
-        assert "COALESCE" in str(excinfo.value)
+        assert len(consumers) == 1
+        self._close_all(consumers)
 
-    def test_execute_slave_consumer_raises_coalesce_type_mismatch(self, db):
+    def test_loads_execute_slave_consumer(self, db):
         register_reaction_execute_slave("evt.three", "instr", "general", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            with pytest.raises(Exception) as excinfo:
-                load_event_consumers(db, self._fake_loop())
+            consumers = load_event_consumers(db, self._fake_loop())
 
-        assert "COALESCE" in str(excinfo.value)
+        assert len(consumers) == 1
+        self._close_all(consumers)
 
-    def test_mixed_consumers_raise_coalesce_type_mismatch(self, db):
+    def test_loads_multiple_mixed_consumers(self, db):
         rmt_addr = insert_rmt(db)
         create_result_via_event("evt.a", "x", db)
         register_reaction_rmt("evt.b", rmt_addr, {}, db)
         register_reaction_execute_slave("evt.c", "instr", "general", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            with pytest.raises(Exception) as excinfo:
-                load_event_consumers(db, self._fake_loop())
+            consumers = load_event_consumers(db, self._fake_loop())
 
-        assert "COALESCE" in str(excinfo.value)
+        assert len(consumers) == 3
+        self._close_all(consumers)
 
 
 # ----------------------------------------------------------------------
@@ -391,34 +410,113 @@ class TestFillResult:
 
 
 # ----------------------------------------------------------------------
-# events/event_consumers.py -- create_consumer dispatch
+# events/event_consumers.py -- consumer_outer dispatch
 # ----------------------------------------------------------------------
-class TestCreateConsumerDispatch:
+class FakeNatsMsg:
+    """Stand-in for a nats.aio.msg.Msg as consumed by consumer_outer."""
+    def __init__(self, subject: str, data: bytes):
+        self.subject = subject
+        self.data = data
+
+
+class FakeSubscription:
+    """Stand-in for what nt.subscribe(...) returns -- only .messages is used."""
+    def __init__(self, msgs: list[FakeNatsMsg]):
+        self._msgs = msgs
+
+    @property
+    async def messages(self):
+        for m in self._msgs:
+            yield m
+
+
+def _make_fake_nats_client(msgs: list[FakeNatsMsg]) -> AsyncMock:
+    nt = AsyncMock()
+    nt.subscribe = AsyncMock(return_value=FakeSubscription(msgs))
+    return nt
+
+
+class TestConsumerOuterDispatch:
     """
-    KNOWN SOURCE BUG: create_consumer does `match type(consumer_data): case
-    ConsumerCallRmt(): ...`. The class pattern `ConsumerCallRmt()` matches via
-    isinstance against the match *subject* -- but the subject here is
-    type(consumer_data), i.e. the class object itself, not the instance.
-    isinstance(ConsumerCallRmt, ConsumerCallRmt) is False (a class is not an
-    instance of itself), so every case falls through to `case _` regardless
-    of consumer_data's actual type. Fix: match consumer_data directly, not
-    type(consumer_data).
+    consumer_outer subscribes on NATS and, for each message, dispatches to the
+    matching consumer_inner (call_rmt / execute_slave / fill_result) via
+    loop.run_in_executor. These tests fake out the NATS subscription with one
+    message each, and patch run_in_executor to capture the (func, event,
+    consumer_data) it was called with -- without actually running the real
+    DB-touching consumer_inner or needing a real event loop's executor.
     """
 
-    def test_dispatch_call_rmt_currently_falls_through_to_unknown(self):
-        consumer_data = ConsumerCallRmt("p", "call_rmt", 1, {})
-        with pytest.raises(ValueError, match="Action type unknown"):
-            create_consumer(consumer_data, nt=MagicMock())
+    @pytest.mark.anyio
+    async def test_dispatches_call_rmt_to_call_rmt_inner(self):
+        consumer_data = ConsumerCallRmt("evt.rmt", "call_rmt", 1, {"a": "b"})
+        nt = _make_fake_nats_client([FakeNatsMsg("evt.rmt", b"payload")])
 
-    def test_dispatch_execute_slave_currently_falls_through_to_unknown(self):
-        consumer_data = ConsumerExecuteSlave("p", "execute_slave", "i", "general")
-        with pytest.raises(ValueError, match="Action type unknown"):
-            create_consumer(consumer_data, nt=MagicMock())
+        with patch("asyncio.get_running_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_get_loop.return_value = mock_loop
+            await consumer_outer(consumer_data, nt)
 
-    def test_dispatch_fill_result_currently_falls_through_to_unknown(self):
-        consumer_data = ConsumerFillResult("p", "fill_result", 1, "s")
-        with pytest.raises(ValueError, match="Action type unknown"):
-            create_consumer(consumer_data, nt=MagicMock())
+        mock_loop.run_in_executor.assert_called_once()
+        args = mock_loop.run_in_executor.call_args[0]
+        # (executor, func, event, consumer_data)
+        assert args[1] is call_rmt
+        assert args[3] is consumer_data
+
+    @pytest.mark.anyio
+    async def test_dispatches_execute_slave_to_execute_slave_inner(self):
+        consumer_data = ConsumerExecuteSlave("evt.slave", "execute_slave", "i", "general")
+        nt = _make_fake_nats_client([FakeNatsMsg("evt.slave", b"payload")])
+
+        with patch("asyncio.get_running_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_get_loop.return_value = mock_loop
+            await consumer_outer(consumer_data, nt)
+
+        mock_loop.run_in_executor.assert_called_once()
+        args = mock_loop.run_in_executor.call_args[0]
+        assert args[1] is execute_slave
+        assert args[3] is consumer_data
+
+    @pytest.mark.anyio
+    async def test_dispatches_fill_result_to_fill_result_inner(self):
+        consumer_data = ConsumerFillResult("evt.fill", "fill_result", 1, "s")
+        nt = _make_fake_nats_client([FakeNatsMsg("evt.fill", b"payload")])
+
+        with patch("asyncio.get_running_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_get_loop.return_value = mock_loop
+            await consumer_outer(consumer_data, nt)
+
+        mock_loop.run_in_executor.assert_called_once()
+        args = mock_loop.run_in_executor.call_args[0]
+        assert args[1] is fill_result
+        assert args[3] is consumer_data
+
+    @pytest.mark.anyio
+    async def test_dispatches_once_per_message(self):
+        consumer_data = ConsumerFillResult("evt.fill", "fill_result", 1, "s")
+        nt = _make_fake_nats_client([
+            FakeNatsMsg("evt.fill", b"one"),
+            FakeNatsMsg("evt.fill", b"two"),
+            FakeNatsMsg("evt.fill", b"three"),
+        ])
+
+        with patch("asyncio.get_running_loop") as mock_get_loop:
+            mock_loop = MagicMock()
+            mock_get_loop.return_value = mock_loop
+            await consumer_outer(consumer_data, nt)
+
+        assert mock_loop.run_in_executor.call_count == 3
+
+    @pytest.mark.anyio
+    async def test_subscribes_to_the_consumer_data_event_path(self):
+        consumer_data = ConsumerFillResult("evt.some.specific.path", "fill_result", 1, "s")
+        nt = _make_fake_nats_client([])
+
+        with patch("asyncio.get_running_loop"):
+            await consumer_outer(consumer_data, nt)
+
+        nt.subscribe.assert_awaited_once_with("evt.some.specific.path")
 
 
 # ----------------------------------------------------------------------
@@ -479,3 +577,4 @@ class TestEventSend:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

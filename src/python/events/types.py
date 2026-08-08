@@ -26,7 +26,7 @@ class Event:
     event_path: str
     payload: str
 
-    async def __init__(self,
+    def __init__(self,
                        event_path: str,
                        payload: str,
                        nt: Client

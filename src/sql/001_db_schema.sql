@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL, -- This the cronjob action name, not name of this exact cronjob instance.
     args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE,
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL, -- this is cronjob action name.
     args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
     last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch

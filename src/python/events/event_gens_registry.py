@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
 This file is the registry for the event recievers.
+
+YOU can write your event generators in any language and just wire them into the NATS server. 
+You should also simply document them in a knowledge item and thats it.
+Or you can of course write one in python and get the benefits of automatic integration,
+for the propable performance issues if there are way to many events, so you gotta be carefull.
 """
 
 from typing import AsyncGenerator, Callable, Coroutine

@@ -559,6 +559,7 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     SET status = 'paradox',
         status_inf = %s
     FROM slaves s
+        JOIN results r ON s.result_addr = s.addr
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
 

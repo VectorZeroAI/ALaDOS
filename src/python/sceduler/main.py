@@ -12,12 +12,14 @@ Tracks which tasks are already being executed, and executes all the other tasks.
 import threading
 
 from pydantic import TypeAdapter
+from traceback import format_exception
 
 from ..context.main import resolve_context
 from ..context.types import SlaveObj
 from ..executor.queue import executor_queue
 from ..executor.types import Instr
 from ..utils.conn_factory import Conn, conn_factory
+from ..utils.logger import log_json
 
 instr_json_validator = TypeAdapter(Instr)
 
@@ -62,7 +64,6 @@ def slave_addr_to_instr(slave_addr: int, conn: Conn) -> Instr:
 def new_slave_listener_thread():
     """ The sceduler thread that listens to Postgres telling it what slaves are unblocked, and sceduling them for execution."""
     conn = conn_factory()
-    qconn = conn_factory()
     try:
         conn.execute("LISTEN slaves_ready")
         print("sceduler_listener_thread_ready")
@@ -81,11 +82,15 @@ def new_slave_listener_thread():
             conn.close()
         except Exception:
             pass
-        try:
-            qconn.close()
-        except Exception:
-            pass
-    print("sceduler thread exited!")
+
+    log_json({
+        "type": "scheduler",
+        "subtype": "thread",
+        "status": "fatal",
+        "msg": "Scheduler thread exited for some reason!",
+        "backtrace": f"{format_exception(Exception("Backtrace"))}"
+    })
+    print("SCHEUDLER THREAD BROKE!!!")
                
 
 def setup() -> None:

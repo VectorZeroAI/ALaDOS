@@ -79,6 +79,7 @@ class GetSlaveState:
 @dataclass(slots=True)
 class ContextGetState:
     slave_addr: ReferenceTo
+    finish: bool
     tag: Literal[Cs.CONTEXT_GEN] = Cs.CONTEXT_GEN
 
 @dataclass(slots=True)
@@ -86,7 +87,7 @@ class ApiCallsState:
     str_instr: str
     instr: Instr
     occ_timestamp: datetime
-    finish: bool = False
+    finish: bool
     tag: Literal[Cs.API_CALLS] = Cs.API_CALLS
 
 @dataclass(slots=True)
@@ -94,8 +95,8 @@ class ExecuteState:
     tool_calls: ToolCallsBlock
     instr: Instr
     occ_timestamp: datetime
+    finish: bool
     error_count: int = 0
-    finish: bool = False
     tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
 
 @dataclass(slots=True)
@@ -103,6 +104,7 @@ class ContextShortState:
     slave_addr: ReferenceTo
     error: ContextLimitExceededError
     instr: Instr
+    finish: bool
     tag: Literal[Cs.CONTEXT_SHORTENING] = Cs.CONTEXT_SHORTENING
 
 @dataclass(slots=True)
@@ -110,6 +112,7 @@ class ParadoxState:
     paradox_e: ParadoxDetected
     instr: Instr
     time: datetime
+    finish: bool
     tag: Literal[Cs.PARADOX] = Cs.PARADOX
 
 @dataclass(slots=True)

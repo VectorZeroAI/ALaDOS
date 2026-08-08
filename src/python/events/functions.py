@@ -31,7 +31,7 @@ def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> Ref
     INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s, %s)
                  """, (event_consumers_addr, result_addr, result_str))
 
-    return event_consumers_addr
+    return result_addr
 
 
 def register_reaction_rmt(event_path: str, rmt_addr: ReferenceTo, args: dict[str, str], conn: Conn) -> ReferenceTo:

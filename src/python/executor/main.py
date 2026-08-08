@@ -309,7 +309,7 @@ Further documentation of the states inlined as docstrings in the match statement
             case ContextShortState():
                 curr = state
                 set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr, datetime.now()))
-                add_state(ContextGetState(curr.instr.slave_addr))
+                add_state(ContextGetState(curr.instr.slave_addr)) # FIXME : Potential bug: The finish isnt propagated but rather always set to true afterwards. 
                 """
                 This means that first it will execute the entire chain of the context shortening tool calls and API calls,
                 and then it will execute the normal path again from ContextGetState.
@@ -319,6 +319,8 @@ Further documentation of the states inlined as docstrings in the match statement
                 ## TODO : When reusable master templates are implemented
                 ## Turn this into a reusable master template
                 ## With all the required logic for a robust paradox resolver.
+
+                # FIXME : Potential bug: The finish isnt propagated but rather always set to true afterwards. 
 
                 curr = state
 

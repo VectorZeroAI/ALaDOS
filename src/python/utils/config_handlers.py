@@ -48,6 +48,8 @@ def load_apis_from_text(text: str) -> Sequence[Api]:
             url=i['url'],
             key=i['key'],
             model=i['model'],
+            claude=i.get('claude'),
+            max_tokens=i.get('max_tokens')
         ))
 
     return apis

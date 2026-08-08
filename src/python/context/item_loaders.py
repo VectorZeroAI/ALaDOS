@@ -49,7 +49,7 @@ def _logs_item_resolve(addr: int, conn: Conn) -> str:
         return f"DOES NOT EXIST@{addr}"
 
     result = "@".join((str(item[0]), f"{addr}", "log_item"))
-    result = "\n".join(("", "", result, str(item[1]), item[2], "", "", ""))
+    result = "\n".join(("", "", result, str(item[1]), str(item[2]), "", "", ""))
     return result
 
 

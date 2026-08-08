@@ -4,10 +4,11 @@ import re
 from copy import copy
 from dataclasses import asdict
 from typing import Sequence, get_args
+from traceback import format_exception
 
-from psycopg.errors import DataError
 from psycopg.types.json import Jsonb
 
+from ..utils.logger import log_json
 from ..executor.types import SlaveScope, SlaveScope_
 from ..types import ReferenceTo
 from ..utils.conn_factory import Conn
@@ -365,20 +366,13 @@ def activate_as_master(rmt_addr: ReferenceTo,
     """
 
     depends_on = list(depends_on)
-
-    for i in range(len(depends_on)):
-        if isinstance(depends_on[i], str):
-            name_tuple = conn.execute("SELECT resolve_name(%s);", (depends_on[i],)).fetchone()
-            if name_tuple is not None:
-                name = name_tuple[0]
-            else:
-                raise DataError("Provided name was not able to be resolved.")
-            depends_on[i] = name
+    
+    depends_on = resolve_to_addrs(depends_on, conn)
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
         SELECT new_addr();
-            """)
+                                            """)
 
         conn.execute("""
         INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
@@ -457,10 +451,14 @@ def activate_as_master(rmt_addr: ReferenceTo,
     if missing_keys:
         raise ValueError(f'Keys {missing_keys} are missing from inputs.')
 
-#    if redunant_keys:
-#        (f'Input keys {redundant_keys} found in inputs but not found in the template. Double check if this is the right template.')
-# NOTE : Propably log the thing, but logging should be implemented later.
-# TODO: ADD logging
+    if redundant_keys:
+        log_json({
+            'type': 'rmt',
+            "subtype": "activate_as_master function",
+            "status": "warning",
+            "msg": f"redundant keys found: {redundant_keys}.",
+            "backtrace": f"{format_exception(Exception())}"
+        })
 
     def replace_match(match):
         key = match.group(1)

@@ -6,9 +6,10 @@ This file is the registry for the event recievers.
 from typing import AsyncGenerator, Callable, Coroutine
 
 from ..events.types import Event
+from ..utils.logger import log_json
 
 EVENT_PRODUCERS: list[Coroutine[None, None, None]] = []
-EVENT_DOCS: list[str] = []
+EVENT_DOCS: str = ""
 
 def register_event_generator(name: str):
     """
@@ -19,11 +20,22 @@ def register_event_generator(name: str):
             async for event in func():
                 await event.send()
 
+        global EVENT_DOCS
+
         EVENT_PRODUCERS.append(producer())
-        EVENT_DOCS.append(func.__doc__ if func.__doc__ else '')
+        if func.__doc__ is None:
+            EVENT_DOCS = EVENT_DOCS + f"\n\n EVENT GENERATOR {func.__name__} DOESNT HAVE DOCUMENTATION"
+            log_json({
+                "type": "event",
+                "subtype": "event_gens",
+                "status": "warning",
+                "msg": f"EVENT GENERATOR {func.__name__} DOESNT HAVE DOCUMENTATION!!!"
+            })
+            return func
+
+        EVENT_DOCS = EVENT_DOCS + "\n\n" + func.__doc__
         return func
 
     return decorator
 
-EVENT_DOCS.__str__ = lambda: "\n\n".join(EVENT_DOCS) # Makes the print out nicer. 
 # TODO : make printout nicer in more places using this kind of technique.

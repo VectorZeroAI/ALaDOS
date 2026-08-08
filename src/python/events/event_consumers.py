@@ -15,6 +15,7 @@ Guide on how to add a new type of event consumer:
 
 import asyncio
 from typing import Callable, Coroutine
+import json
 
 from nats.aio.client import Client
 from psycopg.rows import TupleRow
@@ -51,8 +52,8 @@ def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[Ev
     event_consumers_fetch = conn.execute("""
     SELECT ec.event_path,
            ec.action_type,
-           COALESCE(evr.rmt_addr, evs.instruction, evfr.result_addr),
-           COALESCE(evr.args, evs.scope, evfr.result_str)
+           COALESCE(evr.rmt_addr::TEXT, evs.instruction, evfr.result_addr::TEXT),
+           COALESCE(evr.args::TEXT, evs.scope::TEXT, evfr.result_str)
     FROM event_consumers ec
         LEFT JOIN event_call_rmt evr ON ec.addr = evr.addr
         LEFT JOIN event_call_execute_slave evs ON ec.addr = evs.addr
@@ -83,15 +84,24 @@ def build_consumer_data(row: TupleRow) -> ConsumerData:
     match row[1]:
         case "call_rmt":
             return ConsumerCallRmt(
-                *[r for r in row] # NOTE : Make sure the order actually matches!
+                row[0],
+                row[1],
+                int(row[2]),
+                json.loads(row[3])
             )
         case 'execute_slave':
             return ConsumerExecuteSlave(
-                *[r for r in row]
+                row[0],
+                row[1],
+                row[2],
+                row[3]
             )
         case "fill_result":
             return ConsumerFillResult(
-                *[r for r in row]
+                row[0],
+                row[1],
+                int(row[2]),
+                row[3]
             )
         case _:
             raise ValueError(f"Unknown action type {row[1]}.")

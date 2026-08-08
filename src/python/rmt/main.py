@@ -4,14 +4,15 @@ import re
 from copy import copy
 from dataclasses import asdict
 from typing import Sequence, get_args
+from traceback import format_exception
 
-from psycopg.errors import DataError
 from psycopg.types.json import Jsonb
 
+from ..utils.logger import log_json
 from ..executor.types import SlaveScope, SlaveScope_
 from ..types import ReferenceTo
 from ..utils.conn_factory import Conn
-from ..utils.name_resolver import resolve_to_addrs
+from ..utils.name_resolver import resolve_to_addr, resolve_to_addrs
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from .dsl import parse, serialise
 
@@ -151,12 +152,8 @@ def create_from_range(
         ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
 
-    if isinstance(start_node_id, str):
-        try:
-            start_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (start_node_id,))
-            end_node_id = conn.execute_fetchval("SELECT resolve_name(%s);", (end_node_id,))
-        except Exception as e:
-            raise ValueError(f"NAME COULD NOT BE RESOLVED, MOST LIKELY. ERROR: {e}")
+    start_node_id = resolve_to_addr(start_node_id, conn)
+    end_node_id = resolve_to_addr(end_node_id, conn)
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
     backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
@@ -365,20 +362,13 @@ def activate_as_master(rmt_addr: ReferenceTo,
     """
 
     depends_on = list(depends_on)
-
-    for i in range(len(depends_on)):
-        if isinstance(depends_on[i], str):
-            name_tuple = conn.execute("SELECT resolve_name(%s);", (depends_on[i],)).fetchone()
-            if name_tuple is not None:
-                name = name_tuple[0]
-            else:
-                raise DataError("Provided name was not able to be resolved.")
-            depends_on[i] = name
+    
+    depends_on = resolve_to_addrs(depends_on, conn)
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
         SELECT new_addr();
-            """)
+                                            """)
 
         conn.execute("""
         INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
@@ -392,9 +382,10 @@ def activate_as_master(rmt_addr: ReferenceTo,
         SELECT result_addr FROM masters WHERE addr = %s;
                                       """, (master_addr,))
 
-    curr = conn.cursor()
+    required_by = resolve_to_addrs(required_by)
+
     if len(required_by) > 0:
-        curr.executemany("""
+        conn.executemany("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
                         """, [(i, master_result_addr) for i in required_by])
         
@@ -457,10 +448,14 @@ def activate_as_master(rmt_addr: ReferenceTo,
     if missing_keys:
         raise ValueError(f'Keys {missing_keys} are missing from inputs.')
 
-#    if redunant_keys:
-#        (f'Input keys {redundant_keys} found in inputs but not found in the template. Double check if this is the right template.')
-# NOTE : Propably log the thing, but logging should be implemented later.
-# TODO: ADD logging
+    if redundant_keys:
+        log_json({
+            'type': 'rmt',
+            "subtype": "activate_as_master function",
+            "status": "warning",
+            "msg": f"redundant keys found: {redundant_keys}.",
+            "backtrace": f"{format_exception(Exception())}"
+        })
 
     def replace_match(match):
         key = match.group(1)

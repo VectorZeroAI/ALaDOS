@@ -13,7 +13,7 @@ CREATE SEQUENCE IF NOT EXISTS vector_ops_position
 DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
-        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui', '_rmt');
+        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui');
     END IF;
 END;
 $$ LANGUAGE plpgsql;

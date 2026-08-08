@@ -13,6 +13,7 @@ from .interfaces.alados_console import start_console
 from .sceduler.main import setup as s_setup
 from .utils.conn_factory import conn_factory_raw
 from .utils.logger import startup as l_startup
+from .events.main import startup as ev_startup
 
 
 def main() -> None:
@@ -39,6 +40,7 @@ def main() -> None:
     e_startup()
     s_setup()
     l_startup()
+    ev_startup()
 
     print("startup of the server finished.")
 

@@ -322,6 +322,23 @@ class CreateAndReadKnowledge:
     ]
 
 
+class CheckNestedNewPaths:
+    steps = [
+        ExecutorStep(
+            instruction="Start wrongly.",
+            llm_responses=[
+                '[{"tool": "NOT EXISTS", "args": {}}]',
+                ## Then report a paradox inside of recovery.
+                '[{"tool": "K.report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
+                ## Now recover from paradox, and then recover from the tool error?
+                '[{"tool": "result.write", "args": {"text": "recovered paradox"}}]',
+                '[{"tool": "result.write", "args": {"text": "recovered tool_error"}}]',
+            ],
+            expected_content_contains="recovered tool_error" # check if the last recovery was executed as expected.
+        )
+    ]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 

@@ -222,13 +222,19 @@ class TestLoadEventConsumersQuery:
     These exercise the actual SQL join in load_event_consumers against a real DB,
     with connect_nats mocked out so no live NATS server is required.
 
-    NOTE: as of the last run, load_event_consumers's query aliases the
-    event_call_execute_slave join as `evs` but then references `evc.instruction`
-    in the COALESCE (should be `evs.instruction`), so every call currently
-    raises psycopg.errors.UndefinedTable. The tests below assert that specific
-    failure mode for now (test_query_has_alias_bug) so the suite fails loudly
-    and points at the exact bug, and mark the "should work" tests as xfail so
-    they auto-flip to passing once the alias is fixed -- no test edits needed.
+    KNOWN SOURCE BUG: the query's COALESCE(evr.rmt_addr, evs.instruction,
+    evfr.result_addr) mixes a bigint column (rmt_addr) with a text column
+    (instruction) in the same COALESCE. Postgres requires all COALESCE
+    branches to share a type, so this raises DatatypeMismatch any time a
+    matching row exists to actually evaluate the join. Fix needs to
+    restructure the query (e.g. separate queries per action_type, or cast
+    to a common type and reconstruct in Python) rather than a single
+    three-way COALESCE across differently-typed columns.
+
+    Below: the empty-table case genuinely passes today since the COALESCE
+    is never evaluated against a mismatched row. Every other case fails
+    and is asserted as failing, so this suite tells the truth about
+    current behavior with no xfail masking.
     """
 
     def _fake_loop(self):
@@ -236,76 +242,52 @@ class TestLoadEventConsumersQuery:
         loop.run_until_complete = MagicMock(return_value=MagicMock())
         return loop
 
-    def test_query_has_known_alias_bug(self, db):
-        """
-        Documents the current broken state: COALESCE references `evc` but only
-        `evs` is aliased for event_call_execute_slave. Fix in source: rename
-        evc.instruction -> evs.instruction (or alias the join as evc).
-        """
-        register_reaction_execute_slave("evt.alias_bug", "instr", "general", db)
+    def test_no_consumers_returns_empty_list(self, db):
+        """The only load_event_consumers case that currently works end-to-end."""
+        with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
+            consumers = load_event_consumers(db, self._fake_loop())
+
+        assert consumers == []
+
+    def test_fill_result_consumer_raises_coalesce_type_mismatch(self, db):
+        create_result_via_event("evt.one", "payload text", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
             with pytest.raises(Exception) as excinfo:
                 load_event_consumers(db, self._fake_loop())
 
-        assert "evc" in str(excinfo.value)
+        assert "COALESCE" in str(excinfo.value)
 
-    @pytest.mark.xfail(reason="load_event_consumers query references unaliased "
-                               "'evc' instead of 'evs' -- fails until source SQL is fixed",
-                        strict=False)
-    def test_loads_fill_result_consumer(self, db):
-        create_result_via_event("evt.one", "payload text", db)
-
-        with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            consumers = load_event_consumers(db, self._fake_loop())
-
-        assert len(consumers) == 1
-
-    @pytest.mark.xfail(reason="load_event_consumers query references unaliased "
-                               "'evc' instead of 'evs' -- fails until source SQL is fixed",
-                        strict=False)
-    def test_loads_call_rmt_consumer(self, db):
+    def test_call_rmt_consumer_raises_coalesce_type_mismatch(self, db):
         rmt_addr = insert_rmt(db)
         register_reaction_rmt("evt.two", rmt_addr, {"a": "b"}, db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            consumers = load_event_consumers(db, self._fake_loop())
+            with pytest.raises(Exception) as excinfo:
+                load_event_consumers(db, self._fake_loop())
 
-        assert len(consumers) == 1
+        assert "COALESCE" in str(excinfo.value)
 
-    @pytest.mark.xfail(reason="load_event_consumers query references unaliased "
-                               "'evc' instead of 'evs' -- fails until source SQL is fixed",
-                        strict=False)
-    def test_loads_execute_slave_consumer(self, db):
+    def test_execute_slave_consumer_raises_coalesce_type_mismatch(self, db):
         register_reaction_execute_slave("evt.three", "instr", "general", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            consumers = load_event_consumers(db, self._fake_loop())
+            with pytest.raises(Exception) as excinfo:
+                load_event_consumers(db, self._fake_loop())
 
-        assert len(consumers) == 1
+        assert "COALESCE" in str(excinfo.value)
 
-    @pytest.mark.xfail(reason="load_event_consumers query references unaliased "
-                               "'evc' instead of 'evs' -- fails until source SQL is fixed",
-                        strict=False)
-    def test_loads_multiple_mixed_consumers(self, db):
+    def test_mixed_consumers_raise_coalesce_type_mismatch(self, db):
         rmt_addr = insert_rmt(db)
         create_result_via_event("evt.a", "x", db)
         register_reaction_rmt("evt.b", rmt_addr, {}, db)
         register_reaction_execute_slave("evt.c", "instr", "general", db)
 
         with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            consumers = load_event_consumers(db, self._fake_loop())
+            with pytest.raises(Exception) as excinfo:
+                load_event_consumers(db, self._fake_loop())
 
-        assert len(consumers) == 3
-
-    @pytest.mark.xfail(reason="load_event_consumers query references unaliased "
-                               "'evc' instead of 'evs' -- fails until source SQL is fixed",
-                        strict=False)
-    def test_no_consumers_returns_empty_list(self, db):
-        with patch("python.events.event_consumers.connect_nats", new=AsyncMock()):
-            consumers = load_event_consumers(db, self._fake_loop())
-
-        assert consumers == []
+        assert "COALESCE" in str(excinfo.value)
 
 
 # ----------------------------------------------------------------------
@@ -413,44 +395,30 @@ class TestFillResult:
 # ----------------------------------------------------------------------
 class TestCreateConsumerDispatch:
     """
-    NOTE: as of the last run, all three of these fail with
-    "ValueError: Action type unknown" -- the `match type(consumer_data): case
-    ConsumerCallRmt(): ...` pattern in create_consumer is no longer matching
-    any of the Consumer* dataclasses. This wasn't the case when this test was
-    first written, so something changed on the source side (dataclass
-    structure, an isinstance-breaking change, a module reload / duplicate
-    class definition, etc).
-
-    Marked xfail(strict=False) for now rather than guessing at a fix blind --
-    flip these back to plain tests once the dispatch is working again.
+    KNOWN SOURCE BUG: create_consumer does `match type(consumer_data): case
+    ConsumerCallRmt(): ...`. The class pattern `ConsumerCallRmt()` matches via
+    isinstance against the match *subject* -- but the subject here is
+    type(consumer_data), i.e. the class object itself, not the instance.
+    isinstance(ConsumerCallRmt, ConsumerCallRmt) is False (a class is not an
+    instance of itself), so every case falls through to `case _` regardless
+    of consumer_data's actual type. Fix: match consumer_data directly, not
+    type(consumer_data).
     """
 
-    @pytest.mark.xfail(reason="create_consumer's match/case no longer matches "
-                               "Consumer* dataclasses -- see class docstring",
-                        strict=False)
-    def test_dispatches_call_rmt(self):
+    def test_dispatch_call_rmt_currently_falls_through_to_unknown(self):
         consumer_data = ConsumerCallRmt("p", "call_rmt", 1, {})
-        coro = create_consumer(consumer_data, nt=MagicMock())
-        assert coro is not None
-        coro.close()  # avoid "coroutine was never awaited" warning
+        with pytest.raises(ValueError, match="Action type unknown"):
+            create_consumer(consumer_data, nt=MagicMock())
 
-    @pytest.mark.xfail(reason="create_consumer's match/case no longer matches "
-                               "Consumer* dataclasses -- see class docstring",
-                        strict=False)
-    def test_dispatches_execute_slave(self):
+    def test_dispatch_execute_slave_currently_falls_through_to_unknown(self):
         consumer_data = ConsumerExecuteSlave("p", "execute_slave", "i", "general")
-        coro = create_consumer(consumer_data, nt=MagicMock())
-        assert coro is not None
-        coro.close()
+        with pytest.raises(ValueError, match="Action type unknown"):
+            create_consumer(consumer_data, nt=MagicMock())
 
-    @pytest.mark.xfail(reason="create_consumer's match/case no longer matches "
-                               "Consumer* dataclasses -- see class docstring",
-                        strict=False)
-    def test_dispatches_fill_result(self):
+    def test_dispatch_fill_result_currently_falls_through_to_unknown(self):
         consumer_data = ConsumerFillResult("p", "fill_result", 1, "s")
-        coro = create_consumer(consumer_data, nt=MagicMock())
-        assert coro is not None
-        coro.close()
+        with pytest.raises(ValueError, match="Action type unknown"):
+            create_consumer(consumer_data, nt=MagicMock())
 
 
 # ----------------------------------------------------------------------
@@ -511,4 +479,3 @@ class TestEventSend:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

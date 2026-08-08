@@ -14,7 +14,7 @@ Guide on how to add a new type of event consumer:
 """
 
 import asyncio
-from typing import Callable, Coroutine
+from typing import Callable, Coroutine, TypeAlias, Union
 import json
 
 from nats.aio.client import Client
@@ -70,7 +70,7 @@ def load_event_consumers(conn: Conn, loop: asyncio.AbstractEventLoop) -> list[Ev
         consumer = build_consumer_data(consumer_raw)
 
         result.append(
-            create_consumer(consumer, nt)
+            consumer_outer(consumer, nt)
         )
 
     return result
@@ -87,7 +87,7 @@ def build_consumer_data(row: TupleRow) -> ConsumerData:
                 row[0],
                 row[1],
                 int(row[2]),
-                json.loads(row[3])
+                row[3]
             )
         case 'execute_slave':
             return ConsumerExecuteSlave(
@@ -107,19 +107,32 @@ def build_consumer_data(row: TupleRow) -> ConsumerData:
             raise ValueError(f"Unknown action type {row[1]}.")
 
 
-async def consumer_outer(consumer_inner: Callable[[Event, ConsumerData], None],
-                         consumer_data: ConsumerData,
+async def consumer_outer(consumer_data: ConsumerData,
                          nt: Client) -> None:
     sub = await nt.subscribe(consumer_data.event_path)
     loop = asyncio.get_running_loop()
+
+
     async for event in sub.messages:
         event = Event(event.subject, event.data.decode(), nt)
-        loop.run_in_executor(None, consumer_inner, event, consumer_data)
+
+        match consumer_data:
+            case ConsumerExecuteSlave():
+                loop.run_in_executor(None, execute_slave, event, consumer_data)
+            case ConsumerCallRmt():
+                loop.run_in_executor(None, call_rmt, event, consumer_data)
+            case ConsumerFillResult():
+                loop.run_in_executor(None, fill_result, event, consumer_data)
+            case _:
+                raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
+
         log_json({
             'type': 'event',
             'subtype': 'consumer',
             'event_path': consumer_data.action_type
         })
+
+
 
 def call_rmt(event: Event, consumer_data: ConsumerCallRmt) -> None:
     conn = conn_factory()
@@ -128,6 +141,8 @@ def call_rmt(event: Event, consumer_data: ConsumerCallRmt) -> None:
     with conn.transaction():
         activate_as_master(consumer_data.rmt_id, conn, inputs=consumer_data.args)
     conn.close()
+
+
 
 def execute_slave(event: Event, consumer_data: ConsumerExecuteSlave) -> None:
     conn = conn_factory()
@@ -142,6 +157,8 @@ def execute_slave(event: Event, consumer_data: ConsumerExecuteSlave) -> None:
                      """, (instruction, consumer_data.scope))
     conn.close() # TODO: Read psycopg docs on how to close connections correctly.
 
+
+
 def fill_result(event: Event, consumer_data: ConsumerFillResult) -> None:
     conn = conn_factory()
 
@@ -155,23 +172,4 @@ def fill_result(event: Event, consumer_data: ConsumerFillResult) -> None:
                      """, (result_str, consumer_data.result_addr))
 
     conn.close()
-
-
-def create_consumer(consumer_data: ConsumerData, nt: Client) -> Coroutine[None, None, None]:
-    """
-    Higher order function that constructs the coroutine of the consumer
-    from the respective consumer_inner action, which is one of the functions above, and consumer outer.
-    """
-    match type(consumer_data):
-        case ConsumerExecuteSlave():
-            consumer_inner = execute_slave
-        case ConsumerCallRmt():
-            consumer_inner = call_rmt
-        case ConsumerFillResult():
-            consumer_inner = fill_result
-        case _:
-            raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
-    return consumer_outer(consumer_inner, consumer_data, nt)
-
-
 

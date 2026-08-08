@@ -24,8 +24,6 @@ from python.rmt.main import (
 from python.utils.conn_factory import (
     Conn,
     register_all_the_composite_types,
-    _execute_fetchval,
-    _execute_many,
 )
 
 # -------------------------------------------------------------------
@@ -37,12 +35,9 @@ DB_HOST = "/data/data/com.termux/files/usr/tmp"
 
 def conn_factory_test() -> Conn:
     """Create a Conn connected to the test DB, with autocommit off."""
-    conn_raw = psycopg.connect(host=DB_HOST, dbname=DB_NAME)
+    conn_raw = Conn.connect(host=DB_HOST, dbname=DB_NAME)
     conn_raw.autocommit = False          # we use explicit transactions
     conn = register_all_the_composite_types(conn_raw)
-    conn = cast(Conn, conn)
-    conn.execute_fetchval = types.MethodType(_execute_fetchval, conn)
-    conn.executemany = types.MethodType(_execute_many, conn)
 
     return conn
 

@@ -8,28 +8,45 @@ A style I would want to enforce with rmts:
     please report it as a bug and cite this place here as proof that its a bug.
 """
 
-import os
-from typing import Any, Literal, Mapping, Sequence, TypeAlias, get_args
-
-from numpy import ndarray
-from functools import partial
-import psycopg
-from psycopg.types.json import Jsonb
-from python.utils.conn_factory import NoValue
-from python.utils.name_resolver import resolve_to_addr, resolve_to_addrs
-from python.utils.occ_functions import occ_check, update_timestamp
-from .execute_tool import register_tool
-import subprocess
 import json
-from .embedder import embedder
-from .types import _ExecToolMetaData, ReferenceTo, SlaveScope
-from .exceptions import ParadoxDetected
-from .cronjobs.types import CronjobActions, Cronjob
-from .cronjobs.parser import insert_cronjob
-from .comms.searxng import SearxngSearcher
+import os
+import subprocess
+from functools import partial
+from typing import Any, Literal, Sequence, TypeAlias, get_args
+
+import httpx
+import psycopg
+from numpy import ndarray
+from psycopg.types.json import Jsonb
+
+from ..rmt.main import (
+    activate_as_master,
+    change_scope,
+    create_from_master,
+    create_from_range,
+    create_from_serial,
+    delete_node,
+    edit_instruction,
+    insert_node,
+    serialize,
+)
+from ..utils.conn_factory import NoValue
+from ..utils.name_resolver import resolve_self, resolve_to_addr, resolve_to_addrs
+from ..utils.occ_functions import occ_check, update_timestamp
+from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
+from ..events.functions import (
+    create_result_via_event,
+    register_reaction_execute_slave,
+    register_reaction_rmt
+)
 from .comms import httpsystem
-from ..utils.sr_edit import _sr_block_parser, SearchAndReplaceBlock
-from ..rmt.main import activate_as_master, change_scope, create_from_range, create_from_serial, delete_node, edit_instruction, insert_node, serialize, create_from_master
+from .comms.searxng import SearxngSearcher
+from .cronjobs.parser import insert_cronjob
+from .cronjobs.types import Cronjob, CronjobActions
+from .embedder import embedder
+from .exceptions import ParadoxDetected
+from .execute_tool import register_tool
+from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
 Name: TypeAlias = str
@@ -58,8 +75,8 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
     INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s);
                  """, (addr, description))
 
-    if name is not None:
-        conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr,name))
+    if name:
+        conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s);", (addr, name))
 
     _meta._embedder_queue.put(addr)
 
@@ -158,13 +175,16 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     env = os.environ.copy()
     env["KWARGS"] = json.dumps(kwargs)
     
-    result = subprocess.run(["python3"],
-                                 input=body,
-                                 capture_output=True,
-                                 text=True,
-                                 timeout=timeout,
-                                 env=env
-                                 )
+    try:
+        result = subprocess.run(["python3"],
+                                     input=body,
+                                     capture_output=True,
+                                     text=True,
+                                     timeout=timeout,
+                                     env=env
+                                     )
+    except subprocess.TimeoutExpired as e:
+        return f"Tool timed out. Error msg: {e}."
 
     return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
 
@@ -320,17 +340,14 @@ def add_slave(instruction: str,
 
     required_results_addrs = []
 
-    for i in required_results_ids:
-        if i == 'self':
-            self_addr = conn.execute_fetchval("SELECT result_addr FROM slaves WHERE addr = %s", (_meta.slave_id,))
-            required_results_addrs.append(self_addr)
-        else:
-            required_results_addrs.append(i)
-
-    required_results_addrs = resolve_to_addrs(required_results_addrs, conn)
-
+    required_results_addrs = resolve_to_addrs(
+        resolve_self(_meta.slave_id, required_results_ids, conn),
+        conn
+    )
+    
     if slave_type == "planner":
-        return add_replanner_slave(_meta) # NOTE: Dont remove this, the AI will continue to fuck this up forever
+        """ This is here as a fallback for a fairly common AI hallucination. Dont remove. """
+        return add_replanner_slave(_meta)
 
     conn.execute("""
     SELECT new_slave(
@@ -544,6 +561,9 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     FROM slaves s
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
+
+    # FIXME: The paradox label is never removed. That is wrong after the fact of handling it.
+
     raise ParadoxDetected(paradox, items)
 
 
@@ -649,14 +669,14 @@ def web_request(url: str,
                 _meta: _ExecToolMetaData,
                 timeout: int = 10,
                 return_type: Literal['extracted', 'raw'] = 'extracted',
-                headers: Sequence[Mapping[str, str]] = []) -> ActionConfirmation:
+                headers: dict[str, str] = {}) -> ActionConfirmation:
     """
     The GET http request onto the url.
     return_type specifies what you wish to get from that url.
     Extracted means only meaningfull content, and raw means raw response content as string. 
     """
     
-    result = httpsystem.get(url, headers, timeout) 
+    result = httpsystem.get(url, httpx.Headers(headers), timeout)
 
     return f"<website> content = [{result['text'] if return_type == "extracted" else result['content_raw']}], url = [{result["url"]}], status_code = [{result['status_code']}] </website>"
 
@@ -668,7 +688,7 @@ def web_post(url: str,
              _meta: _ExecToolMetaData,
              timeout: int = 10,
              return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
-             headers: Sequence[Mapping[str, str]] = [],
+             headers: dict[str, str] = {},
              payload: str = ""
              ) -> ActionConfirmation:
     """
@@ -677,7 +697,7 @@ def web_post(url: str,
     Extracted means only meaningfull content, raw means raw response content as string, status_means means no content, only status code.
     """
 
-    result = httpsystem.post(url, headers, payload, timeout)
+    result = httpsystem.post(url, httpx.Headers(headers), payload, timeout)
 
     match return_type:
         case 'status_code':
@@ -696,10 +716,15 @@ def create_master(instruction: str,
                   result_name: str|None = None
                   ) -> ActionConfirmation:
     """
-    Creates a master goal, with the given instruction, depending on given results, outputting a given results name.
+    Creates a master goal,
+    with the given instruction,
+    depending on given results, outputting a given results name.
+    Can use "self" to specify the currently executed slave as one of the required_ids.
     """
 
     conn = _meta.conn
+
+    required_ids = resolve_self(_meta.slave_id, required_ids, conn)
 
     required_addrs = resolve_to_addrs(required_ids, conn)
 
@@ -856,11 +881,11 @@ def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_
     addr = resolve_to_addr(rmt_slave_id, conn)
     template_addr = resolve_to_addr(template_id, conn)
     
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, template_addr, conn))
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, template_addr, conn))
 
     delete_node(addr, conn, concatenate)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Deleted node {rmt_slave_id if isinstance(rmt_slave_id, str) else 'No name'}@{addr} from the rmt."
 
@@ -906,6 +931,8 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
     conn = _meta.conn
     addr = resolve_to_addr(rmt_id, conn)
 
+    depends_on = resolve_self(_meta.slave_id, depends_on, conn)
+
     activate_as_master(addr, conn, depends_on, required_by, inputs)
 
     return f"Activated rmt {rmt_id} as master, with depends_on = {depends_on} and required_by = {required_by}"
@@ -919,11 +946,15 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
     
     addr = resolve_to_addr(node_id, conn)
 
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+    template_addr = conn.execute_fetchval("""
+    SELECT template_addr FROM rmt_slaves WHERE addr = %s;
+                                          """, (addr, ))
+
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, addr, conn))
 
     edit_instruction(addr, sr_block, conn)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Edited instruction of rmt slave {node_id if isinstance(node_id, str) else 'No name'}@{addr}"
 
@@ -936,10 +967,82 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
 
     addr = resolve_to_addr(node_id, conn)
 
-    occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
+
+    template_addr = conn.execute_fetchval("""
+    SELECT template_addr FROM rmt_slaves WHERE addr = %s;
+                                          """, (addr, ))
+
+    occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, addr, conn))
 
     change_scope(addr, new_scope, conn)
 
-    update_timestamp(addr, conn)
+    update_timestamp(template_addr, conn)
 
     return f"Updated instruction of rmt node {node_id}"
+
+
+
+@register_tool("event.register_reaction.rmt", ['task'])
+def tool_register_event_reaction_rmt(_meta: _ExecToolMetaData,
+                                event_path: str,
+                                rmt_id: Addr|Name,
+                                args: dict[str, str]) -> ActionConfirmation:
+    """
+    Executes an RMT as a callback to the given event.
+    "data" and "subject" arguments will be provided additionaly at event arrival time, and filled out with events payload and events full event_path respectfully.
+    The event_path provided to the tool is a NATS event subscribtion string.
+    """
+    conn = _meta.conn
+
+    addr = resolve_to_addr(rmt_id, conn)
+
+    register_reaction_rmt(event_path, addr, args, conn)
+
+    return f"Registered callback of rmt {rmt_id if isinstance(rmt_id, str) else 'No name'}@{addr} for event {event_path}."
+
+
+
+@register_tool("event.register_reaction.slave", ['task'])
+def tool_register_event_reaction_execute_slave(
+        _meta: _ExecToolMetaData,
+        event_path: str, ## TODO : Add handler name option or smt.
+        instruction: str, 
+        scope: SlaveScope
+        ) -> ActionConfirmation:
+    """
+    Creates a callback slave for the given event path, with the given instruction and given scope. 
+    Slaves instruction will have strings ${{data}} and ${{subject}} replaced with the events payload and event path respectfully. 
+    The event_path you provide into the tool is NATS event subscribtion string,
+    which means the actuall full event type will nearly never be the same you wrote into there.
+    """
+    conn = _meta.conn
+
+    register_reaction_execute_slave(event_path, instruction, scope, conn)
+
+    return f"Registered callback of slave for event  {event_path} with scope {scope}."
+
+
+
+@register_tool("event.create_result", ['task'])
+def tool_create_result_via_event(
+        _meta: _ExecToolMetaData,
+        event_path: str, 
+        result_str: str,
+        name: str|None = None
+        ) -> ActionConfirmation:
+    """
+    Creates a result that will be filled out with the event.
+    The keys ${{data}} and ${{event}} in the result string will be replaced via the events payload and full event path.
+    Event path you provide as an argument is NATS event subscribtion string,
+    which means it will nearly never be exactly the same as the actual event path.
+    """
+    conn = _meta.conn
+    
+    addr = create_result_via_event(event_path, result_str, conn)
+    
+    if name:
+        conn.execute("""
+        INSERT INTO names(addr, name) VALUES(%s, %s);
+                     """, (addr, name))
+    
+    return f"Created result {name if name is not None else "No Name"}@{addr} as result of an event."

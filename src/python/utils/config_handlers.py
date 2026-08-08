@@ -3,7 +3,17 @@
 from typing import Iterable, Sequence
 import tomllib
 
+from ..utils.config_dir_resolver import config_dir_resolver
+
 from ..executor.types import Api
+from ..events.types import EventsConfig
+
+class ConfigurationError(Exception):
+    def __init__(self, *e: str):
+        self.e = "\n".join(e)
+
+    def __str__(self) -> str:
+        return self.e
 
 
 def load_apis(file_path: str) -> Sequence[Api]:
@@ -41,3 +51,11 @@ def load_apis_from_text(text: str) -> Sequence[Api]:
         ))
 
     return apis
+
+
+def load_events_config() -> EventsConfig:
+    """ Loads the events config from the dedicated file. """
+    config_raw = tomllib.loads((config_dir_resolver() / 'events.toml').read_text())
+    return EventsConfig(
+        filesystem_watch_dirs=config_raw.get('filesystem', {}).get('watch_dirs', ['~'])
+    )

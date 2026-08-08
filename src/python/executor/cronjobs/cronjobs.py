@@ -7,5 +7,5 @@ from .cronjob_registry import register_cronjob
 def do_this_later(**kwargs):
     conn = conn_factory()
     conn.execute("""
-SELECT new_slave(NULL, %s);
+    SELECT new_slave(NULL, %s);
                  """, (f"Perform the following actions: '{kwargs.get('ai_instruction')}'",))

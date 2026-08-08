@@ -103,7 +103,7 @@ class ContextShortState:
     slave_addr: ReferenceTo
     error: ContextLimitExceededError
     instr: Instr
-    tag: Literal[Cs.EXECUTE] = Cs.EXECUTE
+    tag: Literal[Cs.CONTEXT_SHORTENING] = Cs.CONTEXT_SHORTENING
 
 @dataclass(slots=True)
 class ParadoxState:

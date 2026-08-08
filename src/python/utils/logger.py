@@ -4,25 +4,13 @@ from ..utils.uqueue import Uqueue
 from psycopg.types.json import Jsonb
 import threading
 import time
-import json
 
 global _log_conn
 
 _logger_queue = Uqueue[dict]()
 
-def _sanitize_for_json(obj):
-    try:
-        json.dumps(obj)
-        return obj
-    except TypeError:
-        if isinstance(obj, dict):
-            return {k: _sanitize_for_json(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [_sanitize_for_json(i) for i in obj]
-        return "NOT JSON SERIALIZABLE"
-
-def log_json(content: dict) -> None:
-    _logger_queue.put(_sanitize_for_json(content))
+def log_json(content: dict[str, str]) -> None:
+    _logger_queue.put(content)
 
 def _logger_thread() -> None:
     while True:
@@ -44,7 +32,7 @@ def _logger_thread() -> None:
         _log_curr.close()
 
 
-def startup():
+def startup() -> None:
     global _log_conn
     _log_conn = conn_factory()
 

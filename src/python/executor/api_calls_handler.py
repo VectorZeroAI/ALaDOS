@@ -5,6 +5,8 @@ import tomllib
 import httpx
 import time
 
+from python.interrupts.main import InterruptInvokation
+
 from ..executor.exceptions import ContextLimitExceededError
 from ..executor.types import Api
 from ..utils.logger import log_json
@@ -74,7 +76,7 @@ def api_calls_block(api_specs: Sequence[Api], checkpoint: Callable, prompt: str)
 
         checkpoint()
         for _ in range(config['cores_number']):
-            global_interrupt_queue.put('WAIT')
+            global_interrupt_queue.put(InterruptInvokation("WAIT"))
             log_json({
                 'type': 'api',
                 'status': 'error',

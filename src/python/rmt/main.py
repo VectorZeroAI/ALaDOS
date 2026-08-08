@@ -160,21 +160,21 @@ def create_from_range(
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
     backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
-    print(f"forwards_nodes: {forwards_nodes}")
-    print(f"backwards nodes: {backwards_nodes}")
+#    print(f"forwards_nodes: {forwards_nodes}")
+#    print(f"backwards nodes: {backwards_nodes}")
 
     forwards_nodes = [r for r in forwards_nodes]
     backwards_nodes = [r for r in backwards_nodes]
 
-    print(f"forwards_nodes as list: {forwards_nodes}")
-    print(f"backwards nodes as list: {backwards_nodes}")
+#    print(f"forwards_nodes as list: {forwards_nodes}")
+#    print(f"backwards nodes as list: {backwards_nodes}")
 
     forwards_nodes = set(forwards_nodes)
     backwards_nodes = set(backwards_nodes)
 
     intersection: set[int] = forwards_nodes & backwards_nodes # NOTE : This weird sign here is doing the intersection detection work.
-    print("intersection addresses:", intersection )
-    print("intersection as list: ", [ a for a in intersection])
+#    print("intersection addresses:", intersection )
+#    print("intersection as list: ", [ a for a in intersection])
 
     if len(intersection) < 2:
         raise ValueError("Items do not intersect!")
@@ -203,14 +203,14 @@ def create_from_range(
     
     slaves_deps = {}
 
-    print(f"Deps fetch : {deps}")
+#    print(f"Deps fetch : {deps}")
 
     for s in slaves:
-        print(f"initing slaves_deps[{s[ADDR]}]")
+#        print(f"initing slaves_deps[{s[ADDR]}]")
         slaves_deps[s[ADDR]] = []
 
     for d in deps:
-        print(f"sorting {d[0]} to {d[1]}")
+#        print(f"sorting {d[0]} to {d[1]}")
         slaves_deps[d[1]].append(d[0])
 
     slaves = [[i for i in s] for s in slaves]
@@ -219,20 +219,20 @@ def create_from_range(
     INSERT INTO reusable_master_templates DEFAULT VALUES RETURNING addr;
                  """)
 
-    print(f"slaves: {slaves}")
+#    print(f"slaves: {slaves}")
     for s in slaves:
         new_addr = conn.execute_fetchval("SELECT new_addr();")
-        print(f"new_addr: {new_addr}", f"slave: {s}")
-        print(f"slaves_deps.values : {slaves_deps.values()}, slave_deps.items : {slaves_deps.items()}")
+#        print(f"new_addr: {new_addr}", f"slave: {s}")
+#        print(f"slaves_deps.values : {slaves_deps.values()}, slave_deps.items : {slaves_deps.items()}")
         for k, sd in slaves_deps.items():
-            print(f"sd: {sd}, k: {k}")
+#            print(f"sd: {sd}, k: {k}")
             for indx, d in enumerate(sd):
-                print(f"indx, d: {indx}, {d}")
+#                print(f"indx, d: {indx}, {d}")
                 if d == s[ADDR]:
-                    print(f"replacing {d}, wich is {s[ADDR]} with {new_addr}")
+#                    print(f"replacing {d}, wich is {s[ADDR]} with {new_addr}")
                     slaves_deps[k][indx] = new_addr
 
-        print(f"reasigning deps from {s[ADDR]} to {new_addr}")
+#        print(f"reasigning deps from {s[ADDR]} to {new_addr}")
         slaves_deps[new_addr] = slaves_deps.get(s[ADDR])
         s[ADDR] = new_addr
     
@@ -273,11 +273,11 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
     """
     
     with conn.transaction():
-        reqired_by = conn.execute("""
+        required_by = conn.execute("""
         SELECT addr FROM rmt_slaves WHERE %s = ANY(deps);
                                   """, (node_id,)).fetchall()
 
-        reqired_by = [r[0] for r in reqired_by]
+        required_by = [r[0] for r in required_by]
 
         if concatenate:
             requirements = conn.execute_fetchval("""
@@ -287,13 +287,19 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
                 requirements = []
 
             
-            for i in reqired_by:
-                for j in requirements:
-                    conn.execute("""
-                        UPDATE rmt_slaves
-                            SET deps = array_append(deps, %s)
-                        WHERE addr = %s
-                                 """, (j, i))
+            conn.execute("""
+                UPDATE rmt_slaves
+                    SET deps = array_cat(
+                        COALESCE(deps, ARRAY[]::BIGINT[]),
+                        (
+                            SELECT array_agg(DISTINCT requirement)
+                            FROM unnest(%s) AS required_by, unnest(%s) AS requirement
+                            WHERE required_by = rmt_slaves.addr
+                                AND requirement <> ALL(COALESCE(deps, ARRAY[]::BIGINT[]))
+                        )
+                    )
+                WHERE addr = ANY(%s)
+                         """, (required_by, requirements, required_by))
 
         conn.execute("""
         DELETE FROM addrs WHERE addr = %s
@@ -304,7 +310,7 @@ def delete_node(node_id: ReferenceTo, conn: Conn, concatenate: bool = True) -> N
             UPDATE rmt_slaves
                 SET deps = array_remove(deps, %s)
             WHERE addr = ANY(%s)
-                     """, (node_id, reqired_by))
+                     """, (node_id, required_by))
 
 
 
@@ -371,15 +377,15 @@ def activate_as_master(rmt_addr: ReferenceTo,
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
-            SELECT new_addr();
-                                            """)
+        SELECT new_addr();
+            """)
 
         conn.execute("""
-    INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
+        INSERT INTO names(name, addr) VALUES('_rmt_activation'||nextval('global_rmt_activation_serial'), %s)
                      """, (master_addr,))
 
         conn.execute("""
-    SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
+        SELECT new_master(p_instruction := 'NONE'::TEXT, req_addrs := %s::BIGINT[], p_addr := %s::BIGINT); 
                      """, (depends_on, master_addr))
 
     master_result_addr = conn.execute_fetchval("""
@@ -387,7 +393,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
                                       """, (master_addr,))
 
     curr = conn.cursor()
-    if len(required_by) < 1:
+    if len(required_by) > 0:
         curr.executemany("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
                         """, [(i, master_result_addr) for i in required_by])

@@ -88,25 +88,6 @@ CREATE TABLE IF NOT EXISTS executables (
     body TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
-CREATE TABLE IF NOT EXISTS vector_ops(
-    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_rmt BIGINT REFERENCES reusable_master_template(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr BIGINT GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
-    description TEXT NOT NULL,
-    position NUMERIC UNIQUE NOT NULL,
-    updated_at TIMESTAMP DEFAULT NOW(),
-    type TEXT GENERATED ALWAYS AS (CASE
-        WHEN addr_exe IS NOT NULL THEN 'executable'
-        WHEN addr_k IS NOT NULL THEN 'knowledge'
-        WHEN addr_rmt IS NOT NULL THEN 'rmt'
-    END) VIRTUAL,
-    emb vector(768),
-    CONSTRAINT an_addr_exists_vector_ops_check CHECK (
-        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NONE
-    )
-    PRIMARY KEY (addr)
-);
 
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -229,26 +210,6 @@ CREATE TABLE IF NOT EXISTS master_req (
     PRIMARY KEY (master_addr, req_addr)
 );
 
-CREATE OR REPLACE VIEW addrs_tables AS
-    SELECT addr, 'knowledge' AS type FROM knowledge
-    UNION ALL
-    SELECT addr, 'executables' AS type FROM executables
-    UNION ALL
-    SELECT addr, 'logs' AS type FROM logs
-    UNION ALL
-    SELECT addr, 'masters' AS type FROM masters
-    UNION ALL
-    SELECT addr, 'slaves' AS type FROM slaves
-    UNION ALL
-    SELECT addr, 'results' AS type FROM results
-    UNION ALL
-    SELECT addr, 'reusable_master_templates' AS type FROM reusable_master_templates
-    UNION ALL
-    SELECT addr, 'rmt_slaves' AS type FROM rmt_slaves
-    UNION ALL
-    SELECT addr, 'cronjob_once' AS type FROM cronjob_once
-    UNION ALL
-    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;
 
 CREATE TABLE IF NOT EXISTS cronjob_once(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
@@ -318,3 +279,83 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
             ON UPDATE CASCADE,
     deps BIGINT[]
 );
+
+DO $$
+    BEGIN
+        IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'event_consumers_action_types') THEN
+            CREATE TYPE event_consumers_action_types AS ENUM('call_rmt', 'execute_slave', 'fill_result');
+        END IF;
+    END;
+$$;
+
+CREATE TABLE IF NOT EXISTS event_consumers(
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    event_path TEXT NOT NULL,
+    action_type event_consumers_action_types NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_call_rmt(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    rmt_addr BIGINT REFERENCES reusable_master_templates(addr) NOT NULL,
+    args JSONB
+);
+
+CREATE TABLE IF NOT EXISTS event_call_execute_slave(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    instruction TEXT NOT NULL,
+    scope slave_scope
+);
+
+CREATE TABLE IF NOT EXISTS event_call_fill_result(
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    result_addr BIGINT NOT NULL REFERENCES results(addr),
+    result_str TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vector_ops(
+    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_rmt BIGINT REFERENCES reusable_master_templates(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt)) STORED,
+    description TEXT NOT NULL,
+    position NUMERIC UNIQUE NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    type TEXT GENERATED ALWAYS AS (CASE
+        WHEN addr_exe IS NOT NULL THEN 'executable'
+        WHEN addr_k IS NOT NULL THEN 'knowledge'
+        WHEN addr_rmt IS NOT NULL THEN 'rmt'
+    END) VIRTUAL,
+    emb vector(768),
+    CONSTRAINT an_addr_exists_vector_ops_check CHECK (
+        COALESCE(addr_exe, addr_k, addr_rmt) IS NOT NULL
+    )
+);
+
+CREATE OR REPLACE VIEW addrs_tables AS
+    SELECT addr, 'knowledge' AS type FROM knowledge
+    UNION ALL
+    SELECT addr, 'executables' AS type FROM executables
+    UNION ALL
+    SELECT addr, 'logs' AS type FROM logs
+    UNION ALL
+    SELECT addr, 'masters' AS type FROM masters
+    UNION ALL
+    SELECT addr, 'slaves' AS type FROM slaves
+    UNION ALL
+    SELECT addr, 'results' AS type FROM results
+    UNION ALL
+    SELECT addr, 'reusable_master_templates' AS type FROM reusable_master_templates
+    UNION ALL
+    SELECT addr, 'rmt_slaves' AS type FROM rmt_slaves
+    UNION ALL
+    SELECT addr, 'cronjob_once' AS type FROM cronjob_once
+    UNION ALL
+    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;

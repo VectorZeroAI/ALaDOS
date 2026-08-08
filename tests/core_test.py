@@ -1,391 +1,342 @@
 #!/usr/bin/env python3
 """
-Integration tests for ALaDOS system.
-Requires a local PostgreSQL instance with database 'alados' accessible without a password
-(host=127.0.0.1, port=5432). The application will be started as a subprocess and
-tested end‑to‑end.
+My core testing framework.
+Uses a decorator to turn classes with steps: list[ExecutorStep] into actual tests
+and runs them against actual executor thread. 
+
+Usage doc:
+    ExecutorStep fields are self explanatory.
+    Multiple LLM outputs are allowed when required, as that property is a list of strings.
+    Each Step is its own Slave to be executed.
+    Each class is its own test case to be executed. 
+    You are not required to name classes with Test...
+    DB is cleared between classes, e.g. test cases, not between individual Steps. 
+
+!!! RUN THE SQL AT THE BOTTOM AGAINST THE alados_test DB YOURSELF ELSE EVERYTHING TIMES OUT. !!!
 """
 
-import subprocess
-import time
 import threading
 import queue
-import sys
-import os
-from pathlib import Path
+import time
+import dataclasses
+from typing import List, Optional, Callable
 
+import flask
+import httpx
 import psycopg
 import pytest
+import uuid
 
-# ----------------------------------------------------------------------
-# Helper: wait until the server prints a specific startup message
-# ----------------------------------------------------------------------
-def _wait_for_startup(proc, timeout=30):
-    """Read lines from proc.stdout until the startup message appears."""
-    deadline = time.time() + timeout
-    for line in proc.stdout:
-        if "startup of the server finished." in line:
-            return True
-        if time.time() > deadline:
-            return False
-    return False
+#  --  System modules  -------------------------------------------------
+from python.executor.main import core as executor_core
+from python.executor.queue import executor_queue
+from python.executor.types import Api
+from python.sceduler.main import setup as scheduler_setup
+from python.utils.conn_factory import (
+    Conn,
+    register_all_the_composite_types
+)
 
-
-# ----------------------------------------------------------------------
-# Output capturing for subprocess stdout/stderr (non-blocking)
-# ----------------------------------------------------------------------
-def _start_output_capture(proc):
-    """Spawn threads that drain stdout and stderr into queues."""
-    out_q = queue.Queue()
-    err_q = queue.Queue()
-
-    def _enqueue_output(stream, q):
-        for line in stream:
-            q.put(line)
-        stream.close()
-
-    threading.Thread(target=_enqueue_output, args=(proc.stdout, out_q), daemon=True).start()
-    threading.Thread(target=_enqueue_output, args=(proc.stderr, err_q), daemon=True).start()
-    return out_q, err_q
+#  --  Database configuration  ----------------------------------------
+DB_HOST = "/data/data/com.termux/files/usr/tmp"
+DB_NAME = "alados_test"
 
 
-# ----------------------------------------------------------------------
-# Fixture: start the application (module scope – shared across tests)
-# ----------------------------------------------------------------------
-@pytest.fixture(scope="module")
-def app_process():
-    """Launch the ALaDOS server and wait until it is ready."""
-
-    env = os.environ.copy()
-
-    cmd = "alados_start"
-
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.DEVNULL,    # prevent console waiting for input
-        text=True,
-        bufsize=1,                   # line‑buffered
-        env=env,
-    )
-
-    out_q, err_q = _start_output_capture(proc)
-
-    # Wait for the startup signal
-    if not _wait_for_startup(proc, timeout=30):
-        # Dump captured output to help debugging
-        sys.stdout.write("\n--- Captured stdout during startup ---\n")
-        while not out_q.empty():
-            sys.stdout.write(out_q.get_nowait())
-        sys.stdout.write("\n--- Captured stderr during startup ---\n")
-        while not err_q.empty():
-            sys.stdout.write(err_q.get_nowait())
-        proc.terminate()
-        proc.wait()
-        pytest.fail("Server did not start in time")
-
-    # Store the queues so we can access them later (in case of failures)
-    proc._out_q = out_q
-    proc._err_q = err_q
-
-    yield proc
-
-    # Teardown: terminate the server
-    proc.terminate()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-
-
-# ----------------------------------------------------------------------
-# Fixture: fresh database connection for test helpers
-# ----------------------------------------------------------------------
-@pytest.fixture
-def db_conn():
-    """Return a psycopg connection to the test database."""
-    conn = psycopg.connect(host="127.0.0.1", port=5432, dbname="alados_test")
+def _test_conn_factory_raw():
+    conn = Conn.connect(host=DB_HOST, dbname=DB_NAME)
     conn.autocommit = True
     return conn
 
 
-# ----------------------------------------------------------------------
-# Helper to wait for all slaves of a master to become ready
-# ----------------------------------------------------------------------
-def _wait_for_master(conn, master_addr, timeout=120):
-    """Poll until every slave of the given master has result.ready=True."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        cur = conn.execute(
-            """
-            SELECT bool_and(r.ready)
-            FROM slaves s
-            JOIN results r ON r.addr = s.result_addr
-            WHERE s.master_addr = %s
-            """,
-            (master_addr,),
+def _test_conn_factory():
+    raw = _test_conn_factory_raw()
+    conn = register_all_the_composite_types(raw)
+    return conn
+
+
+#  --  Monkey‑patch all modules that use conn_factory  ----------------
+def _patch_connection_factories():
+    import python.executor.main as executor_main
+    import python.sceduler.main as scheduler_main
+    import python.utils.logger as logger_mod
+    executor_main.conn_factory = _test_conn_factory
+    scheduler_main.conn_factory = _test_conn_factory
+    logger_mod.conn_factory = _test_conn_factory
+    import python.utils.conn_factory as conn_mod
+    conn_mod.conn_factory_raw = _test_conn_factory_raw
+
+
+#  --  Flask LLM mock  ------------------------------------------------
+class LLMMockServer:
+    def __init__(self):
+        self.app = flask.Flask(__name__)
+        self.response_queue = queue.Queue()
+        self._setup_routes()
+
+    def _setup_routes(self):
+        @self.app.route("/v1/chat/completions", methods=["POST"])
+        def chat_completions():
+            try:
+                content = self.response_queue.get(timeout=30)
+            except queue.Empty:
+                return flask.jsonify({"error": "No mock response left"}), 500
+            return flask.jsonify({"choices": [{"message": {"content": content}}]})
+
+    def start(self, port: int = 8001) -> int:
+        self.thread = threading.Thread(
+            target=self.app.run,
+            kwargs={"port": port, "debug": False, "use_reloader": False},
+            daemon=True,
         )
-        all_ready = cur.fetchone()[0]
-        if all_ready:
-            return True
-        time.sleep(0.5)
-    return False
+        self.thread.start()
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                httpx.get(f"http://127.0.0.1:{port}/", timeout=0.2)
+                break
+            except httpx.RequestError:
+                time.sleep(0.1)
+        self.port = port
+        return self.port
+
+    def put_response(self, json_string: str):
+        self.response_queue.put(json_string)
 
 
-# ----------------------------------------------------------------------
-# Helper to dump captured subprocess output on test failure
-# ----------------------------------------------------------------------
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    """Capture test outcome to add subprocess output on failure."""
-    outcome = yield
-    rep = outcome.get_result()
-    if rep.when == "call" and rep.failed:
-        # Access the app_process fixture if it was used in the test
-        if "app_process" in item.funcargs:
-            proc = item.funcargs["app_process"]
-            out_q = getattr(proc, "_out_q", None)
-            err_q = getattr(proc, "_err_q", None)
-            if out_q or err_q:
-                sys.stdout.write("\n========== Subprocess output on failure ==========\n")
-                sys.stdout.write("--- stdout (last ~100 lines) ---\n")
-                lines = []
-                if out_q:
-                    while not out_q.empty():
-                        lines.append(out_q.get_nowait())
-                    sys.stdout.write("".join(lines[-100:]))
-                sys.stdout.write("\n--- stderr (last ~100 lines) ---\n")
-                lines = []
-                if err_q:
-                    while not err_q.empty():
-                        lines.append(err_q.get_nowait())
-                    sys.stdout.write("".join(lines[-100:]))
-                sys.stdout.write("==================================================\n")
+#  --  Helper: wait for result using LISTEN/NOTIFY  -------------------
+def wait_for_result(db_conn: Conn, result_addr: int, timeout: float = 10.0):
+    """
+    Block until the given result is marked ready.
+    Uses the 'result_ready' notification channel.
+    """
+    # We need a separate connection for listening because
+    # psycopg can't listen on a connection that's also doing other work.
+    with psycopg.connect(host=DB_HOST, dbname=DB_NAME) as listen_conn:
+        listen_conn.autocommit = True
+        listen_conn.execute("LISTEN result_ready")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for notify in listen_conn.notifies(timeout=9):
+                if notify.payload == str(result_addr):
+                    return
+        raise TimeoutError(f"Result {result_addr} not ready within {timeout}s")
 
 
-# ======================================================================
-#                          Actual test cases
-# ======================================================================
-
-def test_simple_instruction(app_process, db_conn):
-    """A trivial task: the LLM should just produce a result."""
-    master_addr = db_conn.execute(
-        "SELECT new_master('Say hello world')"
-    ).fetchone()[0]
-
-    completed = _wait_for_master(db_conn, master_addr, timeout=60)
-    assert completed, f"Master {master_addr} did not complete in time"
-
-    # Optionally check the final master result
-    result_addr = db_conn.execute(
-        "SELECT result_addr FROM masters WHERE addr = %s", (master_addr,)
-    ).fetchone()[0]
-    content = db_conn.execute(
-        "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
-    ).fetchone()[0]
-    assert content is not None and len(content) > 0, "Master result is empty"
+#  --  Declarative test step  -----------------------------------------
+@dataclasses.dataclass
+class ExecutorStep:
+    """One step of an executor test scenario."""
+    instruction: str
+    llm_responses: List[str]                    # will be queued in order
+    expected_content_contains: Optional[str] = None
+    expected_status: Optional[str] = None
+    expected_knowledge_count: Optional[int] = None  # example of a DB assertion
 
 
-def test_create_and_read_knowledge(app_process, db_conn):
-    """The AI must create a knowledge item and then read it."""
-    master_addr = db_conn.execute(
-        "SELECT new_master('Create a knowledge item with content \"The moon is made of cheese\" and description \"fun fact about moon\", then read it back.')"
-    ).fetchone()[0]
+#  --  Decorator that turns a step class into a pytest test class  ----
+def executor_test(cls):
+    """
+    Decorator that reads the `steps` class variable and creates a
+    parametrized pytest test class. Each step is run in order.
+    """
+    # We'll create a new class that inherits from object so pytest discovers it.
+    class TestWrapper:
+        @pytest.fixture(autouse=True)
+        def _setup(self, global_setup, clean_database):
+            self.mock = global_setup          # the LLMMockServer instance
+            self.db = _test_conn_factory()    # fresh connection for the test
 
-    assert _wait_for_master(db_conn, master_addr, timeout=120), "Master did not finish"
+        @pytest.mark.parametrize("step", cls.steps, ids=lambda s: s.instruction)
+        def test_step(self, step):
+            # Enqueue responses for this step
+            for resp in step.llm_responses:
+                self.mock.put_response(resp)
 
-    # Verify that at least one slave created the item and another read it
-    slave_count = db_conn.execute(
-        "SELECT count(*) FROM slaves WHERE master_addr = %s", (master_addr,)
-    ).fetchone()[0]
-    assert slave_count >= 2, "Expected at least two slaves (create + read)"
+            # Create a slave with no dependencies (easy to test)
+            slave_addr = self.db.execute_fetchval(
+                "SELECT new_slave(NULL, %s, NULL, NULL, NULL, NULL, NULL, 'general')",
+                (step.instruction,),
+            )
+            result_addr = self.db.execute_fetchval(
+                "SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,)
+            )
 
+            # Wait for the executor to process it
+            wait_for_result(self.db, result_addr)
 
-def test_context_window_landing(app_process, db_conn):
-    """Test semantic landing of the viewing window."""
-    # Create some items first, then ask to land
-    db_conn.execute(
-        "SELECT new_master('Create three knowledge items about different fruits.')"
-    ).fetchone()[0]
-    # Wait for that master to finish? Not necessary; the next task will trigger later.
-    # Better: create items directly via SQL
-    for fruit, content in [("apple", "Apples are red and juicy."),
-                           ("banana", "Bananas are yellow and curved."),
-                           ("orange", "Oranges are citrus fruits.")]:
-        addr = db_conn.execute("SELECT new_addr()").fetchone()[0]
-        db_conn.execute(
-            "INSERT INTO knowledge (addr, content) VALUES (%s, %s)",
-            (addr, content),
-        )
-        db_conn.execute(
-            "INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s)",
-            (addr, f"Information about {fruit}"),
-        )
+            # Run the user‑specified assertions
+            if step.expected_content_contains is not None:
+                content = self.db.execute_fetchval(
+                    "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
+                )
+                assert step.expected_content_contains in content, (
+                    f"Expected '{step.expected_content_contains}' in result, "
+                    f"got: {content}"
+                )
 
-    master_addr = db_conn.execute(
-        "SELECT new_master('Land the context window on the item about bananas.')"
-    ).fetchone()[0]
+            if step.expected_status is not None:
+                status = self.db.execute_fetchval(
+                    "SELECT status FROM results WHERE addr = %s", (result_addr,)
+                )
+                assert status == step.expected_status, (
+                    f"Expected status '{step.expected_status}', got '{status}'"
+                )
 
-    assert _wait_for_master(db_conn, master_addr, timeout=60)
-    # Ensure the window anchor changed (check master_context)
-    anchor = db_conn.execute(
-        """
-        SELECT window_anchor_knowledge FROM master_context WHERE addr = %s
-        """,
-        (master_addr,),
-    ).fetchone()[0]
-    assert anchor is not None, "Window anchor was not set"
+            if step.expected_knowledge_count is not None:
+                cnt = self.db.execute_fetchval("SELECT count(*) FROM knowledge")
+                assert cnt == step.expected_knowledge_count, (
+                    f"Expected {step.expected_knowledge_count} knowledge items, "
+                    f"found {cnt}"
+                )
 
+    # Give the wrapper a nice name for pytest output
+    TestWrapper.__name__ = "Test" + cls.__name__
+    TestWrapper.__qualname__ = "Test" + cls.__qualname__
+    
+    globals()[TestWrapper.__name__] = TestWrapper
+    globals()[TestWrapper.__qualname__] = TestWrapper
 
-def test_tool_execution(app_process, db_conn):
-    """The AI should be able to execute an existing tool."""
-    # Create a tool manually
-    tool_addr = db_conn.execute("SELECT new_addr()").fetchone()[0]
-    db_conn.execute(
-        "INSERT INTO executables (addr, header, body) VALUES (%s, %s, %s)",
-        (tool_addr, "get_greeting -> str", "print('Hello from test tool')"),
-    )
-    db_conn.execute(
-        "INSERT INTO vector_ops (addr_exe, description) VALUES (%s, %s)",
-        (tool_addr, "A simple tool that prints a greeting"),
-    )
-
-    master_addr = db_conn.execute(
-        "SELECT new_master('Execute the tool \"get_greeting\".')"
-    ).fetchone()[0]
-
-    assert _wait_for_master(db_conn, master_addr, timeout=90)
+    return TestWrapper
 
 
-def test_paradox_detection(app_process, db_conn):
-    """Check that the system handles paradoxal information."""
-    # Create two conflicting knowledge items
-    addr1 = db_conn.execute("SELECT new_addr()").fetchone()[0]
-    addr2 = db_conn.execute("SELECT new_addr()").fetchone()[0]
-    db_conn.execute(
-        "INSERT INTO knowledge (addr, content) VALUES (%s, %s)",
-        (addr1, "The Earth is flat."),
-    )
-    db_conn.execute(
-        "INSERT INTO knowledge (addr, content) VALUES (%s, %s)",
-        (addr2, "The Earth is round."),
-    )
-    db_conn.execute(
-        "INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s)",
-        (addr1, "flat Earth claim"),
-    )
-    db_conn.execute(
-        "INSERT INTO vector_ops (addr_k, description) VALUES (%s, %s)",
-        (addr2, "round Earth claim"),
+#  --  Session‑scoped fixture for the executor and mock server  -------
+@pytest.fixture(scope="session", autouse=True)
+def global_setup():
+    """Patch factories, start scheduler and executor with mock API."""
+    _patch_connection_factories()
+
+    mock_llm = LLMMockServer()
+    port = mock_llm.start()
+    api = Api(
+        url=f"http://127.0.0.1:{port}/v1/chat/completions",
+        key="test",
+        model="mock",
+        max_tokens=8000,
     )
 
-    master_addr = db_conn.execute(
-        "SELECT new_master('You are given two contradictory items. Report the paradox using the appropriate tool.')"
-    ).fetchone()[0]
+    scheduler_setup()
+    threading.Thread(
+        target=executor_core, args=(executor_queue, [api]), daemon=True
+    ).start()
 
-    # Even if the master “fails” because of the paradox, the system should not crash.
-    # We’ll just check that it completes without an unexpected exception.
-    assert _wait_for_master(db_conn, master_addr, timeout=120) or True
-    # Verify that at least one slave has status 'paradox' or 'error'
-    paradox_exists = db_conn.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1 FROM results
-            WHERE addr IN (SELECT result_addr FROM slaves WHERE master_addr = %s)
-              AND (status = 'paradox' OR status = 'error')
-        )
-        """,
-        (master_addr,),
-    ).fetchone()[0]
-    assert paradox_exists, "Expected at least one slave to report a paradox"
+    # Clean database once at the start of the session
+    conn = _test_conn_factory()
+    _clean_database(conn)
+    conn.close()
+
+    yield mock_llm
 
 
-def test_error_recovery(app_process, db_conn):
-    """Test that the system recovers from a failed tool call."""
-    master_addr = db_conn.execute(
-        "SELECT new_master('Try to edit a non-existent knowledge item with addr 99999. Then handle the error and explain what happened.')"
-    ).fetchone()[0]
-
-    assert _wait_for_master(db_conn, master_addr, timeout=120)
-    # Check that the master result contains some explanation
-    result_addr = db_conn.execute(
-        "SELECT result_addr FROM masters WHERE addr = %s", (master_addr,)
-    ).fetchone()[0]
-    content = db_conn.execute(
-        "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
-    ).fetchone()[0]
-    assert content and "error" not in content.lower(), "Master result should not be blank"
+@pytest.fixture(autouse=True, scope="class")
+def clean_database():
+    """Clean tables before each test function."""
+    conn = _test_conn_factory()
+    _clean_database(conn)
+    conn.close()
 
 
-def test_multiple_slaves_dependency(app_process, db_conn):
-    """A task with multiple dependent slaves should execute in correct order."""
-    master_addr = db_conn.execute(
-        "SELECT new_master('First, create a knowledge item. Second, read that item. Third, write a summary of it.')"
-    ).fetchone()[0]
-
-    assert _wait_for_master(db_conn, master_addr, timeout=180)
-    # Check that there are at least three slaves
-    slave_count = db_conn.execute(
-        "SELECT count(*) FROM slaves WHERE master_addr = %s", (master_addr,)
-    ).fetchone()[0]
-    assert slave_count >= 3, "Expected at least three slaves"
-
-
-def test_webui_session_creation(app_process, db_conn):
-    """A WebUI session should be created and the first AI response generated."""
-    # This test creates a session as a normal user would, by calling the SQL function directly
-    session_name = db_conn.execute(
-        "SELECT create_session('Hello AI, can you help me?', 'You are a helpful assistant.')"
-    ).fetchone()[0]
-
-    # Wait a bit for the AI to respond
-    time.sleep(5)
-
-    # Check that an AI message result exists and is ready
-    ai_result = db_conn.execute(
-        """
-        SELECT content_str FROM results
-        WHERE metadata->>'type' = 'ai_message'
-          AND metadata->>'session_name' = %s
-          AND ready = TRUE
-        ORDER BY (metadata->>'turn')::int DESC LIMIT 1
-        """,
-        (session_name,),
-    ).fetchone()
-    assert ai_result is not None, "AI did not respond to the first message"
-    assert len(ai_result[0]) > 0
+def _clean_database(conn: Conn):
+    tables = [
+        "master_req", "slave_req", "master_load", "master_context",
+        "rmt_slaves", "reusable_master_templates",
+        "slaves", "masters", "results", "names", "vector_ops",
+        "executables", "knowledge", "logs", "addrs",
+        "cronjob_once", "cronjob_loop",
+        "event_consumers", "event_call_rmt", "event_call_execute_slave",
+        "event_call_fill_result",
+    ]
+    with conn.transaction():
+        for t in tables:
+            try:
+                conn.execute(f"DELETE FROM {t} CASCADE")  # pyright: ignore
+            except Exception:
+                pass
+        conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
 
 
-def test_cronjob_do_this_later(app_process, db_conn):
-    """Test that a 'do_this_later' cronjob is executed after a delay."""
-    # Insert a cronjob that runs once after 5 seconds
-    db_conn.execute(
-        """
-        INSERT INTO cronjob_once (name, start_after, args)
-        VALUES ('ai_perform_action_later', %s, '{"ai_instruction": "create a knowledge item with content ''cronjob success'' and description ''cronjob test''"}'::jsonb)
-        """,
-        (time.time() + 10,),  # give enough time for the test to wait
-    )
+#  ======================================================================
+#  Example test cases – just add classes like these
+#  ======================================================================
 
-    # Wait for the cronjob to execute (up to 30 seconds)
-    deadline = time.time() + 30
-    found_item = False
-    while time.time() < deadline:
-        cur = db_conn.execute(
-            "SELECT 1 FROM knowledge WHERE content = 'cronjob success'"
-        )
-        if cur.fetchone():
-            found_item = True
-            break
-        time.sleep(1)
-
-    assert found_item, "Cronjob did not create the expected knowledge item"
+@executor_test
+class BasicExecution:
+    steps = [
+        ExecutorStep(
+            instruction="Write 'Hello World'",
+            llm_responses=['[{"tool": "result.write", "args": {"text": "Hello World"}}]'],
+            expected_content_contains="Hello World",
+        ),
+    ]
 
 
-# ----------------------------------------------------------------------
-# Run configuration: add a marker for slow integration tests
-# ----------------------------------------------------------------------
+@executor_test
+class ParadoxHandling:
+    steps = [
+        ExecutorStep(
+            instruction="Report a paradox",
+            llm_responses=[
+                '[{"tool": "K.report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
+                '[{"tool": "result.write", "args": {"text": "Assume handled."}}]',
+                '[{"tool": "result.write", "args": {"text": "DONE!"}}]'
+            ],
+            expected_content_contains="DONE!"
+        ),
+    ]
+
+
+@executor_test
+class ErrorRecovery:
+    steps = [
+        ExecutorStep(
+            instruction="Fail then recover",
+            llm_responses=[
+                '[{"tool": "nonexistent.tool", "args": {}}]',
+                '[{"tool": "result.write", "args": {"text": "recovered"}}]',
+            ],
+            expected_content_contains="recovered",
+        ),
+    ]
+
+name = str(uuid.uuid4())
+print(f"NAME = {name}")
+
+@executor_test
+class CreateAndReadKnowledge:
+    steps = [
+        ExecutorStep(
+            instruction="Create a knowledge item",
+            llm_responses=[
+                '[{"tool": "K.create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
+            ],
+            expected_knowledge_count=1,
+        ),
+        ExecutorStep(
+            instruction="Read that knowledge item (simulate read by checking we can find it)",
+            llm_responses=[
+                '[{"tool": "K.read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
+            ],
+            expected_content_contains="moon is cheese",
+        ),
+    ]
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-m", "not slow"])
+    pytest.main([__file__, "-v"])
+
+"""
+CREATE OR REPLACE FUNCTION notify_result_ready()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.ready AND NOT OLD.ready THEN
+        PERFORM pg_notify('result_ready', NEW.addr::TEXT);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_result_ready
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+"""

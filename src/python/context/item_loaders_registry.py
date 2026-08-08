@@ -9,7 +9,7 @@ ItemLoader: TypeAlias = Callable[[ReferenceTo, Conn], str]
 
 ITEMS_LOADERS: dict[str, ItemLoader] = {}
 
-def register_item_loader(tablename: str):
+def register_item_loader(tablename: str) -> Callable[[ItemLoader], ItemLoader]:
     """
     The decorator to register the Item Loader for a given tablename.
     """
@@ -21,3 +21,5 @@ def register_item_loader(tablename: str):
 def load_item(addr: ReferenceTo, tablename: str, conn: Conn) -> str:
     """ Dynamic load dispatcher for tablename and addr loading. """
     return ITEMS_LOADERS[tablename](addr, conn)
+
+from . import item_loaders as _oergnsorbgwsoureg # pyright: ignore # noqa

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
+from os import name
 from traceback import format_exception
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from python.executor.types import Conn
 from python.types import ReferenceTo
@@ -61,3 +62,19 @@ def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str], conn: Conn) -> 
     int_deps.extend(addrs)
 
     return int_deps 
+
+def resolve_self(slave_addr: ReferenceTo, names_and_addrs: Sequence[str|ReferenceTo], conn: Conn) -> list[str|ReferenceTo]:
+    """
+    Resolved the "self" string in the input list to the slaves result address, slave address required.
+    Later possibly will be expanded to include self_master as well.
+
+    Resolves the slaves result addr automatically from the given addr.
+    """
+    result_addr = conn.execute_fetchval("SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,))
+
+    names_and_addrs = list(names_and_addrs)
+    for i in range(len(names_and_addrs)):
+        if names_and_addrs[i] == "self":
+            names_and_addrs[i] = result_addr
+    
+    return names_and_addrs

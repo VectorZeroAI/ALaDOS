@@ -14,8 +14,6 @@ Guide on how to add a new type of event consumer:
 """
 
 import asyncio
-from typing import Callable, Coroutine, TypeAlias, Union
-import json
 
 from nats.aio.client import Client
 from psycopg.rows import TupleRow

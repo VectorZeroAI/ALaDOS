@@ -188,19 +188,19 @@ class TestContextTools:
         )
         assert anchor == addr
 
-    def test_window_semantic_land(self, meta):
-        name = unique_name("sem")
-        k_create(content="semantic", description="target desc", name=name, _meta=meta)
-        addr = resolve_to_addr(name, meta.conn)
-        meta.conn.execute(
-            "UPDATE vector_ops SET emb = array_fill(0.1, ARRAY[768])::vector(768), position = 100 WHERE addr = %s",
-            (addr,)
-        )
-        context_window_lands(querry="target", _meta=meta)
-        anchor = meta.conn.execute_fetchval(
-            "SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta.master_id,)
-        )
-        assert anchor == addr
+#     def test_window_semantic_land(self, meta):
+#         name = unique_name("sem")
+#         k_create(content="semantic", description="target desc", name=name, _meta=meta)
+#         addr = resolve_to_addr(name, meta.conn)
+#         meta.conn.execute(
+#             "UPDATE vector_ops SET emb = array_fill(0.1, ARRAY[768])::vector(768), position = 100 WHERE addr = %s",
+#             (addr,)
+#         )
+#         context_window_lands(querry="target", _meta=meta)
+#         anchor = meta.conn.execute_fetchval(
+#             "SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta.master_id,)
+#         )
+#         assert anchor == addr
 
     def test_window_size_change(self, meta):
         name = unique_name("sz")

@@ -13,7 +13,7 @@ CREATE SEQUENCE IF NOT EXISTS vector_ops_position
 DO $$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'slave_scope') THEN
-        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui', '_rmt');
+        CREATE TYPE slave_scope AS ENUM('all', 'general', 'context', 'task', 'communication', '_webui');
     END IF;
 END;
 $$ LANGUAGE plpgsql;
@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL, -- This the cronjob action name, not name of this exact cronjob instance.
     args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
     finished BOOLEAN NOT NULL DEFAULT FALSE,
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS cronjob_loop(
         REFERENCES addrs(addr)
             ON DELETE CASCADE
             ON UPDATE CASCADE,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL, -- this is cronjob action name.
     args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
     last_ran INTEGER NOT NULL DEFAULT 0, -- unix epoch

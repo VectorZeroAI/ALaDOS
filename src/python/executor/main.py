@@ -98,7 +98,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     'message': str(e),
                     'state': str(state.tag)
                 })
-                return ('', ContextShortState(instr.slave_addr, e, instr))
+                return ('', ContextShortState(instr.slave_addr, e, instr, False))
             except Exception as e:
                 print(f"FATAL ERROR {e}, TRACEBACK: {traceback.format_exception(e)}")
                 log_json({
@@ -133,7 +133,7 @@ Further documentation of the states inlined as docstrings in the match statement
             case GetSlaveState():
                 """ This is just the state of awaiting next task. """
                 slave_addr = queue.get()
-                set_next_state(ContextGetState(slave_addr))
+                set_next_state(ContextGetState(slave_addr, True))
 
             case ContextGetState():
                 """
@@ -232,7 +232,7 @@ Further documentation of the states inlined as docstrings in the match statement
 
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
-                            set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now()))
+                            set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now(), curr.finish))
                             break
 
                         except Exception as e:
@@ -308,8 +308,15 @@ Further documentation of the states inlined as docstrings in the match statement
 
             case ContextShortState():
                 curr = state
-                set_next_state(ApiCallsState(prepare_context_shortening_prompt(curr.error, conn, curr.instr), curr.instr, datetime.now()))
-                add_state(ContextGetState(curr.instr.slave_addr))
+                set_next_state(
+                        ApiCallsState(
+                            prepare_context_shortening_prompt(curr.error, conn, curr.instr),
+                            curr.instr,
+                            occ_timestamp=datetime.now(),
+                            finish=False
+                        )
+                )
+                add_state(ContextGetState(curr.instr.slave_addr, curr.finish))
                 """
                 This means that first it will execute the entire chain of the context shortening tool calls and API calls,
                 and then it will execute the normal path again from ContextGetState.
@@ -338,8 +345,15 @@ Further documentation of the states inlined as docstrings in the match statement
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """
 
-                set_next_state(ApiCallsState(prompt, curr.instr, curr.time))
-                add_state(ContextGetState(curr.instr.slave_addr))
+                set_next_state(
+                    ApiCallsState(
+                        prompt,
+                        curr.instr,
+                        curr.time,
+                        False
+                    )
+                )
+                add_state(ContextGetState(curr.instr.slave_addr, curr.finish))
 
             case ErrorState():
                 curr = state

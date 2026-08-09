@@ -559,6 +559,7 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     SET status = 'paradox',
         status_inf = %s
     FROM slaves s
+        JOIN results r ON s.result_addr = s.addr
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
 
@@ -1038,11 +1039,14 @@ def tool_create_result_via_event(
     """
     conn = _meta.conn
     
-    addr = create_result_via_event(event_path, result_str, conn)
+    event_consumer = create_result_via_event(event_path, result_str, conn)
     
     if name:
         conn.execute("""
         INSERT INTO names(addr, name) VALUES(%s, %s);
-                     """, (addr, name))
+                     """, (event_consumer.result_addr, name))
     
-    return f"Created result {name if name is not None else "No Name"}@{addr} as result of an event."
+    return f"Created result {name if name is not None else "No Name"}@{event_consumer.result_addr} as result of an event."
+
+
+

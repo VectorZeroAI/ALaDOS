@@ -116,11 +116,11 @@ async def consumer_outer(consumer_data: ConsumerData,
 
         match consumer_data:
             case ConsumerExecuteSlave():
-                loop.run_in_executor(None, execute_slave, event, consumer_data)
+                await loop.run_in_executor(None, execute_slave, event, consumer_data)
             case ConsumerCallRmt():
-                loop.run_in_executor(None, call_rmt, event, consumer_data)
+                await loop.run_in_executor(None, call_rmt, event, consumer_data)
             case ConsumerFillResult():
-                loop.run_in_executor(None, fill_result, event, consumer_data)
+                await loop.run_in_executor(None, fill_result, event, consumer_data)
             case _:
                 raise ValueError(f"Action type unknown. Action type {consumer_data.action_type} is not found.")
 

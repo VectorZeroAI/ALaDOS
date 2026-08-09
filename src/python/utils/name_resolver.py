@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from os import name
 from traceback import format_exception
 from typing import Iterable, Sequence
 
@@ -8,6 +7,7 @@ from python.executor.types import Conn
 from python.types import ReferenceTo
 
 from .logger import log_json
+
 
 def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:
     """

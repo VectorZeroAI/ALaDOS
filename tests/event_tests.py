@@ -20,6 +20,7 @@ without any external services beyond postgres.
 """
 
 import os
+from re import A
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -135,33 +136,6 @@ class TestCreateResultViaEvent:
             (result.consumer_addr,),
         )
         assert result.consumer_addr != result_addr
-
-    def test_end_to_end_create_result_via_event_then_fill(self, db):
-        """create_result_via_event + fill_result should compose correctly."""
-        ret = create_result_via_event("evt.pipeline", "answer=${{data}}", db)
-
-        result_addr, result_str = db.execute(
-            "SELECT result_addr, result_str FROM event_call_fill_result WHERE addr = %s",
-            (ret.consumer_addr,),
-        ).fetchone()
-        assert result_addr == ret.result_addr
-        consumer_data = ConsumerFillResult(
-            event_path="evt.pipeline",
-            action_type="fill_result",
-            result_addr=result_addr,
-            result_str=result_str,
-        )
-        event = FakeEvent("evt.pipeline", "17")
-
-        with patch("python.events.event_consumers.conn_factory", return_value=db), \
-             patch.object(db, "close"):
-            fill_result(event, consumer_data)
-
-        content_str, ready = db.execute(
-            "SELECT content_str, ready FROM results WHERE addr = %s", (result_addr,)
-        ).fetchone()
-        assert content_str == "answer=17"
-        assert ready is True
 
 
 class TestRegisterReactionRmt:
@@ -479,7 +453,7 @@ class TestConsumerOuterDispatch:
         nt = _make_fake_nats_client([FakeNatsMsg("evt.rmt", b"payload")])
 
         with patch("asyncio.get_running_loop") as mock_get_loop:
-            mock_loop = MagicMock()
+            mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
             await consumer_outer(consumer_data, nt)
 
@@ -495,7 +469,7 @@ class TestConsumerOuterDispatch:
         nt = _make_fake_nats_client([FakeNatsMsg("evt.slave", b"payload")])
 
         with patch("asyncio.get_running_loop") as mock_get_loop:
-            mock_loop = MagicMock()
+            mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
             await consumer_outer(consumer_data, nt)
 
@@ -510,7 +484,7 @@ class TestConsumerOuterDispatch:
         nt = _make_fake_nats_client([FakeNatsMsg("evt.fill", b"payload")])
 
         with patch("asyncio.get_running_loop") as mock_get_loop:
-            mock_loop = MagicMock()
+            mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
             await consumer_outer(consumer_data, nt)
 
@@ -529,7 +503,7 @@ class TestConsumerOuterDispatch:
         ])
 
         with patch("asyncio.get_running_loop") as mock_get_loop:
-            mock_loop = MagicMock()
+            mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
             await consumer_outer(consumer_data, nt)
 

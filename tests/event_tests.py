@@ -137,6 +137,33 @@ class TestCreateResultViaEvent:
         )
         assert result.consumer_addr != result_addr
 
+    
+    def test_end_to_end_create_result_via_event_then_fill(self, db):
+        """create_resut_via_event + fill_result should compose correctly."""
+        ret = create_result_via_event("evt.pipeline", "answer=${{data}}", db)
+
+        result_addr, result_str = db.execute(
+            "SELECT result_addr, result_str FROM event_call_fill_result WHERE addr = %s",
+            (ret.consumer_addr,),
+        ).fetchone()
+        assert result_addr == ret.result_addr
+        consumer_data = ConsumerFillResult(
+            event_path="evt.pipeline",
+            action_type="fill_result",
+            result_addr=result_addr,
+            result_str=result_str,
+        )
+        event = FakeEvent("evt.pipeline", "17")
+
+        with patch("python.events.event_consumers.conn_factory", return_value=db), patch.object(db, "close"):
+             fill_result(event, consumer_data)
+
+        content_str, ready = db.execute(
+            "SELECT content_str, ready FROM results WHERE addr = %s", (result_addr,)
+        ).fetchone()
+        assert content_str == "answer=17"
+        assert ready is True
+
 
 class TestRegisterReactionRmt:
     def test_creates_consumer_and_call_rmt_row(self, db):
@@ -385,11 +412,11 @@ class TestFillResult:
 
     def test_end_to_end_create_result_via_event_then_fill(self, db):
         """create_result_via_event + fill_result should compose correctly."""
-        consumer_addr = create_result_via_event("evt.pipeline", "answer=${{data}}", db)
+        ret = create_result_via_event("evt.pipeline", "answer=${{data}}", db)
 
         result_addr, result_str = db.execute(
             "SELECT result_addr, result_str FROM event_call_fill_result WHERE addr = %s",
-            (consumer_addr,),
+            (ret.consumer_addr,),
         ).fetchone()
         consumer_data = ConsumerFillResult(
             event_path="evt.pipeline",

@@ -617,7 +617,7 @@ class TestEventTools:
     def test_create_result_via_event(self, meta):
         conn = meta.conn
         # The function returns the consumer address, not the result address
-        consumer_addr = tool_create_result_via_event(
+        str_ret = tool_create_result_via_event(
             event_path="test.event",
             result_str="data: ${{data}}",
             name="ev_res",
@@ -625,13 +625,7 @@ class TestEventTools:
         )
         # Verify that the name points to the consumer address
         resolved = resolve_to_addr("ev_res", conn)
-        assert str(resolved) in consumer_addr
-
-        # The actual result address is stored in event_call_fill_result
-        result_addr = conn.execute_fetchval(
-            "SELECT result_addr FROM event_call_fill_result WHERE addr = %s", (int(consumer_addr.split("@")[1].split(' ')[0]),)
-        )
-        assert conn.execute_fetchval("SELECT 1 FROM results WHERE addr = %s", (result_addr,))
+        assert str(resolved) in str_ret
 
     def test_register_reaction_rmt(self, meta):
         dsl = "START -> (instruction='react') -> END"

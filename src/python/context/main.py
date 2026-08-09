@@ -10,6 +10,7 @@ At some point.
 from ..context.item_loaders_registry import load_item
 from ..executor.execute_tool import HEADERS_REGISTRY
 from ..types import ReferenceTo
+from ..utils.logger import log_json
 from ..utils.conn_factory import Conn
 from .types import Anchor, LoadsData, SlaveObj, WindowData
 
@@ -110,7 +111,7 @@ def resolve_window(master_addr: ReferenceTo, conn: Conn) -> str:
         return "WINDOW DOES NOT EXIST YET."
         
     if window_data_fetch[0] is None and window_data_fetch[1] is None:
-        raise ValueError(f"Invalid viewing window. Viewing window fetch: {window_data_fetch}, expected position 0 or 1 to have an addr.")
+        return "WINDOW IS EMPTY"
 
     window_data = WindowData(
         master_addr,

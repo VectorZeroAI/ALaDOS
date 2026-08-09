@@ -9,9 +9,6 @@ So I am building this AI Operating system, e.g. Operating system for AI, that wi
 
 ## Architectural changes roadmap
 
-- [ ] Make viewing windows into usable items, that can be attached to Slaves and Masters
-- [ ] Add "Optimisers" which allow for meta learning and self optimisation via abstraction
-
 ### Create base state [x]
 
 Create a framework for the devs to define the base state, the ground truth of the Enviroment, and not just the enviroment itself. That will be later used to move everything currently hardcoded into the DB, although it will still be hardcoded, but it will be better hard coded, cause its now uniform with anything AI itself writes, and no AI written tools will feel like Ad-Hoc, but rather all tools will look the same and have the same interfact.
@@ -61,9 +58,11 @@ LRU cache the scope string, and make a helper to make resolve the scope string.
 Invalidated on change of a tool in scope or of scope itself, checked DB side. 
 Actual implementation the same way.
 
-### Make views into Items
+Scopes should include operations such as "calculate intersection %" and "merge".
 
-Includes the making of more types of views, optionally. 
+### Make views into Items []
+
+Includes the making of more types of views, which will be described in the next section.
 
 The viewing_window will be an object in DB.
 viewing_window can be attached to a slave or a master.
@@ -75,7 +74,25 @@ with possible cloning/branching paths. (More complex then MESI controlls, but DA
 
 Also propably scoping and branching of the same viewing window, which means creating a copy of it to work on for yourself insdead of working on public version.
 
-### Viewing window types
+This also includes the rewrite of the rmt parser and serialiser into a new form for the new DSL speficiation.
+New langauge syntax:
+RMT usage:
+{id='name of addr', args='{"json": "args", "allow": [{"full": "json"}, "speficiation", "."]}'}
+
+Window definition:
+window_name := (slave that makes it)
+OR
+window_name := {rmt that makes it}
+
+Window attachment to slaves:
+
+(instruction='Test', ..., window=['window_name', 'optionally many'])
+
+Window attachment to masters and slaves in the builtins will be simply a new argument in there. 
+
+Item Loads will be deprecated in favour of attaching a "comulative window"
+
+### Viewing window types []
 
 More viewing window types includes basically the idea of filtering by type at the window creation time.
 
@@ -89,7 +106,20 @@ Or even further processing into like Timelines and stuff, cause viewing windows 
 
 This also includes the data loaders idea under the same "NLP processing suite" idea.
 
-#### Data Loaders
+#### Cumulative windows []
+
+These viewing windows are different from normal ones.
+They operate over data that the populating functions gave them in,
+which means they fundamentally are already slices of total, e.g. they show a slice of the slice of total.
+Which is different from normal viewing windows that show a slice of the whole Base.
+
+#### Recursive windows []
+
+There are viewing windows of viewing windows, and as you guessed, yeah, recurse is allowed, e.g. viewing window of recursive viewing window of recusrive viewing windows of viewing windows kind of thingy. 
+
+There should also be a cumulative version of this, for grouping viewing windows.
+
+#### Data Loaders []
 
 The idea is to reuse the RLM idea of slicing large blobs of context up.
 
@@ -104,18 +134,18 @@ And with that ether populate an "cummulative context window" with querry results
     or directly see the querry results,
     or even land a viewing window into the loaded data and explore it.
 
-### Optimiser Meta learning
+### Optimiser Meta learning []
 
 This is the culmination of the development process, the final piece on the road to an General Information Transofmer mashine, to the complete ALaDOS.
 
 The optimiser consists of many "strategies" which it uses to optimise ALaDOS enviroment to lessen the friction of working with it.
 That means creating abstractions over repetative work.
 
-#### Strategy 1, RMT auto detector.
+#### Strategy 1, RMT auto detector. []
 
 Because the entire backlog of the execution history is right there in the masters and slaves tables, all we need to do is detect repetative patterns and abstact that work away into an RMT.
 
-##### Algoritm
+##### Algoritm []
 
 NOTE: Any group size smaller then k (configurable) are removed.
 All instructions withhin members of the same slice (relative to start node graph position) must be highly similar. (90% or even higher similarity, e.g. "The same thing.")
@@ -152,6 +182,6 @@ Of course there may be better solutions, and I will look into them, but not now.
 3. Optimiser has to be fast, naive python loop wont work. Preferably in can even be written in a different language, like OCaml.
 
 
-#### Strategy 2, scope creation
+#### Strategy 2, scope creation []
 
-Check what tools were used and detect usage patterns.
+Check what tools were used together often, or searched for together, and combine them into scopes.

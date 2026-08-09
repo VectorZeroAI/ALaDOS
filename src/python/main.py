@@ -14,6 +14,7 @@ from .sceduler.main import setup as s_setup
 from .utils.conn_factory import conn_factory_raw
 from .utils.logger import startup as l_startup
 from .events.main import startup as ev_startup
+from .base_state.main import startup as bs_startup
 
 
 def main() -> None:
@@ -37,6 +38,7 @@ def main() -> None:
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
 
+    bs_startup()
     e_startup()
     s_setup()
     l_startup()

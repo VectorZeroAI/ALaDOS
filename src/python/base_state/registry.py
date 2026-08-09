@@ -54,13 +54,17 @@ def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
                      """, (item.addr, item.event_path, item.action_type))
         match item.action_type:
             case "call_rmt":
-                sql = "INSERT INTO event_call_rmt(addr, rmt_addr, args) VALUES(%s, %s::BIGINT, %s::JSONB)"
+                conn.execute("""
+                INSERT INTO event_call_rmt(addr, rmt_addr, args) VALUES(%s, %s::BIGINT, %s::JSONB)
+                             """, (item.addr, item.field1, Jsonb(item.field2)))
             case "execute_slave":
-                sql = "INSERT INTO event_call_execute_slave(addr, instruction, scope) VALUES(%s, %s::TEXT, %s::slave_scope)"
+                conn.execute("""
+                INSERT INTO event_call_execute_slave(addr, instruction, scope) VALUES(%s, %s::TEXT, %s::slave_scope)
+                             """, (item.addr, item.field1, item.field2))
             case "fill_result":
-                sql = "INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s::BIGINT, %s::TEXT)"
-        
-        conn.execute(sql, (item.addr, item.field1, item.field2))
+                conn.execute("""
+                INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s::BIGINT, %s::TEXT)
+                             """, (item.addr, item.field1, item.field2))
 
 
 
@@ -154,7 +158,7 @@ def register_executable(item: Executable, conn: Conn) -> None:
                      """, (item.addr, item.header, item.body))
 
         conn.execute("""
-        INSERT INTO vector_ops(exe_addr, description) VALUES(%s, %s::TEXT);
+        INSERT INTO vector_ops(addr_exe, description) VALUES(%s, %s::TEXT);
                      """, (item.addr, item.description))
         if item.name:
             conn.execute("""
@@ -171,7 +175,7 @@ def register_knowledge(item: Knowledge, conn: Conn) -> None:
                      """, (item.addr, item.content))
 
         conn.execute("""
-        INSERT INTO vector_ops(k_addr, description) VALUES(%s, %s::TEXT);
+        INSERT INTO vector_ops(addr_k, description) VALUES(%s, %s::TEXT);
                      """, (item.addr, item.description))
         if item.name:
             conn.execute("""

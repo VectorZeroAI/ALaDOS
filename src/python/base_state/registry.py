@@ -44,126 +44,138 @@ def __item_registerer(item_type: str):
 def __register_item(item: Item, conn: Conn) -> None:
     REGISTERERS_REGISTRY[str(type(item))](item, conn)
 
+
+
 @__item_registerer(str(type(EventConsumers)))
 def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO event_consumers(addr, event_path, action_type) VALUES(%s, %s, %s)
-                 """, (item.addr, item.event_path, item.action_type))
-    match item.action_type:
-        case "call_rmt":
-            sql = "INSERT INTO event_call_rmt(addr, rmt_addr, args) VALUES(%s, %s::BIGINT, %s::JSONB)"
-        case "execute_slave":
-            sql = "INSERT INTO event_call_execute_slave(addr, instruction, scope) VALUES(%s, %s::TEXT, %s::slave_scope)"
-        case "fill_result":
-            sql = "INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s::BIGINT, %s::TEXT)"
-    
-    conn.execute(sql, (item.addr, item.field1, item.field2))
+    with conn.transaction():
+        conn.execute("""
+        INSERT INTO event_consumers(addr, event_path, action_type) VALUES(%s, %s, %s)
+                     """, (item.addr, item.event_path, item.action_type))
+        match item.action_type:
+            case "call_rmt":
+                sql = "INSERT INTO event_call_rmt(addr, rmt_addr, args) VALUES(%s, %s::BIGINT, %s::JSONB)"
+            case "execute_slave":
+                sql = "INSERT INTO event_call_execute_slave(addr, instruction, scope) VALUES(%s, %s::TEXT, %s::slave_scope)"
+            case "fill_result":
+                sql = "INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s::BIGINT, %s::TEXT)"
+        
+        conn.execute(sql, (item.addr, item.field1, item.field2))
+
 
 
 @__item_registerer(str(type(Rmt)))
 def register_rmt(item: Rmt, conn: Conn) -> None:
-    auto_addr = create_from_serial(item.dsl, conn, item.name)
-    conn.execute("""
-    UPDATE addrs
-        SET addr = %s
-    WHERE addr = %s;
-                 """, (item.addr, auto_addr))
+    with conn.transaction():
+        auto_addr = create_from_serial(item.dsl, conn, item.name)
+        conn.execute("""
+        UPDATE addrs
+            SET addr = %s
+        WHERE addr = %s;
+                     """, (item.addr, auto_addr))
 
-    conn.execute("""
-    INSERT INTO vector_ops(rmt_addr, description) VALUES (%s, %s);
-                 """, (item.addr, item.description))
-
-
+        conn.execute("""
+        INSERT INTO vector_ops(rmt_addr, description) VALUES (%s, %s);
+                     """, (item.addr, item.description))
 
 
 
 @__item_registerer(str(type(Cronjob)))
 def register_cronjob(item: Cronjob, conn: Conn) -> None:
-    if item.type == "once":
-        conn.execute("""
-        INSERT INTO cronjob_once(addr, name, args, start_after)
-        VALUES (%s, %s, (EXRACT(EPOCH FROM NOW()) + %s)::INT);
-                     """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
-    else:
-        conn.execute("""
-        INSERT INTO cronjob_loop(addr, name, args, last_ran, execute_every)
-        VALUES (%s, %s, %s, (EXTRACT EPOCH FROMNOW()), %s);
-                     """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
+    with conn.transaction():
+        if item.type == "once":
+            conn.execute("""
+            INSERT INTO cronjob_once(addr, name, args, start_after)
+            VALUES (%s, %s, (EXRACT(EPOCH FROM NOW()) + %s)::INT);
+                         """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
+        else:
+            conn.execute("""
+            INSERT INTO cronjob_loop(addr, name, args, last_ran, execute_every)
+            VALUES (%s, %s, %s, (EXTRACT( EPOCH FROM NOW())), %s);
+                         """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
+
 
 
 @__item_registerer(str(type(Slaves)))
 def register_slaves(item: Slaves, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (%s, %s, %s, %s);
-                 """, (item.addr, item.instruction, item.result_addr, item.scope))
-    if item.deps:
-        conn.executemany("""
-        INSERT INTO slave_req(slave_addr, req_addr) VALUES(%s, %s);
-                         """,
-                         [(item.addr, d) for d in item.deps],
-                         returning=False
-        )
+    with conn.transaction():
+        conn.execute("""
+        INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (%s, %s, %s, %s);
+                     """, (item.addr, item.instruction, item.result_addr, item.scope))
+        if item.deps:
+            conn.executemany("""
+            INSERT INTO slave_req(slave_addr, req_addr) VALUES(%s, %s);
+                             """,
+                             [(item.addr, d) for d in item.deps],
+                             returning=False
+            )
 
 
 
 @__item_registerer(str(type(Masters)))
 def register_master(item: Masters, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO masters(addr, instruction, result_addr) VALUES (%s, %s, %s);
-                 """, (item.addr, item.instruction, item.result_addr))
-    if item.deps:
-        conn.executemany("""
-        INSERT INTO master_req(master_addr, req_addr) VALUES(%s, %s);
-                         """,
-                         [(item.addr, d) for d in item.deps],
-                         returning=False
-        )
-
-    if item.name:
+    with conn.transaction():
         conn.execute("""
-        INSERT INTO names(addr, name) VALUES(%s, %s)
-                     """, (item.addr, item.name))
+        INSERT INTO masters(addr, instruction, result_addr) VALUES (%s, %s, %s);
+                     """, (item.addr, item.instruction, item.result_addr))
+        if item.deps:
+            conn.executemany("""
+            INSERT INTO master_req(master_addr, req_addr) VALUES(%s, %s);
+                             """,
+                             [(item.addr, d) for d in item.deps],
+                             returning=False
+            )
+
+        if item.name:
+            conn.execute("""
+            INSERT INTO names(addr, name) VALUES(%s, %s)
+                         """, (item.addr, item.name))
 
 
 
 @__item_registerer(str(type(Results)))
 def register_result(item: Results, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
-                 """, (item.addr, item.content_str, item.metadata, item.ready))
-    if item.name:
+    with conn.transaction():
         conn.execute("""
-        INSERT INTO names(addr, name) VALUES(%s, %s)
-                     """, (item.addr, item.name))
+        INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
+                     """, (item.addr, item.content_str, item.metadata, item.ready))
+        if item.name:
+            conn.execute("""
+            INSERT INTO names(addr, name) VALUES(%s, %s)
+                         """, (item.addr, item.name))
 
 
 
 @__item_registerer(str(type(Executable)))
 def register_executable(item: Executable, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO executables(addr, header, body) VALUES (%s, %s::TEXT, %s::TEXT);
-                 """, (item.addr, item.header, item.body))
-
-    conn.execute("""
-    INSERT INTO vector_ops(exe_addr, description) VALUES(%s, %s::TEXT);
-                 """, (item.addr, item.description))
-    if item.name:
+    with conn.transaction():
         conn.execute("""
-        INSERT INTO names(addr, name) VALUES(%s, %s)
-                     """, (item.addr, item.name))
+        INSERT INTO executables(addr, header, body) VALUES (%s, %s::TEXT, %s::TEXT);
+                     """, (item.addr, item.header, item.body))
+
+        conn.execute("""
+        INSERT INTO vector_ops(exe_addr, description) VALUES(%s, %s::TEXT);
+                     """, (item.addr, item.description))
+        if item.name:
+            conn.execute("""
+            INSERT INTO names(addr, name) VALUES(%s, %s)
+                         """, (item.addr, item.name))
 
 
 
 @__item_registerer(str(type(Knowledge)))
 def register_knowledge(item: Knowledge, conn: Conn) -> None:
-    conn.execute("""
-    INSERT INTO knowledge(addr, content) VALUES(%s, %s::TEXT);
-                 """, (item.addr, item.content))
-
-    conn.execute("""
-    INSERT INTO vector_ops(k_addr, description) VALUES(%s, %s::TEXT);
-                 """, (item.addr, item.description))
-    if item.name:
+    with conn.transaction():
         conn.execute("""
-        INSERT INTO names(addr, name) VALUES(%s, %s)
-                     """, (item.addr, item.name))
+        INSERT INTO knowledge(addr, content) VALUES(%s, %s::TEXT);
+                     """, (item.addr, item.content))
+
+        conn.execute("""
+        INSERT INTO vector_ops(k_addr, description) VALUES(%s, %s::TEXT);
+                     """, (item.addr, item.description))
+        if item.name:
+            conn.execute("""
+            INSERT INTO names(addr, name) VALUES(%s, %s)
+                         """, (item.addr, item.name))
+
+

@@ -382,12 +382,12 @@ def activate_as_master(rmt_addr: ReferenceTo,
         SELECT result_addr FROM masters WHERE addr = %s;
                                       """, (master_addr,))
 
-    required_by = resolve_to_addrs(required_by)
+    required_by = resolve_to_addrs(required_by, conn)
 
     if len(required_by) > 0:
         conn.executemany("""
         INSERT INTO slave_req(slave_addr, req_addr) VALUES (%s, %s)
-                        """, [(i, master_result_addr) for i in required_by])
+                        """, [(i, master_result_addr) for i in required_by], returning=False)
         
     rmt_template = conn.execute("""
     SELECT addr,

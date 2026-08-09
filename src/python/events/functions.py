@@ -4,17 +4,22 @@ This is the file where the functions that use the events should be placed.
 """
 
 from psycopg.types.json import Jsonb
+from dataclasses import dataclass
 
-from ..executor.types import JsonSerializable, SlaveScope
+from ..executor.types import SlaveScope
 from ..types import ReferenceTo
 from ..utils.conn_factory import Conn
 
+@dataclass(slots=True)
+class ResultViaEventReturn:
+    result_addr: ReferenceTo
+    consumer_addr: ReferenceTo
 
-def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> ReferenceTo:
+def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> ResultViaEventReturn:
     """
     Creates a result that will be filled out with the event and a consumer to fill that event in.
     Does not handle wiring that result into the DAG, only handles the creation of the result itself. 
-    Returns result addr.
+    Returns both result_addr and consumer_addr.
     """
 
     event_consumers_addr = conn.execute_fetchval("""
@@ -31,7 +36,7 @@ def create_result_via_event(event_path: str, result_str: str, conn: Conn) -> Ref
     INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s, %s)
                  """, (event_consumers_addr, result_addr, result_str))
 
-    return result_addr
+    return ResultViaEventReturn(result_addr, event_consumers_addr)
 
 
 def register_reaction_rmt(event_path: str, rmt_addr: ReferenceTo, args: dict[str, str], conn: Conn) -> ReferenceTo:

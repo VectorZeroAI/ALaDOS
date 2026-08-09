@@ -17,6 +17,7 @@ from ..utils.conn_factory import conn_factory
 from ..utils.logger import log_json
 from .registry import SYSTEM_ADDRS_LIST, ADDR_REGISTER
 from traceback import format_exception
+from . import state_components # noqa # pyright: ignore
 
 def startup() -> None:
     conn = conn_factory()
@@ -25,7 +26,10 @@ def startup() -> None:
     SELECT unnest(%s::BIGINT[])
     EXCEPT
     SELECT addr FROM addrs;
-                           """, (SYSTEM_ADDRS_LIST,))
+                           """, (SYSTEM_ADDRS_LIST,)).fetchall()
+
+    results = [r[0] for r in results]
+
     if results is not list[int]:
         log_json({
             "type": "base state",

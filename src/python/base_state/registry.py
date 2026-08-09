@@ -40,8 +40,6 @@ def item_registerer(item_type: str):
 def register_item(item: Item, conn: Conn) -> None:
     REGISTERERS_REGISTRY[str(type(item))](item, conn)
 
-
-
 @item_registerer(str(type(EventConsumers)))
 def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
     conn.execute("""
@@ -79,23 +77,20 @@ def register_rmt(item: Rmt, conn: Conn) -> None:
 def register_cronjob(item: Cronjob, conn: Conn) -> None:
     if item.type == "once":
         conn.execute("""
-        INSERT INTO cronjob_once(addr, name, args, start_after) VALUES (%s, %s, (NOW() + %s)::INT);
+        INSERT INTO cronjob_once(addr, name, args, start_after)
+        VALUES (%s, %s, (EXRACT(EPOCH FROM NOW()) + %s)::INT);
                      """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
     else:
         conn.execute("""
-        INSERT INTO cronjob_loop(addr, name, args, last_ran, execute_every) VALUES (%s, %s, %s, NOW(), %s);
+        INSERT INTO cronjob_loop(addr, name, args, last_ran, execute_every)
+        VALUES (%s, %s, %s, NOW(), %s);
                      """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
 
 
 @item_registerer(str(type(Slaves)))
 def register_slaves(item: Slaves, conn: Conn) -> None:
     conn.execute("""
-    DECLARE 
-        t_addr BIGINT;
-    BEGIN
-        t_addr := %s;
-        INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (t_addr, %s, %s, %s);
-    END;
+    INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (%s, %s, %s, %s);
                  """, (item.addr, item.instruction, item.result_addr, item.scope))
     if item.deps:
         conn.executemany("""
@@ -110,12 +105,7 @@ def register_slaves(item: Slaves, conn: Conn) -> None:
 @item_registerer(str(type(Masters)))
 def register_master(item: Masters, conn: Conn) -> None:
     conn.execute("""
-    DECLARE 
-        t_addr BIGINT;
-    BEGIN
-        t_addr := %s;
-        INSERT INTO masters(addr, instruction, result_addr) VALUES (t_addr, %s, %s);
-    END;
+    INSERT INTO masters(addr, instruction, result_addr) VALUES (%s, %s, %s);
                  """, (item.addr, item.instruction, item.result_addr))
     if item.deps:
         conn.executemany("""
@@ -135,12 +125,7 @@ def register_master(item: Masters, conn: Conn) -> None:
 @item_registerer(str(type(Results)))
 def register_result(item: Results, conn: Conn) -> None:
     conn.execute("""
-    DECLARE 
-        t_addr BIGINT;
-    BEGIN
-        t_addr := %s;
-        INSERT INTO results(addr, content_str, metadata, ready) VALUES (t_addr, %s, %s);
-    END;
+    INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
                  """, (item.addr, item.content_str, item.metadata, item.ready))
     if item.name:
         conn.execute("""
@@ -152,6 +137,7 @@ def register_result(item: Results, conn: Conn) -> None:
 @item_registerer(str(type(Executable)))
 def register_executable(item: Executable, conn: Conn) -> None:
     conn.execute("""
+    DO $$
     DECLARE 
         t_addr BIGINT;
     BEGIN
@@ -159,6 +145,7 @@ def register_executable(item: Executable, conn: Conn) -> None:
         INSERT INTO executables(addr, header, body) VALUES (t_addr, %s, %s);
         INSERT INTO vector_ops(addr, description) VALUES(t_addr, %s);
     END;
+    $$
                  """, (item.addr, item.header, item.body, item.description))
     if item.name:
         conn.execute("""
@@ -170,6 +157,7 @@ def register_executable(item: Executable, conn: Conn) -> None:
 @item_registerer(str(type(Knowledge)))
 def register_knowledge(item: Knowledge, conn: Conn) -> None:
     conn.execute("""
+    DO $$
     DECLARE
         t_addr BIGINT;
     BEGIN
@@ -177,6 +165,7 @@ def register_knowledge(item: Knowledge, conn: Conn) -> None:
         INSERT INTO knowledge(addr, content) VALUES(t_addr, %s);
         INSERT INTO vector_ops(addr, content) VALUES(t_addr, %s);
     END;
+    $$
                  """, (item.addr, item.content, item.description))
     if item.name:
         conn.execute("""

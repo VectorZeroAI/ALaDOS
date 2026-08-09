@@ -102,23 +102,23 @@ def insert_rmt(db: Conn) -> int:
 # ----------------------------------------------------------------------
 class TestCreateResultViaEvent:
     def test_creates_result_and_consumer(self, db):
-        addr = create_result_via_event("foo.bar.baz", "hello ${{data}}", db)
+        result = create_result_via_event("foo.bar.baz", "hello ${{data}}", db)
 
         action_type = db.execute_fetchval(
-            "SELECT action_type FROM event_consumers WHERE addr = %s", (addr,)
+            "SELECT action_type FROM event_consumers WHERE addr = %s", (result.consumer_addr,)
         )
         event_path = db.execute_fetchval(
-            "SELECT event_path FROM event_consumers WHERE addr = %s", (addr,)
+            "SELECT event_path FROM event_consumers WHERE addr = %s", (result.consumer_addr,)
         )
         assert action_type == "fill_result"
         assert event_path == "foo.bar.baz"
 
     def test_links_event_call_fill_result_row(self, db):
-        addr = create_result_via_event("foo.bar", "hello", db)
+        result = create_result_via_event("foo.bar", "hello", db)
 
         result_addr, result_str = db.execute(
             "SELECT result_addr, result_str FROM event_call_fill_result WHERE addr = %s",
-            (addr,),
+            (result.consumer_addr,),
         ).fetchone()
 
         assert result_str == "hello"
@@ -129,12 +129,39 @@ class TestCreateResultViaEvent:
         assert ready is False
 
     def test_returns_consumer_addr_not_result_addr(self, db):
-        consumer_addr = create_result_via_event("path", "str", db)
+        result = create_result_via_event("path", "str", db)
         result_addr = db.execute_fetchval(
             "SELECT result_addr FROM event_call_fill_result WHERE addr = %s",
-            (consumer_addr,),
+            (result.consumer_addr,),
         )
-        assert consumer_addr != result_addr
+        assert result.consumer_addr != result_addr
+
+    def test_end_to_end_create_result_via_event_then_fill(self, db):
+        """create_result_via_event + fill_result should compose correctly."""
+        ret = create_result_via_event("evt.pipeline", "answer=${{data}}", db)
+
+        result_addr, result_str = db.execute(
+            "SELECT result_addr, result_str FROM event_call_fill_result WHERE addr = %s",
+            (ret.consumer_addr,),
+        ).fetchone()
+        assert result_addr == ret.result_addr
+        consumer_data = ConsumerFillResult(
+            event_path="evt.pipeline",
+            action_type="fill_result",
+            result_addr=result_addr,
+            result_str=result_str,
+        )
+        event = FakeEvent("evt.pipeline", "17")
+
+        with patch("python.events.event_consumers.conn_factory", return_value=db), \
+             patch.object(db, "close"):
+            fill_result(event, consumer_data)
+
+        content_str, ready = db.execute(
+            "SELECT content_str, ready FROM results WHERE addr = %s", (result_addr,)
+        ).fetchone()
+        assert content_str == "answer=17"
+        assert ready is True
 
 
 class TestRegisterReactionRmt:

@@ -8,7 +8,6 @@ from typing import Any, Literal, TypeAlias, Union
 from ..executor.types import JsonSerializable
 from ..utils.conn_factory import conn_factory
 
-
 def new_addr() -> int:
     conn = conn_factory()
     return conn.execute_fetchval("SELECT new_addr();")
@@ -66,7 +65,7 @@ class Cronjob:
     """
     type: Literal["once", "loop"]
     timelapse: int
-    name: str = field()
+    action_name: str = field()
     args: JsonSerializable = field()
     addr: int = field(default_factory=new_addr)
 
@@ -85,7 +84,7 @@ class EventConsumers:
     Order is the definition order in the sql file 1.
     """
     event_path: str
-    action_type: str
+    action_type: Literal["call_rmt", "execute_slave", "fill_result"]
     field1: Any
     field2: Any
     addr: int = field(default_factory=new_addr)

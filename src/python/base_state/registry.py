@@ -9,10 +9,12 @@ The pattern of registering something is like this:
 """
 
 from typing import Callable, TypeAlias
+from psycopg.types.json import Jsonb
 
 from ..utils.conn_factory import conn_factory, Conn
+from ..rmt.main import create_from_serial
 
-from .types import Cronjob, Executable, Item, Knowledge, Masters, Results, Slaves
+from .types import Cronjob, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
 
 
 def register(item: Item) -> None:
@@ -21,13 +23,7 @@ def register(item: Item) -> None:
     """
     conn = conn_factory()
     with conn.transaction():
-        match item:
-            case Knowledge():
-                register_knowledge(item, conn)
-            case Executable():
-                register_executable(item, conn)
-            case Results():
-                register_results(item, conn)
+        register_item(item, conn)
 
 Registerer: TypeAlias = Callable[[Item, Conn], None]
 
@@ -46,19 +42,49 @@ def register_item(item: Item, conn: Conn) -> None:
 
 
 
+@item_registerer(str(type(EventConsumers)))
+def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
+    conn.execute("""
+    INSERT INTO event_consumers(addr, event_path, action_type) VALUES(%s, %s, %s)
+                 """, (item.addr, item.event_path, item.action_type))
+    match item.action_type:
+        case "call_rmt":
+            sql = "INSERT INTO event_call_rmt(addr, rmt_addr, args) VALUES(%s, %s::BIGINT, %s)"
+        case "execute_slave":
+            sql = "INSERT INTO event_call_execute_slave(addr, instruction, scope) VALUES(%s, %s::TEXT, %s::slave_scope)"
+        case "fill_result":
+            sql = "INSERT INTO event_call_fill_result(addr, result_addr, result_str) VALUES(%s, %s::BIGINT, %s::TEXT)"
+    
+    conn.execute(sql, (item.addr, item.field1, item.field2))
+
+
+@item_registerer(str(type(Rmt)))
+def register_rmt(item: Rmt, conn: Conn) -> None:
+    auto_addr = create_from_serial(item.dsl, conn, item.name)
+    conn.execute("""
+    UPDATE addrs
+        SET addr = %s
+    WHERE addr = %s;
+                 """, (item.addr, auto_addr))
+
+    conn.execute("""
+    INSERT INTO vector_ops(rmt_addr, description) VALUES (%s, %s);
+                 """, (item.addr, item.description))
+
+
+
+
+
 @item_registerer(str(type(Cronjob)))
 def register_cronjob(item: Cronjob, conn: Conn) -> None:
     if item.type == "once":
         conn.execute("""
-        INSERT INTO cronjob_once()
-                     """) 
+        INSERT INTO cronjob_once(addr, name, args, start_after) VALUES (%s, %s, (NOW() + %s)::INT);
+                     """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
     else:
-
-
-    if item.name:
         conn.execute("""
-        INSERT INTO names(addr, name) VALUES(%s, %s)
-                     """, (item.addr, item.name))
+        INSERT INTO cronjob_loop(addr, name, args, last_ran, execute_every) VALUES (%s, %s, %s, NOW(), %s);
+                     """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
 
 
 @item_registerer(str(type(Slaves)))

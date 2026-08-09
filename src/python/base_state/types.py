@@ -90,4 +90,4 @@ class EventConsumers:
     addr: int = field(default_factory=new_addr)
 
 
-Item: TypeAlias = Union[Knowledge, Executable, Logs, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers]
+Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers]

@@ -10,26 +10,30 @@ The pattern of registering something is like this:
 
 from typing import Callable, TypeAlias
 from psycopg.types.json import Jsonb
+from functools import partial
 
 from ..utils.conn_factory import conn_factory, Conn
 from ..rmt.main import create_from_serial
 
 from .types import Cronjob, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
 
+REGISTERERS_REGISTRY = {}
+SYSTEM_ADDRS_LIST: list[int] = []
+ADDR_REGISTER: dict[int, Callable[[], None]] = {}
 
-def register(item: Item) -> None:
+def register(item: Item) -> Item:
     """
-    The decorator that registers the Item
+    The decorator that registers the Item.
     """
     conn = conn_factory()
-    with conn.transaction():
-        register_item(item, conn)
+    SYSTEM_ADDRS_LIST.append(item.addr)
+    ADDR_REGISTER[item.addr] = partial(__register_item, item, conn)
+    return item
 
 Registerer: TypeAlias = Callable[[Item, Conn], None]
 
-REGISTERERS_REGISTRY = {}
 
-def item_registerer(item_type: str):
+def __item_registerer(item_type: str):
     def wrapper(func):
         global REGISTERERS_REGISTRY
         REGISTERERS_REGISTRY[item_type] = func
@@ -37,10 +41,10 @@ def item_registerer(item_type: str):
     return wrapper
 
 
-def register_item(item: Item, conn: Conn) -> None:
+def __register_item(item: Item, conn: Conn) -> None:
     REGISTERERS_REGISTRY[str(type(item))](item, conn)
 
-@item_registerer(str(type(EventConsumers)))
+@__item_registerer(str(type(EventConsumers)))
 def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
     conn.execute("""
     INSERT INTO event_consumers(addr, event_path, action_type) VALUES(%s, %s, %s)
@@ -56,7 +60,7 @@ def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
     conn.execute(sql, (item.addr, item.field1, item.field2))
 
 
-@item_registerer(str(type(Rmt)))
+@__item_registerer(str(type(Rmt)))
 def register_rmt(item: Rmt, conn: Conn) -> None:
     auto_addr = create_from_serial(item.dsl, conn, item.name)
     conn.execute("""
@@ -73,7 +77,7 @@ def register_rmt(item: Rmt, conn: Conn) -> None:
 
 
 
-@item_registerer(str(type(Cronjob)))
+@__item_registerer(str(type(Cronjob)))
 def register_cronjob(item: Cronjob, conn: Conn) -> None:
     if item.type == "once":
         conn.execute("""
@@ -87,7 +91,7 @@ def register_cronjob(item: Cronjob, conn: Conn) -> None:
                      """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
 
 
-@item_registerer(str(type(Slaves)))
+@__item_registerer(str(type(Slaves)))
 def register_slaves(item: Slaves, conn: Conn) -> None:
     conn.execute("""
     INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (%s, %s, %s, %s);
@@ -102,7 +106,7 @@ def register_slaves(item: Slaves, conn: Conn) -> None:
 
 
 
-@item_registerer(str(type(Masters)))
+@__item_registerer(str(type(Masters)))
 def register_master(item: Masters, conn: Conn) -> None:
     conn.execute("""
     INSERT INTO masters(addr, instruction, result_addr) VALUES (%s, %s, %s);
@@ -122,7 +126,7 @@ def register_master(item: Masters, conn: Conn) -> None:
 
 
 
-@item_registerer(str(type(Results)))
+@__item_registerer(str(type(Results)))
 def register_result(item: Results, conn: Conn) -> None:
     conn.execute("""
     INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
@@ -134,7 +138,7 @@ def register_result(item: Results, conn: Conn) -> None:
 
 
 
-@item_registerer(str(type(Executable)))
+@__item_registerer(str(type(Executable)))
 def register_executable(item: Executable, conn: Conn) -> None:
     conn.execute("""
     DO $$
@@ -154,7 +158,7 @@ def register_executable(item: Executable, conn: Conn) -> None:
 
 
 
-@item_registerer(str(type(Knowledge)))
+@__item_registerer(str(type(Knowledge)))
 def register_knowledge(item: Knowledge, conn: Conn) -> None:
     conn.execute("""
     DO $$

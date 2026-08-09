@@ -13,11 +13,29 @@ There is a meta toolkit for defining those in the registry.py file in this direc
 main.py handles the enforcement at startup time,
 and then there is a directory full of files that are the actual definitions. 
 """
-
 from ..utils.conn_factory import conn_factory
-
+from ..utils.logger import log_json
+from .registry import SYSTEM_ADDRS_LIST, ADDR_REGISTER
+from traceback import format_exception
 
 def startup() -> None:
     conn = conn_factory()
+
+    results = conn.execute("""
+    SELECT unnest(%s::BIGINT[])
+    EXCEPT
+    SELECT addr FROM addrs;
+                           """, (SYSTEM_ADDRS_LIST,))
+    if results is not list[int]:
+        log_json({
+            "type": "base state",
+            "subtype": "existance startup check",
+            "status": "fatal",
+            "msg": f"DB returned wrong type. Excepted list[int], got {type(results)}",
+            "backtrace": f"{format_exception(Exception("backtrace"))}"
+        })
+    
+    for i in results:
+        ADDR_REGISTER[i]()
 
     print("Base state finished.")

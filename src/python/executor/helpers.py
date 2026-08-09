@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import asdict
 import re
 
 from ..utils.conn_factory import Conn
@@ -14,26 +15,26 @@ def prepare_context_shortening_prompt(error: ContextLimitExceededError,
     """ Prepares the special prompt that would make the LLM get it all done correctly. """
 
     window_data = conn.execute("""
-SELECT mc.window_anchor_exe, mc.window_anchor_knowledge, mc.window_size_l, mc.window_size_r
-FROM slaves s
-    INNER JOIN masters m ON s.master_addr = m.addr
-    INNER JOIN master_context mc ON mc.addr = m.addr
-WHERE s.addr = %s
+    SELECT mc.window_anchor_exe, mc.window_anchor_knowledge, mc.window_size_l, mc.window_size_r
+    FROM slaves s
+        INNER JOIN masters m ON s.master_addr = m.addr
+        INNER JOIN master_context mc ON mc.addr = m.addr
+    WHERE s.addr = %s
                           """, (instr.slave_addr,)).fetchone()
     assert window_data is not None
 
     viewing_window_shortened = conn.execute("""
-WITH ordered AS (
-    SELECT addr,
-        position,
-        type,
-        ROW_NUMBER() OVER (ORDER BY position) AS rn FROM vector_ops
-), anchor AS (
-    SELECT rn FROM ordered WHERE addr = %s LIMIT 1
-)
-SELECT addr, o.rn
-FROM ordered o, anchor a
-WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
+    WITH ordered AS (
+        SELECT addr,
+            position,
+            type,
+            ROW_NUMBER() OVER (ORDER BY position) AS rn FROM vector_ops
+    ), anchor AS (
+        SELECT rn FROM ordered WHERE addr = %s LIMIT 1
+    )
+    SELECT addr, o.rn
+    FROM ordered o, anchor a
+    WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
                  """, ((window_data[0] if window_data[0] is not None else window_data[1]),
                         window_data[2],
                        window_data[3]
@@ -44,10 +45,12 @@ WHERE o.rn BETWEEN a.rn - %s AND a.rn + %s;
 
     context_chunk_1 = "\n".join(viewing_window_context_list_str)
     
-    loaded_items_addr = conn.execute("""SELECT ml.item_addr, vp.description
-                                     FROM master_load ml 
-                                        LEFT JOIN vector_ops vp ON ml.item_addr = vp.addr 
-                                     WHERE master_addr = %s""", (instr.master_addr,)).fetchall()
+    loaded_items_addr = conn.execute("""
+    SELECT ml.item_addr, vp.description
+    FROM master_load ml 
+        LEFT JOIN vector_ops vp ON ml.item_addr = vp.addr 
+    WHERE master_addr = %s
+                                     """, (instr.master_addr,)).fetchall()
 
     loaded_items_list_str = []
     for i in loaded_items_addr:
@@ -97,7 +100,7 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
         'status': 'recovered',
         'reason': 'created the new set of toolcalls from the LLM response',
         'llm_without_think': llm_without_think,
-        'new_tool_calls': tool_calls
+        'new_tool_calls': str([asdict(tc) for tc in tool_calls])
     })
 
     return tool_calls

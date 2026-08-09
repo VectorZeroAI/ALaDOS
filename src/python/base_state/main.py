@@ -30,15 +30,6 @@ def startup() -> None:
 
     results = [r[0] for r in results]
 
-    if results is not list[int]:
-        log_json({
-            "type": "base state",
-            "subtype": "existance startup check",
-            "status": "fatal",
-            "msg": f"DB returned wrong type. Excepted list[int], got {type(results)}",
-            "backtrace": f"{format_exception(Exception("backtrace"))}"
-        })
-    
     for i in results:
         ADDR_REGISTER[i]()
 

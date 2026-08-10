@@ -9,6 +9,82 @@ So I am building this AI Operating system, e.g. Operating system for AI, that wi
 
 ## Architectural changes roadmap
 
+### CPU like execution [x]
+
+Have paralel cores that pull ReAct steps, execute them, and write the results back.
+Include Concurrency controlls.
+Have the cores be interruptable to do special instructions.
+All work done through cores.
+
+CPUs actually execute code using Out Of Order (OOO) execution, which means instructions execute in the order of their dependancy fullfillment, and not in the order they were written in, and that forms an execution DAG.
+
+There are also instructions VS processes, so we will have ReAct steps and containers for them, e.g. slave goals and master goals.
+
+This also means that there are no subagents allowed and no context boudaries allowed,
+just like in the computer.
+(OS does enforce memory boudaries but its for security, else there are none. Also for MESI and its optimisations kinda do memory boudaries, but there are fundamentally none, all that are are simply workarounds.)
+
+### Viewing window context [x]
+
+Dont use RAG, use viewing windows.
+A viewing window is a navigatable slice of the shared knowledge plane.
+
+Operations are "land", "move", "resize".
+
+The viewing window ordering of items,
+which is basically the requirement for such a structure to work,
+is going to be my algoritm of "rainbow-ordering". I dont know if that algoritm already exists and has a name, but I will name it anyways. 
+
+Rainbow order is the idea of "the most similar items are right and left of me, and the farther from me, the less similar the items become", like in a rainbow, if you take the colors, the nearest 2 to each color are its most similar colors.
+
+This is achived by this algoritm:
+
+First item position = 1.
+
+Second item position = 2.
+
+All next items, on insert placed into:
+    if similarity of 2 most similar items greater then 0.4:
+        2 most similar items positions summed / 2
+    elif similarity of 1 of the items greater then 0.4:
+        (The items position + MAX(position) + 1) / 2
+    else: # No items are similar enough.
+        MAX(position) + 1
+
+> [!NOTE]
+> All actual numbers are adjustable to future changes. Current numbers as of 2026-08-10 use + 100 on positions and 0.4 as threshhold. May change in the future, but core algoritm remains the same.
+
+### Reusable Master Templates RMT [x]
+
+Make master templates with keys that can be replaced at activation time.
+Used for storing and reusing complex worksflows. 
+
+Supports creation from scratch via DSL and atomic editing functions.
+
+DSL format:
+"""
+START -> (instruction='text', scope='general', id='start') -> (instruction='text', scope='task', id='end') -> END
+(id='start') -> (instruction='intermediate, and scope and id are optional. Defaults are "general", and a uuid.') -> (id='end')
+(id='end') -> (instruction='appended. START and END dont do anything.')
+"""
+
+This kind of system would allow the agent to learn complex workflows as well as test and refine them, which is far better then the SKILL.md system, which is the alternative.
+Or GemBots or whatever OpenAIs idea is. 
+
+### Event based proactivity [~]
+
+Make an event recieving and reaction system, to allow the agent to proactively react to events.
+
+This includes cronjobs system. TODO : Add rmt activation to cronjobs list.
+
+The plan is to have a bunch of events sent into NATS.
+And have event consumers listen for them.
+NATS acts as a router.
+
+This allows the writing of additional listeners in any language, and their potential registration.
+TODO: Think of a protocol to allow event listeners to be written by the AI and registered dynamically by AI. This should be included in the tool rewrite.
+
+
 ### Create base state [x]
 
 Create a framework for the devs to define the base state, the ground truth of the Enviroment, and not just the enviroment itself. That will be later used to move everything currently hardcoded into the DB, although it will still be hardcoded, but it will be better hard coded, cause its now uniform with anything AI itself writes, and no AI written tools will feel like Ad-Hoc, but rather all tools will look the same and have the same interfact.
@@ -49,7 +125,29 @@ its going to be slow as fuck because python anyways, so who cares.
 
 Optionally TOOLS_LOCK can be refined into TOOLS_LOCK: dict[str, threading.Lock] for more atomic locks on tools for less blocking.
 
-### Fully move scopes into the DB []
+#### DB side tool system rewrite [ ]
+
+Create protocol based handler registration. 
+AI should be capable of creating a tool that follows a specific protocol, and to be able to register it as a new events emitter or a new format handler for the DataLoaders idea.
+
+Tools that are part of protocolls are not to be invoked directly.
+
+Tools should be allowed to be written in any language, via a "compiled" flag as well as compilation parameters. Will look into that in more details in the future. 
+
+#### Builtins access from subprocess [ ]
+
+Add anouther directory, so that ALaDOS.src.python was not the only python path.
+Anouther python path would be ALaDOS.lib.system_call_name.
+
+The sys calls would go through to the main ALaDOS process and will be executed via interrupts.
+
+Transportation method: Event system.
+    Extend base state to import the tooling of registering consumers,
+        create the consumers with the custom callbacks,
+        and then store the consumers.
+    Extend the event system to take the stored custom consumers and simply run them.
+
+### Fully move scopes into the DB [ ]
 
 Make scopes fully DB defined.
 Default scopes are defined via base state.
@@ -60,7 +158,7 @@ Actual implementation the same way.
 
 Scopes should include operations such as "calculate intersection %" and "merge".
 
-### Make views into Items []
+### Make views into Items [ ]
 
 Includes the making of more types of views, which will be described in the next section.
 
@@ -92,7 +190,7 @@ Window attachment to masters and slaves in the builtins will be simply a new arg
 
 Item Loads will be deprecated in favour of attaching a "comulative window"
 
-### Viewing window types []
+### Viewing window types [ ]
 
 More viewing window types includes basically the idea of filtering by type at the window creation time.
 
@@ -106,20 +204,20 @@ Or even further processing into like Timelines and stuff, cause viewing windows 
 
 This also includes the data loaders idea under the same "NLP processing suite" idea.
 
-#### Cumulative windows []
+#### Cumulative windows [ ]
 
 These viewing windows are different from normal ones.
 They operate over data that the populating functions gave them in,
 which means they fundamentally are already slices of total, e.g. they show a slice of the slice of total.
 Which is different from normal viewing windows that show a slice of the whole Base.
 
-#### Recursive windows []
+#### Recursive windows [ ]
 
 There are viewing windows of viewing windows, and as you guessed, yeah, recurse is allowed, e.g. viewing window of recursive viewing window of recusrive viewing windows of viewing windows kind of thingy. 
 
 There should also be a cumulative version of this, for grouping viewing windows.
 
-#### Data Loaders []
+#### Data Loaders [ ]
 
 The idea is to reuse the RLM idea of slicing large blobs of context up.
 
@@ -134,18 +232,18 @@ And with that ether populate an "cummulative context window" with querry results
     or directly see the querry results,
     or even land a viewing window into the loaded data and explore it.
 
-### Optimiser Meta learning []
+### Optimiser Meta learning [ ]
 
 This is the culmination of the development process, the final piece on the road to an General Information Transofmer mashine, to the complete ALaDOS.
 
 The optimiser consists of many "strategies" which it uses to optimise ALaDOS enviroment to lessen the friction of working with it.
 That means creating abstractions over repetative work.
 
-#### Strategy 1, RMT auto detector. []
+#### Strategy 1, RMT auto detector. [ ]
 
 Because the entire backlog of the execution history is right there in the masters and slaves tables, all we need to do is detect repetative patterns and abstact that work away into an RMT.
 
-##### Algoritm []
+##### Algoritm 
 
 NOTE: Any group size smaller then k (configurable) are removed.
 All instructions withhin members of the same slice (relative to start node graph position) must be highly similar. (90% or even higher similarity, e.g. "The same thing.")
@@ -182,6 +280,6 @@ Of course there may be better solutions, and I will look into them, but not now.
 3. Optimiser has to be fast, naive python loop wont work. Preferably in can even be written in a different language, like OCaml.
 
 
-#### Strategy 2, scope creation []
+#### Strategy 2, scope creation [ ]
 
 Check what tools were used together often, or searched for together, and combine them into scopes.

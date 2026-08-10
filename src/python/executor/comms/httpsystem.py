@@ -20,6 +20,8 @@ def get(url: str, headers: httpx.Headers, timeout: int) -> ResponseObj:
             headers=headers
         )
 
+    response.raise_for_status()
+
     result: ResponseObj = {
         'url': url,
         'status_code': response.status_code,
@@ -36,6 +38,9 @@ def post(url: str, headers: httpx.Headers, payload: str, timeout: int) -> Respon
             headers=headers,
             content=payload
         )
+
+    response.raise_for_status()
+
     result: ResponseObj = {
         'url': url,
         'status_code': response.status_code,

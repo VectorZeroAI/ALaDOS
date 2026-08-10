@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """
-The giant file where all the built in tools are located. 
+The giant file where all the built in tools are located.  
+
+!!! WARNING: TOOLS ARE BEING MIGRATED TO DB, SO THIS IS SOON TO BE SYSCALLS AND NOT TOOLS. !!!
+
 A style I would want to enforce with rmts: 
     the rmt logic itself lives in the rmt/main file
     the context fill in logic, e.g. the builtins specific logic lives in here in builtins. 
     If you are analysing this file and you see a violation of this,
     please report it as a bug and cite this place here as proof that its a bug.
+
+Syscalls have to return string because transportation layer depends on the return always being string. 
+The lib side will have to translate to proper return type.
 """
 
 import json
@@ -59,8 +65,9 @@ ALL = get_args(SlaveScope)
 
 searcher_obj = SearxngSearcher()
 
+# def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
 @register_tool("K.create", ['general', 'context'])
-def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
+def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> str:
     """ 
     Creates a knowledge item.
     The description is a short definition of the items contents for semantic similarity search.
@@ -83,16 +90,21 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 
     _meta._embedder_queue.put(addr)
 
-    return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
+    return str(addr)
+    # return f"knowledge entry {name if name is not None else "No name"}@{addr} was created."
 
-
+# def k_edit(_meta: _ExecToolMetaData,
+#            id: Addr|str,
+#            description_change: SearchAndReplaceBlock|None = None,
+#            content_change: SearchAndReplaceBlock|None = None,
+#            ) -> ActionConfirmation:
 
 @register_tool("K.edit", ['general', 'context'])
 def k_edit(_meta: _ExecToolMetaData,
            id: Addr|str,
            description_change: SearchAndReplaceBlock|None = None,
            content_change: SearchAndReplaceBlock|None = None,
-           ) -> ActionConfirmation:
+           ) -> str:
     """
     Edits a knowledge entry. 
     Either addr or name must be provided
@@ -139,14 +151,16 @@ def k_edit(_meta: _ExecToolMetaData,
 
     update_timestamp(addr, conn)
 
-    return f"Edited the knowledge item {id if isinstance(id, str) else "Nameless"}@{addr}"
+    return ""
+    #return f"Edited the knowledge item {id if isinstance(id, str) else "Nameless"}@{addr}"
 
 
 
 
 
+#def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
 @register_tool("k_read", ['general', 'context'])
-def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
+def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """ Resolve knowledge item by ID. """
     conn = _meta.conn
     addr = resolve_to_addr(id, conn)
@@ -155,12 +169,13 @@ def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     SELECT content FROM knowledge WHERE addr = %s
                  """, (addr,))
 
-    return f"Knowledge entry {id if isinstance(id, str) else "no name"}@{addr}, contents: {result}."
+    return result
+    #return f"Knowledge entry {id if isinstance(id, str) else "no name"}@{addr}, contents: {result}."
 
 
-
+# def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
 @register_tool("tool.execute", ['general'])
-def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
+def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> str:
     """ 
     Executes a tool beyond buildins, from the database, by id.
     One of addr or name must not be None. 
@@ -223,9 +238,9 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {process.stdout.read() if process.stdout is not None else "Std Out is None"}{f"; and error output: {process.stderr}" if process.stderr else ""}."
 
 
-
+# def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
 @register_tool("tool.create", ['context'])
-def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
+def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> str:
     """
     Creates a python tool, to be executed with tool.execute .
     Description is a short description used for searching and identifing the tool.
@@ -251,9 +266,16 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 
     _meta._embedder_queue.put(addr)
 
-    return f"Created tool {name or description}@{addr}"
+    return str(addr)
+    #return f"Created tool {name or description}@{addr}"
 
 
+# def edit_tool(_meta: _ExecToolMetaData,
+#               id: str|Addr,
+#               header_change: SearchAndReplaceBlock|None = None,
+#               body_change: SearchAndReplaceBlock|None = None,
+#               new_description: str|None = None,
+#               ) -> ActionConfirmation:
 
 @register_tool("tool.edit", ['general', 'context'])
 def edit_tool(_meta: _ExecToolMetaData,
@@ -261,7 +283,7 @@ def edit_tool(_meta: _ExecToolMetaData,
               header_change: SearchAndReplaceBlock|None = None,
               body_change: SearchAndReplaceBlock|None = None,
               new_description: str|None = None,
-              ) -> ActionConfirmation:
+              ) -> str:
     """
     Edit a tool.
     You must provide either header_change or body_change or new_description.
@@ -330,13 +352,15 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     update_timestamp(addr, conn)
 
+    return ""
     return f"Applied the edits to the tool {id if isinstance(id, str) else 'No_Name'}@{addr}"
 
 
 
 
+# def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 @register_tool("context.add", ['general', 'context'])
-def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta.conn
     
@@ -345,10 +369,19 @@ def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
                  """, (_meta.master_id, addr))
-    return f"Added context {id if isinstance(id, str) else "No name"}@{addr}."
+
+    return ""
+    #return f"Added context {id if isinstance(id, str) else "No name"}@{addr}."
     # TODO: Try to find a name and insert the name if found.
 
 
+# def add_slave(instruction: str,
+#               _meta: _ExecToolMetaData,
+#               slave_type: SlaveScope = 'general',
+#               required_results_ids: list[str|Addr] = [],
+#               slave_name: str|None=None,
+#               result_name: str|None=None
+#               ) -> ActionConfirmation:
 
 
 @register_tool("goal.add_slave", ['general', 'task'])
@@ -358,9 +391,11 @@ def add_slave(instruction: str,
               required_results_ids: list[str|Addr] = [],
               slave_name: str|None=None,
               result_name: str|None=None
-              ) -> ActionConfirmation:
+              ) -> str:
     """
-    Adds a step to the task. The steps are executed asyncronosly, the moment all of their requirements are resolved. 
+    Adds a step to the task.
+    Returns the new slaves address.
+    The steps are executed asyncronosly, the moment all of their requirements are resolved. 
     A step may require anouther steps result, by adding the required results name or address. 
     A step gets the results it requires when it is executed.
     Each step is an separate instruction, to be executed, to produce a result, and to pass the result to the next step.
@@ -383,7 +418,7 @@ def add_slave(instruction: str,
         """ This is here as a fallback for a fairly common AI hallucination. Dont remove. """
         return add_replanner_slave(_meta)
 
-    conn.execute("""
+    addr = conn.execute_fetchval("""
     SELECT new_slave(
         p_master_addr := %s,
         p_instruction := %s,
@@ -394,12 +429,17 @@ def add_slave(instruction: str,
     );
         """, 
     (_meta.master_id, instruction, slave_name, required_results_addrs, result_name, slave_type))
-    return "Added a new slave"
+    return str(addr)
+    #return "Added a new slave"
 
 add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(SlaveScope)) , " ]" , "."])
 
+
+
+# def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
+
 @register_tool("goal.add_planner_slave", ['task'])
-def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
+def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. TO ADD PLANNER, USE THIS FUNCTION. """
     conn = _meta.conn
     special_context = []
@@ -450,13 +490,15 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
     prompt = prompt + special_context_str + master_result_so_far_str
 
     conn.execute("SELECT new_slave(%s, %s, NULL, %s, NULL, NULL, NULL, 'task');", (_meta.master_id, prompt, [r[0] for r in fetch]))
-    return "added a replanner slave"
+
+    return ""
+    #return "added a replanner slave"
 
 
 
-
+# def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 @register_tool("result.add_master_result", ALL)
-def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def master_result_add(text: str, _meta: _ExecToolMetaData) -> str:
     """
     This funtion writes a result for the whole master, e.g. the task that consists of many slaves.
     Newly written result is appended to the master result, it does not overwrite the result.
@@ -465,18 +507,22 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation
     conn.execute("""
     UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
                  """, (text, _meta.master_id))
-    return "Added a master result."
+
+    return ""
+    #return "Added a master result."
 
 
 
+# def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 @register_tool("context.window.semantic_land", ['context'])
-def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> str:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
     A viewing window is a dynamic automatic context window capable of providing you with relevant and highly controllable context
     of relevant knowledge and tools to be executed via tool.execute .
     Very important generally. 
+    Returns new anchor addr.
     """
     conn = _meta.conn
 
@@ -485,16 +531,18 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirm
     if isinstance(emb, ndarray):
         emb = emb.tolist()
 
-    conn.execute("""
+    anchor = conn.execute_fetchval("""
     SELECT s_land(%s, %s::vector(768))
                  """, (_meta.master_id, emb))
-    return 'Semantically moved the viewing window anchor.'
+
+    return str(anchor)
+    #return 'Semantically moved the viewing window anchor.'
 
 
-
+# def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 @register_tool("context.window.land_by_addr", ['context'])
-def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """
     Lands a viewing window onto an item by id.
     """
@@ -529,62 +577,89 @@ def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> Actio
                      """, (addr, _meta.master_id))
     else:
         raise psycopg.DataError(f"Invalid addr type gotten. Gotten {addr_type}, expected executables or knowledge.")
-    return f"Moved context window center to {addr}"
+
+    return ""
+    #return f"Moved context window center to {addr}"
 
 
 
 
 
 @register_tool("context.window.change_size", ['context'])
-def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: int = 0) -> ActionConfirmation:
+def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: int = 0) -> str:
     """ 
     The function for changing viewing windows size. 
     Negative number shrinks the size, positive number increases the size, possible in one or 2 directions.
+
+    Returns new window size in json format with keys left,
+    right for the size to the left and to the right.
     """
     conn = _meta.conn
     
-    conn.execute("""
-    UPDATE master_context SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s WHERE addr = %s;
-                 """, (left, right, _meta.master_id))
-    return "Changed context window size."
+    new = conn.execute("""
+    UPDATE master_context
+        SET window_size_l = window_size_l + %s
+        SET window_size_r = window_size_r + %s
+    WHERE addr = %s
+    RETURNING window_size_l, window_size_r;
+                 """, (left, right, _meta.master_id)).fetchone()
+    if not new:
+        log_json({
+            "type": "syscall",
+            "subtype": "context_window_change_size",
+            "status": "fatal",
+            "msg": "Database querry did not return expected values. Expected (int, int) got None."
+        })
+        raise RuntimeError("Database querry did not return expected values. Expected (int, int) got None.")
+
+    return '{"left": ' + str(new[0]) + ' , "right": ' + str(new[1]) + ' }' # NOTE : I hate when I cant do fstrings. 
+    #return "Changed context window size."
 
 
-
+# def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 @register_tool("context.window.move_anchor", ['context'])
-def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> str:
     """
     Function to move the anchor of the viewing window.
     Moves to the left if amount if negative, to the right if amount is positive.
+
+    Returns new anchor address.
     """
     conn = _meta.conn
 
-    conn.execute("""
+    addr = conn.execute_fetchval("""
     SELECT move_anchor(%s, %s);
                            """, (amount, _meta.master_id))
-    return "moved context window anchor"
+    
+    return str(addr)
+    #return "moved context window anchor"
 
 
 
-
+# def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 @register_tool("result.write", ALL)
-def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def result_write(text: str, _meta: _ExecToolMetaData) -> str:
     """
     Writes plaintext passed in as the result to your current instruction, NOT to the master instruction, NOT to the user. 
     TO MESSAGE USER, USE user.send_message tool!
     """
-    return f"Result: {text}"
+    return text
 
 
-
+# def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
 @register_tool("K.report_paradoxal_information", ALL)
-def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> str:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
     paradox: the paradox in the information
     items: the list of items addresses or names that contain the paradoxal information.
+
+    Aborts current execution run.
+    Unless you are unable to fulfill your instruction due to Paradox,
+    you should add a slave with the task of reporting.
     """
 
     conn = _meta.conn
@@ -604,12 +679,18 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
 
 
 
+# def add_cronjob(cronjob_type: Literal['once', 'loop'],
+#                 action: CronjobActions,
+#                 time_between_runs: int,
+#                 params: dict[str, Any],
+#                 _meta: _ExecToolMetaData) -> ActionConfirmation:
+
 @register_tool("goal.add_cron_job", ['task', 'general'])
 def add_cronjob(cronjob_type: Literal['once', 'loop'],
                 action: CronjobActions,
                 time_between_runs: int,
                 params: dict[str, Any],
-                _meta: _ExecToolMetaData) -> ActionConfirmation:
+                _meta: _ExecToolMetaData) -> str:
     """
     Spawns a cronjob. The cronjobs can run ether once, if cronjob type is "once", after time_between_runs seconds, or in a loop every time_between_runs seconds indefinetly.
     action is the action that the cronjob should take, out of all the available options.
@@ -620,8 +701,12 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
         }
     ]
     
+    More detailed cronjobs documentation available in the knowledge item "cronjobs_documentation"
+
+    Returns cronjob address.
     """
-    insert_cronjob(Cronjob(
+    # TODO : Make the cronjobs_documentation knowledge as part of BaseState.
+    addr = insert_cronjob(Cronjob(
             action,
             params,
             cronjob_type,
@@ -629,16 +714,19 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
         ),
         _meta.conn
     )
+    
+    return str(addr)
+    #return f"Added a cronjob that does {action}."
 
-    return f"Added a cronjob that does {action}."
 
-
-
+# def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
 
 @register_tool("context.unload_item", ["context"])
-def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
+def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """
     Unloads the item from the context window, by id.
+
+    Returns Nothing.
     """
     conn = _meta.conn
 
@@ -648,63 +736,89 @@ def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
                  """, (_meta.master_id, addr))
 
-    return f"Unloaded item {addr}."
+    return ""
+    #return f"Unloaded item {addr}."
 
 
 
-
+# def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> ActionConfirmation:
 
 @register_tool("web.search_fulltext", ['general', 'communication'])
-def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> ActionConfirmation:
+def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> str:
     """
-    Websearch function that returns fulltext of top websites_amount webpages texts. Needs analysis through a second slave for actual anaswer. 
+    Websearch function that returns fulltext of top websites_amount webpages texts.
+    Needs analysis through a second slave for actual anaswer. 
+
+    Full text is xml style tagged. 
+    Format: 
+        <WEBSITE url=url, title=title, remeinder=LARGE FULLCAPS STRING.>contents</WEBSITE>
     """
-    return f"Websearch for query '{query}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta.context_limit // 2)}'"
+    return searcher_obj.search_website_content(query, websites_amount, _meta.context_limit // 2)
+    #return f"Websearch for query '{query}', results:'{searcher_obj.search_website_content(query, websites_amount, _meta.context_limit // 2)}'"
 
 
 
+# def send_message_to_human_v_webui(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
+
+# @register_tool("user.send_message", ['general', 'communication'])
+# def send_message_to_human_v_webui(text: str, _meta: _ExecToolMetaData) -> str:
+#     """
+#     Sends a message to the human. Must only be used in presense of an user message, otherwise DONT TOUCH
+#     """
+#     conn = _meta.conn
+#     conn.execute("""
+# SELECT new_result(%s, 
+#     (SELECT addr FROM results WHERE metadata->>'type'='ai_message' 
+#         AND metadata->>'session_name'=(SELECT name FROM names WHERE addr=%s)
+#     ORDER BY (metadata->>'turn')::INT ASC LIMIT 1));
+#                  """, (text, _meta.master_id))
+#     
+#     return "Sent a message to the human." NOTE : webui is deprecated and this is broken. Will not fix, will remake.
 
 
-@register_tool("user.send_message", ['general', 'communication'])
-def send_message_to_human_v_webui(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
-    """
-    Sends a message to the human. Must only be used in presense of an user message, otherwise DONT TOUCH
-    """
-    conn = _meta.conn
-    conn.execute("""
-SELECT new_result(%s, 
-    (SELECT addr FROM results WHERE metadata->>'type'='ai_message' 
-        AND metadata->>'session_name'=(SELECT name FROM names WHERE addr=%s)
-    ORDER BY (metadata->>'turn')::INT ASC LIMIT 1));
-                 """, (text, _meta.master_id))
-    
-    return "Sent a message to the human."
-
-
+# def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
 @register_tool("web.search", ['communication'])
-def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
+def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> str:
     """
-    Returns the normal websearch result like structure.
+    Returns Json list of websearch results in the following structure:
+        [
+            {
+                "url": "url",
+                "title": "title",
+                "snippet": "snippet"
+            },
+            {...}, ...
+        ]
     """
     results_raw = searcher_obj.search(query)
-    results: list[str] = []
+    results: list[str] = ['[', ']']
+    
     for i in results_raw[:amount_results]:
-         results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
+        results.insert(-2, "".join(['{"url": ', i["url"], ', "title": ', i["title"], ', "snippet": ', i["snippet"], '}']))
 
-    if len(results) > 0:
-        return f"websearch results: [{"\n".join(results)}]"
-    else:
-        return f"No results for the websearch of {query}"
+    return "".join(results)
 
 
+#          results.append(f"<website> url={i['url']}, title={i['title']}, snippet={i['snippet']}</website>")
+# 
+#     if len(results) > 0:
+#         return f"websearch results: [{"\n".join(results)}]"
+#     else:
+#         return f"No results for the websearch of {query}"
 
+
+# def web_request(url: str,
+#                 _meta: _ExecToolMetaData,
+#                 timeout: int = 10,
+#                 return_type: Literal['extracted', 'raw'] = 'extracted',
+#                 headers: dict[str, str] = {}) -> ActionConfirmation:
 
 @register_tool("web.get", ['general', 'communication'])
 def web_request(url: str,
                 _meta: _ExecToolMetaData,
                 timeout: int = 10,
                 return_type: Literal['extracted', 'raw'] = 'extracted',
-                headers: dict[str, str] = {}) -> ActionConfirmation:
+                headers: dict[str, str] = {}) -> str:
     """
     The GET http request onto the url.
     return_type specifies what you wish to get from that url.
@@ -713,10 +827,22 @@ def web_request(url: str,
     
     result = httpsystem.get(url, httpx.Headers(headers), timeout)
 
-    return f"<website> content = [{result['text'] if return_type == "extracted" else result['content_raw']}], url = [{result["url"]}], status_code = [{result['status_code']}] </website>"
+    if return_type == "extracted":
+        return result["text"]
+    else:
+        return result["content_raw"]
+
+    #return f"<website> content = [{result['text'] if return_type == "extracted" else result['content_raw']}], url = [{result["url"]}], status_code = [{result['status_code']}] </website>"
 
 
 
+# def web_post(url: str,
+#              _meta: _ExecToolMetaData,
+#              timeout: int = 10,
+#              return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
+#              headers: dict[str, str] = {},
+#              payload: str = ""
+#              ) -> ActionConfirmation:
 
 @register_tool('web.post', ['communication'])
 def web_post(url: str,
@@ -725,7 +851,7 @@ def web_post(url: str,
              return_type: Literal['extracted', 'raw', 'status_code'] = 'extracted',
              headers: dict[str, str] = {},
              payload: str = ""
-             ) -> ActionConfirmation:
+             ) -> str:
     """
     The POST http request onto a url.
     return type specifies what you wish to get from that url. 

@@ -120,7 +120,7 @@ CREATE OR REPLACE FUNCTION s_land (
     master_addr_p BIGINT,
     emb_p vector(768)
 )
-RETURNS VOID AS $$
+RETURNS BIGINT AS $$
 DECLARE
     result_addr BIGINT;
     max_sim FLOAT;
@@ -149,7 +149,7 @@ BEGIN
             window_size_r = 12
         WHERE addr = master_addr_p;
     END IF;
-    RETURN;
+    RETURN result_addr;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -157,7 +157,7 @@ CREATE OR REPLACE FUNCTION move_anchor(
     p_amount INT,
     p_master_id BIGINT
 )
-RETURNS VOID AS $$
+RETURNS BIGINT AS $$
 DECLARE
     v_anchor_addr BIGINT;
     v_new_addr BIGINT;
@@ -197,7 +197,7 @@ BEGIN
         RAISE EXCEPTION'unexpected type of anchor. Type: %, expected "knowledge" or "executable"', v_new_type;
     END IF;
 
-    RETURN;
+    RETURN v_new_addr;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -202,7 +202,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     syscall_queue = _meta.syscalls_queue
 
     while process.poll() is None:
-        if not (time.time() - start > timeout):
+        if time.time() - start > timeout:
             process.kill()
             raise TimeoutError("Process Timed out.")
         for i in syscall_queue.get_all():
@@ -216,11 +216,11 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
             "type": "core",
             "subtype": "tool_execution",
             "status": "error",
-            "msg": f"Tool failed with exit code {process.poll()}, output: {process.stdout} and error {process.stderr}."
+            "msg": f"Tool failed with exit code {process.poll()}, output: {process.stdout.read() if process.stdout is not None else "Std Out is None"} and error {process.stderr.read() if process.stderr is not None else 'stderr is none.'}."
         })
-        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {process.stdout} and error {process.stderr}.")
+        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {process.stdout.read() if process.stdout is not None else "Std Out is None"} and error {process.stderr.read() if process.stderr is not None else 'stderr is none.'}.")
 
-    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {process.stdout}{f"; and error output: {process.stderr}" if process.stderr else ""}."
+    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {process.stdout.read() if process.stdout is not None else "Std Out is None"}{f"; and error output: {process.stderr}" if process.stderr else ""}."
 
 
 

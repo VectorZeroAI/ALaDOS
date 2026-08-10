@@ -14,6 +14,8 @@ from typing import Any
 from nats.aio.client import Client
 import json
 
+from nats.aio.msg import Msg
+
 from ALaDOS.src.python.events.types import connect_nats # pyright: ignore
 
 async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str:
@@ -36,5 +38,17 @@ class syscall:
 async def batch_call(syscalls: list[syscall], slave_id: int) -> list[str]:
     """ Batch syscalls and batch returns. Order is preserved. """
     nt: Client = await connect_nats()
+    response: list[Msg] = []
     for i in syscalls:
-        await nt.publish(f"_.syscall.{slave_addr}.{function_name}", json.dumps(args).encode())
+        r = await nt.request(f"_.syscall.{slave_id}.{i.function_name}", json.dumps(i.args).encode(), timeout=20)
+        response.append(r)
+    
+    results: list[str] = []
+
+    for i in response:
+        results.append(
+            i.reply
+        )
+
+    return results
+

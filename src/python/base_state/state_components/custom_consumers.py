@@ -14,25 +14,23 @@ import json
 from nats.aio.client import Client
 
 from ...events.types import Event
-from ...executor.queue import executor_interrupt_queue
-from ...interrupts.main import InterruptInvokation
+from ...executor.queue import syscalls_queue_dict_per_slave
+from ...executor.types import ToolCall
 from ..registry import register
 from ..types import CustomConsumer
 
 
 def callback(event: Event, nats: Client):
     syscall_name = event.event_path.split('.')[-1]
+    slave_addr = int(event.event_path.split('.')[-2])
     return_event_path = event.event_path.replace(".request.", ".responce.")
-
-    executor_interrupt_queue.put(
-        InterruptInvokation(
-            "syscall",
-            {
-                "syscall": syscall_name,
-                "args": json.loads(event.payload),
-                "return_to": return_event_path,
-                "nats": nats
-            }
+    syscalls_queue_dict_per_slave[slave_addr].put(
+        (
+            ToolCall(
+                tool=syscall_name,
+                args=json.loads(event.payload)
+            ),
+            return_event_path
         )
     )
 

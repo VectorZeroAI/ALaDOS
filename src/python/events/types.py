@@ -4,12 +4,14 @@
 The file where all the types are.
 """
 
+from asyncio import Future
 from dataclasses import dataclass
 from os import PathLike
 from typing import Coroutine, Literal, TypeAlias, Union
 
 import nats
 from nats.aio.client import Client
+from nats.errors import TimeoutError
 
 from ..executor.types import SlaveScope
 from ..types import ReferenceTo

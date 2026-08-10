@@ -9,13 +9,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from nats.aio.client import Client
+from nats.aio.msg import Msg
 from pydantic import JsonValue
 from ..events.types import connect_nats
 import asyncio
 
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
-from ..types import ReferenceTo
+from ..types import ReferenceTo, SyscallsQueue
 from .exceptions import ParadoxDetected, ContextLimitExceededError
 
 JsonSerializable: TypeAlias = JsonValue
@@ -63,7 +64,7 @@ class _ExecToolMetaData:
     slave_id: int
     context_limit: int
     occ_last_change: datetime
-    syscalls_queue: Uqueue[tuple[ToolCall, str]]
+    syscalls_queue: SyscallsQueue
     nats: Client = field(default_factory=partial(asyncio.run, connect_nats()))
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 

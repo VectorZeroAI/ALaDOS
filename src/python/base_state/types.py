@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, TypeAlias, Union
 
 from nats.aio.client import Client
+from nats.aio.msg import Msg
 from python.events.types import ConsumerData, Event
 
 from ..executor.types import JsonSerializable
@@ -100,7 +101,7 @@ class CustomConsumer:
     Used for inetrnal communications handling, such as syscalls.
     """
     event_path: str
-    consumer_inner_callback: Callable[[Event, Client], None]
+    consumer_inner_callback: Callable[[Msg, Client], None]
 
 
 Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers, CustomConsumer]

@@ -2,6 +2,12 @@
 
 from typing import TypeAlias, Union, Literal
 
+from nats.aio.msg import Msg
+
+from .executor.types import ToolCall
+
+from .utils.uqueue import Uqueue
+
 ValidTables: TypeAlias = Union[Literal['executables'],
                                Literal['knowledge'],
                                Literal['addrs'],
@@ -16,3 +22,6 @@ ValidTables: TypeAlias = Union[Literal['executables'],
                                ]
 
 ReferenceTo: TypeAlias = int
+
+SyscallsQueue: TypeAlias = Uqueue[tuple[ToolCall, Msg]]
+SyscallsQueues: TypeAlias = dict[int, SyscallsQueue]

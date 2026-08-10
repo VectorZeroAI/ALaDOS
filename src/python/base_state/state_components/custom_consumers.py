@@ -3,8 +3,7 @@
 The implementation of the lib handshake structure.
 
 The structure:
-    event send to _.syscall.request.<insert_slave_id_here>.<insert_function_name_here>
-    recieve responce from _.syscall.responce.<insert_slave_id_here>.<insert_function_name_here>
+    request sent to _.syscall.<slave_addr>.<tool_name>
 
 Batching results in like "send 50 then recieve all 50" theoretically allowed.
 """
@@ -12,6 +11,7 @@ Batching results in like "send 50 then recieve all 50" theoretically allowed.
 import json
 
 from nats.aio.client import Client
+from nats.aio.msg import Msg
 
 from ...events.types import Event
 from ...executor.queue import syscalls_queue_dict_per_slave
@@ -20,23 +20,22 @@ from ..registry import register
 from ..types import CustomConsumer
 
 
-def callback(event: Event, nats: Client):
-    syscall_name = event.event_path.split('.')[-1]
-    slave_addr = int(event.event_path.split('.')[-2])
-    return_event_path = event.event_path.replace(".request.", ".responce.")
+def callback(msg: Msg, nats: Client):
+    syscall_name = msg.subject.split('.')[-1]
+    slave_addr = int(msg.subject.split('.')[-2])
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
             ToolCall(
                 tool=syscall_name,
-                args=json.loads(event.payload)
+                args=json.loads(msg.data.decode())
             ),
-            return_event_path
+            msg
         )
     )
 
 register(
     CustomConsumer(
-        event_path="_.syscall.request.*.*",
+        event_path="_.syscall.*.*",
         consumer_inner_callback=callback
     )
 )

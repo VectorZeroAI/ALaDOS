@@ -200,7 +200,6 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     start = time.time()
 
     syscall_queue = _meta.syscalls_queue
-    nats = _meta.nats
 
     while process.poll() is None:
         if not (time.time() - start > timeout):
@@ -209,9 +208,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
         for i in syscall_queue.get_all():
             ret = execute_tool(i[0], _meta)
             asyncio.run(
-                nats.publish(
-                    i[1], ret.encode()
-                )
+                i[1].respond(ret.encode())
             )
 
     if process.poll() != 0:

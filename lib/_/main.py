@@ -7,4 +7,42 @@ This is the python alados library, containing all of the system calls code requi
 
 This just means that this file will house the transport layer of the entire library of syscalls.
 """
+import asyncio
+from dataclasses import dataclass
+from typing import Any
 
+from nats.aio.client import Client
+import json
+
+from ALaDOS.src.python.events.types import connect_nats # pyright: ignore
+
+async def send(function_name: str, slave_addr: int, args: dict[str, Any]) -> None:
+    """ Sends the syscall and NOT recieve result. """
+    nt: Client = await connect_nats()
+    await nt.publish(f"_.syscall.request.{slave_addr}.{function_name}", json.dumps(args).encode())
+
+async def recieve(function_name: str, slave_addr: int, args: dict[str, Any]) -> str:
+    """ Sends the syscall and NOT recieve result. """
+    nt: Client = await connect_nats()
+    sub = await nt.subscribe(f"_.syscall.request.{slave_addr}.{function_name}")
+    msg = await sub.next_msg(None)
+    return msg.data.decode()
+
+async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str:
+    """ Executes syscall and returns result. """
+    nt: Client = await connect_nats()
+    await nt.publish(f"_.syscall.request.{slave_addr}.{function_name}", json.dumps(args).encode())
+    sub = await nt.subscribe(f"_.syscall.request.{slave_addr}.{function_name}")
+    msg = await sub.next_msg(None)
+    return msg.data.decode()
+
+@dataclass(slots=True, frozen=True)
+class syscall:
+    function_name: str
+    args: dict[str, Any]
+
+async def batch_call(syscalls: list[syscall], slave_id: int) -> list[str]:
+    """ Batch syscalls and batch returns. Order is preserved. """
+    nt: Client = await connect_nats()
+    for i in syscalls:
+        await nt.publish(f"_.syscall.request.{slave_addr}.{function_name}", json.dumps(args).encode())

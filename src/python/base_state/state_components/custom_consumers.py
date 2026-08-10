@@ -28,7 +28,7 @@ def callback(event: Event, nats: Client):
         InterruptInvokation(
             "syscall",
             {
-                "function": syscall_name,
+                "syscall": syscall_name,
                 "args": json.loads(event.payload),
                 "return_to": return_event_path,
                 "nats": nats

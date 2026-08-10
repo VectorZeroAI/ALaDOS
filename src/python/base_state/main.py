@@ -13,13 +13,16 @@ There is a meta toolkit for defining those in the registry.py file in this direc
 main.py handles the enforcement at startup time,
 and then there is a directory full of files that are the actual definitions. 
 """
+
+from typing import Coroutine
+
 from ..utils.conn_factory import conn_factory
 from ..utils.logger import log_json
-from .registry import SYSTEM_ADDRS_LIST, ADDR_REGISTER
+from .registry import SYSTEM_ADDRS_LIST, ADDR_REGISTER, CUSTOM_CONSUMERS
 from traceback import format_exception
 from . import state_components # noqa # pyright: ignore
 
-def startup() -> None:
+def startup() -> list[Coroutine[None, None, None]]:
     conn = conn_factory()
 
     results = conn.execute("""
@@ -31,6 +34,17 @@ def startup() -> None:
     results = [r[0] for r in results]
 
     for i in results:
-        ADDR_REGISTER[i]()
+        try:
+            ADDR_REGISTER[i]()
+        except Exception as e:
+            log_json({
+                "type": "base_state",
+                "subtype": "ADDR_REGISTER",
+                "msg": str(e),
+                "traceback": str(format_exception(e)),
+                "context": f"Addr = {i}"
+            })
 
     print("Base state finished.")
+    return CUSTOM_CONSUMERS
+

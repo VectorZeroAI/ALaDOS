@@ -21,8 +21,8 @@ from ..types import CustomConsumer
 
 
 def callback(msg: Msg, nats: Client):
-    syscall_name = msg.subject.split('.')[-1]
-    slave_addr = int(msg.subject.split('.')[-2])
+    syscall_name = msg.subject.split('.', 3)[-1]
+    slave_addr = int(msg.subject.split('.', 3)[-2])
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
             ToolCall(

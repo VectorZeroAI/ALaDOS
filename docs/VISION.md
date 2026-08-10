@@ -283,3 +283,8 @@ Of course there may be better solutions, and I will look into them, but not now.
 #### Strategy 2, scope creation [ ]
 
 Check what tools were used together often, or searched for together, and combine them into scopes.
+
+### Presentation [ ]
+
+Implement a good UI, and many UIs at that. Current webui is broken shit, and it will be replaced. 
+The UI should be really really good for the system. 

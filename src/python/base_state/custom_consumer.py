@@ -7,13 +7,15 @@ Primarily for syscalls and lib right now, but later on may be reused for a lot o
 
 from typing import Callable
 
+from nats.aio.client import Client
+
 from ..events.types import Event, connect_nats
 
 
-async def consumer_outer(consumer_inner: Callable[[Event], None], event_path: str):
+async def consumer_outer(consumer_inner: Callable[[Event, Client], None], event_path: str):
     nt = await connect_nats()
     sub = await nt.subscribe(event_path)
 
     async for event_raw in sub.messages:
         event_obj = Event(event_raw.subject, event_raw.data.decode(), nt)
-        consumer_inner(event_obj)
+        consumer_inner(event_obj, nt)

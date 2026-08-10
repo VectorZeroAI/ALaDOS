@@ -9,14 +9,18 @@ The structure:
 Batching results in like "send 50 then recieve all 50" theoretically allowed.
 """
 
-from ..types import CustomConsumer
-from ..registry import register
+import json
+
+from nats.aio.client import Client
+
 from ...events.types import Event
 from ...executor.queue import executor_interrupt_queue
 from ...interrupts.main import InterruptInvokation
-import json
+from ..registry import register
+from ..types import CustomConsumer
 
-def callback(event: Event):
+
+def callback(event: Event, nats: Client):
     syscall_name = event.event_path.split('.')[-1]
     return_event_path = event.event_path.replace(".request.", ".responce.")
 
@@ -26,12 +30,15 @@ def callback(event: Event):
             {
                 "function": syscall_name,
                 "args": json.loads(event.payload),
-                "return_to": return_event_path
+                "return_to": return_event_path,
+                "nats": nats
             }
         )
     )
 
-CustomConsumer(
+register(
+    CustomConsumer(
         event_path="_.syscall.request.*.*",
         consumer_inner_callback=callback
+    )
 )

@@ -26,7 +26,9 @@ CUSTOM_CONSUMERS: list[Coroutine[None, None, None]] = []
 
 def register(item: Item) -> Item:
     """
-    The decorator that registers the Item.
+    The function that registers the item.
+    
+    For some reason you cant decorate an instance of a dataclass.
     """
     if isinstance(item, CustomConsumer):
         CUSTOM_CONSUMERS.append(

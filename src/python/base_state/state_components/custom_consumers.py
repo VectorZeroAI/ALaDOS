@@ -22,7 +22,7 @@ from ..types import CustomConsumer
 
 def callback(msg: Msg, nats: Client):
     syscall_name = msg.subject.split('.', 3)[-1]
-    slave_addr = int(msg.subject.split('.', 3)[-2])
+    slave_addr = int(msg.subject.split('.', 3)[-2]) # FIXME : Rename stuff so that Names of syscalls dont contain dots. 
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
             ToolCall(

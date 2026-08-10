@@ -10,6 +10,7 @@ But just maybe, and definetly later.
 """
 import asyncio
 import threading
+from typing import Coroutine
 
 from python.events.event_consumers import load_event_consumers
 from python.utils.conn_factory import conn_factory
@@ -27,7 +28,7 @@ def event_producer_thread() -> None:
     loop.run_forever()
 
 
-def event_consumer_thread() -> None:
+def event_consumer_thread(custom_consumers: list[Coroutine[None, None, None]]) -> None:
     """
     The event consumer thread with its own asyncio loop.
     Each event consumer is its own asyncio task.
@@ -37,11 +38,15 @@ def event_consumer_thread() -> None:
     conn = conn_factory()
     for consumer in load_event_consumers(conn, loop):
         loop.create_task(consumer)
+
+    for consumer in custom_consumers:
+        loop.create_task(consumer)
+
     loop.run_forever()
 
-def startup() -> None:
+def startup(custom_consumers: list[Coroutine[None, None, None]]) -> None:
     threading.Thread(target=event_producer_thread, daemon=True).start()
-    threading.Thread(target=event_consumer_thread, daemon=True).start()
+    threading.Thread(target=event_consumer_thread, args=[custom_consumers,], daemon=True).start()
     print("Startup of the event based proactivity system finished.")
 ## TODO : Keep track of all the threads to be able to join them for gracefull shutdown 
 ## insdead of crashing everything.

@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from functools import partial
 import threading
 from typing import Literal, Sequence, TypeAlias, get_args, Union
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from nats.aio.client import Client
 from pydantic import JsonValue
+from ..events.types import connect_nats
+import asyncio
 
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
@@ -59,7 +63,9 @@ class _ExecToolMetaData:
     slave_id: int
     context_limit: int
     occ_last_change: datetime
-    _embedder_queue: Uqueue = field(default_factory=Uqueue[ReferenceTo])
+    syscalls_queue: Uqueue[tuple[ToolCall, str]]
+    nats: Client = field(default_factory=partial(asyncio.run, connect_nats()))
+    _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):
     GET_SLAVE = auto()

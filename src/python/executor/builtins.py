@@ -12,12 +12,15 @@ import json
 import os
 import subprocess
 from functools import partial
+import time
 from typing import Any, Literal, Sequence, TypeAlias, get_args
+import asyncio
 
 import httpx
 import psycopg
 from numpy import ndarray
 from psycopg.types.json import Jsonb
+from python.utils.logger import log_json
 
 from ..rmt.main import (
     activate_as_master,
@@ -45,7 +48,7 @@ from .cronjobs.parser import insert_cronjob
 from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
-from .execute_tool import register_tool
+from .execute_tool import execute_tool, register_tool
 from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
@@ -167,26 +170,60 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     """
     conn = _meta.conn
     
-    v_addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id, conn)
 
     body = conn.execute_fetchval("""
     SELECT body FROM executables WHERE addr = %s;
-                        """, (v_addr,))
+                        """, (addr,))
     env = os.environ.copy()
     env["KWARGS"] = json.dumps(kwargs)
-    
-    try:
-        result = subprocess.run(["python3"],
-                                     input=body,
-                                     capture_output=True,
-                                     text=True,
-                                     timeout=timeout,
-                                     env=env
-                                     )
-    except subprocess.TimeoutExpired as e:
-        return f"Tool timed out. Error msg: {e}."
 
-    return f"ran tools stdout: {result.stdout}" # TODO : add error handling and stderr capturing on error.
+    process = subprocess.Popen(
+        ["python3"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        text=True
+    )
+    if process.stdin is not None:
+        process.stdin.write(body)
+    else:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": "Process.stdin is None, unable to write."
+        })
+        raise RuntimeError("Unable to execute, process.stdin is none, call the developer!")
+
+    start = time.time()
+
+    syscall_queue = _meta.syscalls_queue
+    nats = _meta.nats
+
+    while process.poll() is None:
+        if not (time.time() - start > timeout):
+            process.kill()
+            raise TimeoutError("Process Timed out.")
+        for i in syscall_queue.get_all():
+            ret = execute_tool(i[0], _meta)
+            asyncio.run(
+                nats.publish(
+                    i[1], ret.encode()
+                )
+            )
+
+    if process.poll() != 0:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": f"Tool failed with exit code {process.poll()}, output: {process.stdout} and error {process.stderr}."
+        })
+        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {process.stdout} and error {process.stderr}.")
+
+    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {process.stdout}{f"; and error output: {process.stderr}" if process.stderr else ""}."
 
 
 

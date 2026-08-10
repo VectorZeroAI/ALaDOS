@@ -23,7 +23,7 @@ from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
 from .helpers import fix_llm_response, prepare_context_shortening_prompt
-from .queue import embedder_queue, executor_interrupt_queue, executor_queue
+from .queue import embedder_queue, executor_interrupt_queue, executor_queue, syscalls_queue_dict_per_slave
 from .types import (
     Api,
     ApiCallsState,
@@ -216,7 +216,8 @@ Further documentation of the states inlined as docstrings in the match statement
                         conn,
                         curr.instr.slave_addr,
                         config.get('context_limit', 40000),
-                        curr.occ_timestamp
+                        syscalls_queue=syscalls_queue_dict_per_slave[curr.instr.slave_addr],
+                        occ_last_change=curr.occ_timestamp
                     )
 
                 results = []

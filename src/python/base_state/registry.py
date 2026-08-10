@@ -8,23 +8,36 @@ The pattern of registering something is like this:
     You instanciate it, and you decorate it with @register
 """
 
-from typing import Callable, TypeAlias
+from typing import Callable, Coroutine, TypeAlias
 from psycopg.types.json import Jsonb
 from functools import partial
+
+from ..base_state.custom_consumer import consumer_outer
 
 from ..utils.conn_factory import conn_factory, Conn
 from ..rmt.main import create_from_serial
 
-from .types import Cronjob, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
+from .types import Cronjob, CustomConsumer, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
 
 REGISTERERS_REGISTRY = {}
 SYSTEM_ADDRS_LIST: list[int] = []
 ADDR_REGISTER: dict[int, Callable[[], None]] = {}
+CUSTOM_CONSUMERS: list[Coroutine[None, None, None]] = []
 
 def register(item: Item) -> Item:
     """
     The decorator that registers the Item.
     """
+    if isinstance(item, CustomConsumer):
+        CUSTOM_CONSUMERS.append(
+            consumer_outer(
+                item.consumer_inner_callback,
+                item.event_path
+            )
+        )
+        return item
+
+
     conn = conn_factory()
     SYSTEM_ADDRS_LIST.append(item.addr)
     ADDR_REGISTER[item.addr] = partial(__register_item, item, conn)

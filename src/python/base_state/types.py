@@ -3,7 +3,9 @@
 The types for this subsystem.
 """
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeAlias, Union
+from typing import Any, Callable, Literal, TypeAlias, Union
+
+from python.events.types import ConsumerData, Event
 
 from ..executor.types import JsonSerializable
 from ..utils.conn_factory import conn_factory
@@ -88,6 +90,16 @@ class EventConsumers:
     field1: Any
     field2: Any
     addr: int = field(default_factory=new_addr)
+
+
+@dataclass(slots=True)
+class CustomConsumer:
+    """
+    Custom event consumer type.
+    Used for inetrnal communications handling, such as syscalls.
+    """
+    event_path: str
+    consumer_inner_callback: Callable[[Event, str], None]
 
 
 Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers]

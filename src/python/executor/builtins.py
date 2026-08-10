@@ -145,7 +145,7 @@ def k_edit(_meta: _ExecToolMetaData,
 
 
 
-@register_tool("K.read", ['general', 'context'])
+@register_tool("k_read", ['general', 'context'])
 def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
     """ Resolve knowledge item by ID. """
     conn = _meta.conn

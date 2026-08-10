@@ -7,7 +7,6 @@ This is the python alados library, containing all of the system calls code requi
 
 This just means that this file will house the transport layer of the entire library of syscalls.
 """
-import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,7 +22,7 @@ async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str
     nt: Client = await connect_nats()
 
     reply = await nt.request(
-        f"_.syscall.{slave_addr}.{function_name}",
+        f"_.syscall.{function_name}",
         json.dumps(args).encode(),
         5
     )

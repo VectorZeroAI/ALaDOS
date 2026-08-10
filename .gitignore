@@ -24,3 +24,5 @@ dirdump.py
 dump.txt
 dump8.sql.txt
 dump9.sql.txt
+dump_git.txt
+*dump*

@@ -4,11 +4,11 @@ import time
 from psycopg.types.json import Jsonb
 from ...types import ReferenceTo
 
-from ...utils.conn_factory import conn_factory_raw, Conn
+from ...utils.conn_factory import Conn
 from .types import Cronjob
 
 
-def insert_cronjob(input_cronjob: Cronjob, conn: Conn = conn_factory_raw()) -> ReferenceTo:
+def insert_cronjob(input_cronjob: Cronjob, conn: Conn) -> ReferenceTo:
 
     if input_cronjob.cronjob_type == "once":
         addr = conn.execute_fetchval("""

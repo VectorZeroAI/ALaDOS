@@ -929,7 +929,7 @@ def web_post(url: str,
         case 'raw':
             return f"<website> url = [{url}], status_code = [{result['status_code']}, content = [{result['content_raw']}]] </website>"
         case _:
-            raise ValueError("Invalid input on return type. Input: {return_type}.")
+            raise ValueError(f"Invalid input on return type. Input: {return_type}.")
 
 
 

@@ -169,6 +169,7 @@ class ToolsManager:
 
         tmp_file = NamedTemporaryFile("+rw", suffix=".py")
         tmp_file.write(body)
+        tmp_file.flush()
 
         return partial(_execute_tool, tmp_file)
 
@@ -176,7 +177,7 @@ class ToolsManager:
 
 
 
-def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _ExecToolMetaData):
+def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _ExecToolMetaData) -> str:
     """ 
     Executes the given tool body from the DB.
 
@@ -190,7 +191,7 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     kwargs_str: str = json.dumps(kwargs)
 
     process = subprocess.Popen(
-        ["python3", gettempdir() + file.name],
+        ["python3", file.name],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -198,7 +199,7 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     )
     if process.stdin is not None:
         process.stdin.write(kwargs_str)
-        process.stdin.flush()
+        process.stdin.close()
     else:
         log_json({
             "type": "core",
@@ -223,11 +224,12 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
             process.wait()
             raise TimeoutError("Process Timed out.")
 
-        if process.stdout:
-            stdout = stdout + process.stdout.read()
-        
-        if process.stderr:
-            stderr = stderr + process.stderr.read()
+        try:
+            out_chunk, err_chunk = process.communicate(timeout=0.05)
+            stdout = stdout + out_chunk
+            stderr = stderr + err_chunk
+        except subprocess.TimeoutExpired:
+            pass
 
         for i in syscall_queue.get_all():
             ret = execute_syscall(i[0], _meta)
@@ -237,7 +239,12 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
 
     loop.close()
 
-    if not process.stdout:
+    out_chunk, err_chunk = process.communicate(timeout=0.3)
+
+    stdout = stdout + out_chunk
+    stderr = stderr + err_chunk
+
+    if not stdout:
         log_json({
             "type": "core",
             "subtype": "tool_execution",
@@ -245,10 +252,8 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
             "msg": "STDOUT IS NONE"
         })
         stdout = "<Empty>"
-    else:
-        stdout = process.stdout.read()
 
-    if not process.stderr:
+    if not stderr:
         if process.poll() != 0:
             log_json({
                 "type": "core",
@@ -257,8 +262,6 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
                 "msg": "STDERR IS NONE"
             })
         stderr = "<Empty>"
-    else:
-        stderr = process.stderr.read()
 
     if process.poll() != 0:
         log_json({

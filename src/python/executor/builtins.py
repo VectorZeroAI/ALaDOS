@@ -185,7 +185,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     conn = _meta.conn
 
 
-    if id is str:
+    if isinstance(id, str):
         name = id
     else:
         name = conn.execute_fetchval("""

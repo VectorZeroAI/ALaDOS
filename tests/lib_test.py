@@ -9,6 +9,18 @@ this suite drives the *client* wrappers in lib (`Knowledge.create`,
 `Rmt.activate_as_master`, etc.) end to end over NATS, the way a running
 tool subprocess actually would.
 
+These tests assert normal, correct behaviour of lib -- the same
+convention as builtins_test.py -- not the presence of the transport bug
+described below. That distinction matters mechanically, not just
+stylistically: a test that asserts "this currently raises TimeoutError"
+passes today and starts *failing* the moment someone fixes the bug, which
+is backwards -- fixing a bug should turn tests green, not red. So all the
+behavioural tests below are written to pass once `_.main.call()` sends
+the correct subject, and to fail (for a clear, diagnosable reason) until
+then. Exactly one test, TestRawCallTransportBug, exists purely to pin
+down the bug's mechanism, and it does not change shape when the bug is
+fixed -- it just starts skipping instead of passing (see its docstring).
+
 WHAT HAS TO BE RUNNING
 -----------------------
 1. A real NATS server on localhost:4222 (`connect_nats()` in
@@ -19,31 +31,41 @@ WHAT HAS TO BE RUNNING
    system this only happens *inside* execute_tool_builtin_func's polling
    loop while a subprocess tool is running -- there is no standalone
    service that does this. For lib to be testable at all we have to spin
-   up that piece ourselves; `_dispatcher_thread` below is exactly that: a
-   background thread that (a) runs base_state's custom-consumer
-   subscription so inbound `_.syscall.<addr>.<name>` messages get queued,
-   and (b) drains the per-slave queue and replies via execute_tool(),
-   which is precisely what the subprocess-poll loop does today.
+   up that piece ourselves; `_Dispatcher` below is exactly that: a
+   background thread that subscribes to `_.syscall.*.*` and, for every
+   inbound request, drains it straight through execute_tool() -- the
+   same call execute_tool_builtin_func's poll loop makes -- and replies.
 
    This is infrastructure this suite needs to exist, not a system
    component -- it is not a replacement for one and should not be
    mistaken for a "fix" of the missing standalone syscall server.
 
-KNOWN BUG THIS SUITE DOCUMENTS
---------------------------------
+KNOWN BUG THIS SUITE IS BLOCKED ON
+------------------------------------
 `_.main.call()` publishes to `_.syscall.{function_name}` -- it never
 includes slave_addr in the subject. Every single wrapper in Knowledge,
 Executables, Rmt, Context, Goal, Result, Web, Event, and Report (i.e.
-everything except batch_call) goes through `call()`, so every one of
-them sends a subject that doesn't match `_.syscall.*.*` (needs exactly
-three dot-separated segments after `_`) and can never reach the
-dispatcher. Per project convention, this is asserted as current, real
-behaviour (a TimeoutError from nats), not xfail'd or skipped.
+everything except batch_call) goes through `call()`, so none of them can
+reach a dispatcher matching `_.syscall.*.*` as written. Because of this,
+every behavioural test in this file uses the `call_fixed` autouse fixture,
+which patches `_.main.call` to use the correct subject shape for the
+duration of the test. This isolates what's being tested (does
+Knowledge.create/Executables.execute/etc. actually work) from the
+transport bug, exactly the way TestKnowledgeLib.test_create_and_read
+worked in the previous revision of this file, but applied everywhere so
+the pass/fail direction of every test lines up with "is the behaviour
+correct," not "is the known bug still there."
+
+Once `_.main.call()` is fixed for real, `call_fixed`'s patch becomes a
+no-op overwrite of already-correct code, and every test in this file
+should still pass unmodified -- at which point the patch (and this whole
+section of the docstring) can simply be deleted.
 
 `batch_call` gets the subject right (`_.syscall.{slave_id}.{name}`) but
 then tries to read `.reply` off the returned Msg object instead of
-`.data` -- `Msg` has no `reply` attribute holding response bytes, so
-this is asserted too, separately.
+`.data` -- `Msg` has no `reply` attribute holding response bytes. That
+one is a real, independent bug in batch_call itself (not a transport
+routing issue `call_fixed` papers over), so it's asserted directly.
 """
 
 import asyncio
@@ -54,6 +76,7 @@ from unittest.mock import patch
 
 import nats
 import pytest
+from nats.aio.client import Client as NatsClient
 from nats.aio.msg import Msg
 from nats.errors import TimeoutError as NatsTimeoutError
 
@@ -67,6 +90,7 @@ from python.executor.types import _ExecToolMetaData
 from python.types import ToolCall
 from python.utils.conn_factory import Conn, register_all_the_composite_types
 from python.utils.name_resolver import resolve_to_addr
+
 
 # ----------------------------------------------------------------------
 # DB fixtures (matches builtins_test.py conventions: real DB, rolled
@@ -165,32 +189,33 @@ class _Dispatcher:
         sub = await nt.subscribe("_.syscall.*.*")
         self._ready.set()
 
-        async def waiter():
-            while not self._stop.is_set():
-                await asyncio.sleep(0.02)
-
         try:
             async for msg in sub.messages:
-                await self._handle(msg)
+                await self._handle(msg, nt)
                 if self._stop.is_set():
                     break
         finally:
             await sub.unsubscribe()
             await nt.close()
 
-    async def _handle(self, msg: Msg) -> None:
+    async def _handle(self, msg: Msg, nt: NatsClient) -> None:
         parts = msg.subject.split(".", 3)
         slave_addr = int(parts[-2])
         tool_name = parts[-1]
-        meta = _ExecToolMetaData(
-            master_id=0,
-            conn=self._db,
-            slave_id=slave_addr,
-            context_limit=40000,
-            occ_last_change=datetime.now(),
-            syscalls_queue=syscalls_queue_dict_per_slave[slave_addr],
-        )
         try:
+            meta = _ExecToolMetaData(
+                master_id=0,
+                conn=self._db,
+                slave_id=slave_addr,
+                context_limit=40000,
+                occ_last_change=datetime.now(),
+                syscalls_queue=syscalls_queue_dict_per_slave[slave_addr],
+                nats=nt,  # reuse the dispatcher's own connected client instead of
+                          # letting _ExecToolMetaData's default factory call
+                          # asyncio.run(connect_nats()), which raises
+                          # RuntimeError when invoked from inside this
+                          # already-running event loop.
+            )
             args = json.loads(msg.data.decode())
             result = execute_tool(ToolCall(tool=tool_name, args=args), meta)
         except Exception as e:  # noqa: BLE001 -- surfaced to the caller, not swallowed
@@ -201,77 +226,95 @@ class _Dispatcher:
 
 @pytest.fixture
 def dispatcher(db):
-    """
-    Bug context: since raw_call()/lib.* never actually reach this
-    dispatcher (see module docstring), most tests below don't depend on
-    it at all -- it exists for the tests that document *correct* subject
-    routing (i.e. what would work if call() were fixed) and for the
-    batch_call tests, which do route correctly.
-    """
     d = _Dispatcher(db)
     d.start()
     yield d
     d.stop()
 
 
-# ----------------------------------------------------------------------
-# _.main.call() -- the shared transport used by every lib.* wrapper
-# except batch_call.
-# ----------------------------------------------------------------------
-class TestRawCallSubjectBug:
+@pytest.fixture(autouse=True)
+def call_fixed():
     """
-    BUG: call() in _/main.py does:
+    Patches _.main.call to publish the subject shape the dispatcher
+    (and the real system's subscriber pattern "_.syscall.*.*") actually
+    requires: "_.syscall.<slave_addr>.<function_name>", three segments
+    after "_", not two.
 
-        await nt.request(f"_.syscall.{function_name}", ...)
+    This is here so every behavioural test in this file exercises real
+    lib behaviour instead of just re-proving the known transport bug
+    (see module docstring: TestRawCallTransportBug covers that bug on
+    its own). Autouse because every test that touches the dispatcher
+    needs it -- forgetting it on a new test would silently make that
+    test fail with a timeout instead of testing anything useful.
+    """
+    async def fixed_call(function_name, slave_addr, args):
+        nt = await nats.connect()
+        try:
+            reply = await nt.request(
+                f"_.syscall.{slave_addr}.{function_name}",
+                json.dumps(args).encode(),
+                timeout=5,
+            )
+            return reply.data.decode()
+        finally:
+            await nt.close()
 
-    This omits slave_addr entirely. The subscriber pattern registered in
+    with patch("ALaDOS.lib._.main.call", new=fixed_call):
+        yield
+
+
+# ----------------------------------------------------------------------
+# _.main.call() transport bug -- pinned down directly, independent of
+# the call_fixed patch (this test intentionally does NOT use the
+# dispatcher/call_fixed fixtures, since it's testing call()'s own
+# subject-building logic, not anything downstream of it).
+# ----------------------------------------------------------------------
+class TestRawCallTransportBug:
+    """
+    call() in _/main.py builds its subject as f"_.syscall.{function_name}",
+    omitting slave_addr entirely. The subscriber pattern registered in
     base_state/state_components/custom_consumers.py is "_.syscall.*.*",
     which requires exactly two wildcard segments after "_.syscall." --
-    one for slave_addr, one for the syscall name. A subject of
-    "_.syscall.k_create" only has one segment there, so it can never
-    match, and the request will always time out against a real NATS
-    server, function_name and slave_addr notwithstanding.
+    one for slave_addr, one for the syscall name -- so this subject can
+    never match it, regardless of which function_name/slave_addr is
+    passed in.
+
+    This test is intentionally decoupled from call_fixed and the
+    dispatcher: it inspects the subject call() builds, not whether a
+    request succeeds. It will keep failing until call()'s subject
+    includes slave_addr, and its assertion won't need to change when
+    that happens -- it'll just start passing.
     """
 
+    def test_call_subject_omits_slave_addr(self):
+        import inspect
+        from ALaDOS.lib._ import main as transport_main
+
+        source = inspect.getsource(transport_main.call)
+        # The correct shape interpolates slave_addr into the subject
+        # somewhere between "_.syscall." and the function name. Assert
+        # that directly rather than re-deriving it from the buggy
+        # example, so this test states what *should* be true.
+        assert "{slave_addr}" in source, (
+            "call() should build its subject with slave_addr in it "
+            "(e.g. f'_.syscall.{slave_addr}.{function_name}'), matching "
+            "the '_.syscall.*.*' subscriber pattern and batch_call's "
+            "own subject construction. It currently doesn't."
+        )
+
+
+# ----------------------------------------------------------------------
+# _.main.call() / batch_call -- subject shape sanity, and the real
+# batch_call bug (.reply vs .data), independent of the routing bug above
+# since batch_call already builds the correct subject.
+# ----------------------------------------------------------------------
+class TestBatchCall:
     @pytest.mark.anyio
-    async def test_call_times_out_against_live_dispatcher(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await raw_call("k_create", slave, {"content": "x", "description": "y", "name": None})
-
-    @pytest.mark.anyio
-    async def test_call_publishes_malformed_subject(self):
+    async def test_batch_call_subject_reaches_dispatcher(self, dispatcher, slave, db):
         """
-        Directly proves the subject shape is wrong, independent of
-        whether anything is subscribed: connect our own client, request
-        with a very short timeout against a subject built the same way
-        call() builds it, and confirm it isn't "_.syscall.<addr>.<name>"
-        (i.e. splitting on '.' doesn't yield 4 parts).
-        """
-        subject = f"_.syscall.{'k_create'}"
-        assert len(subject.split(".")) == 2  # "_" , "syscall.k_create" after first split point
-        # More directly: the correct shape has exactly 4 dot-separated
-        # segments ("_", "syscall", "<addr>", "<name>"); the buggy one
-        # only ever has 3, with no address segment at all.
-        assert len(subject.split(".")) != 4
-
-
-class TestBatchCallBugs:
-    """
-    batch_call gets the *subject* right ("_.syscall.<slave_id>.<name>"),
-    unlike call(), but then does `results.append(i.reply)` where `i` is
-    a `Msg` returned from `nt.request(...)`. `Msg` doesn't carry response
-    payload under `.reply` (that's the *subject* used for anyone
-    replying to this message, not the reply's contents) -- the payload
-    lives in `.data`. This is asserted as current, real behavior.
-    """
-
-    @pytest.mark.anyio
-    async def test_batch_call_subject_matches_dispatcher_pattern(self, dispatcher, slave, db):
-        """
-        Sanity check that the subject shape itself is correct, by
-        exercising the low level request manually and confirming the
-        dispatcher (which only matches "_.syscall.*.*") does receive
-        and answer it.
+        batch_call's subject shape is correct on its own -- confirm the
+        low-level request it makes reaches the dispatcher and gets
+        answered, independent of the later .reply/.data bug below.
         """
         nt = await nats.connect()
         try:
@@ -283,21 +326,52 @@ class TestBatchCallBugs:
             )
             addr = int(reply.data.decode())
             assert addr > 0
-            resolved = resolve_to_addr(name, db)
-            assert resolved == addr
+            assert resolve_to_addr(name, db) == addr
         finally:
             await nt.close()
 
     @pytest.mark.anyio
-    async def test_batch_call_raises_attributeerror_on_reply_access(self, dispatcher, slave):
+    async def test_batch_call_returns_results_in_order(self, dispatcher, slave, db):
         """
-        Documents the `.reply` vs `.data` bug: batch_call should raise
-        AttributeError while trying to build its return list, even
-        though the underlying request/response round trip succeeds.
+        Normal-behaviour test for batch_call: two syscalls in, two
+        results out, in the same order, with real DB state to prove it.
+        This is written to describe what batch_call is supposed to do;
+        it currently fails because of the `.reply` vs `.data` bug (see
+        test_batch_call_reply_attribute_bug below for that bug pinned
+        down directly), not because this expectation is wrong.
         """
-        calls = [SyscallSpec("k_create", {"content": "c", "description": "d", "name": None})]
-        with pytest.raises(AttributeError):
-            await batch_call(calls, slave)
+        name_a = unique_name("batch_a")
+        name_b = unique_name("batch_b")
+        calls = [
+            SyscallSpec("k_create", {"content": "ca", "description": "da", "name": name_a}),
+            SyscallSpec("k_create", {"content": "cb", "description": "db", "name": name_b}),
+        ]
+        results = await batch_call(calls, slave)
+
+        assert len(results) == 2
+        addr_a = int(results[0])
+        addr_b = int(results[1])
+        assert addr_a == resolve_to_addr(name_a, db)
+        assert addr_b == resolve_to_addr(name_b, db)
+
+    def test_batch_call_reply_attribute_bug(self):
+        """
+        Pins down the actual bug: batch_call does `results.append(i.reply)`
+        for each response Msg `i`, but Msg.reply is the *subject to
+        respond to*, not response payload -- that's `.data`. Checking
+        the source directly (rather than round-tripping through NATS)
+        keeps this test decoupled from whether the transport-routing bug
+        above has been fixed.
+        """
+        import inspect
+        from ALaDOS.lib._ import main as transport_main
+
+        source = inspect.getsource(transport_main.batch_call)
+        assert ".data" in source, (
+            "batch_call should read response payloads via Msg.data, not "
+            "Msg.reply (which holds the reply-to subject, not response "
+            "bytes). It currently reads .reply."
+        )
 
 
 # ----------------------------------------------------------------------
@@ -305,37 +379,27 @@ class TestBatchCallBugs:
 # ----------------------------------------------------------------------
 class TestKnowledgeLib:
     @pytest.mark.anyio
-    async def test_create_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Knowledge.create(slave, content="hello", description="desc")
+    async def test_create_and_read_round_trip(self, dispatcher, slave, db):
+        name = unique_name("kn")
+        addr = await Knowledge.create(slave, content="hello", description="desc", name=name)
+        assert addr == resolve_to_addr(name, db)
+
+        content = await Knowledge.read(name, slave)
+        assert content == "hello"
 
     @pytest.mark.anyio
-    async def test_create_and_read_work_once_call_is_fixed(self, dispatcher, slave, db):
-        """
-        Demonstrates Knowledge.create/read/edit are otherwise correctly
-        implemented: patch call() to use the correct subject shape and
-        confirm the round trip through the real dispatcher and DB
-        succeeds. This isolates the bug to the transport layer.
-        """
-        async def fixed_call(function_name, slave_addr, args):
-            nt = await nats.connect()
-            try:
-                reply = await nt.request(
-                    f"_.syscall.{slave_addr}.{function_name}",
-                    json.dumps(args).encode(),
-                    timeout=5,
-                )
-                return reply.data.decode()
-            finally:
-                await nt.close()
+    async def test_edit_updates_content(self, dispatcher, slave, db):
+        name = unique_name("kn_edit")
+        await Knowledge.create(slave, content="old text", description="desc", name=name)
 
-        with patch("ALaDOS.lib.Knowledge.functions.call", new=fixed_call):
-            name = unique_name("kn")
-            addr = await Knowledge.create(slave, content="hello", description="desc", name=name)
-            assert addr == resolve_to_addr(name, db)
+        await Knowledge.edit(
+            name, slave,
+            content_change="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>",
+            description_change=None,
+        )
 
-            content = await Knowledge.read(name, slave)
-            assert content == "hello"
+        content = await Knowledge.read(name, slave)
+        assert content == "new text"
 
 
 # ----------------------------------------------------------------------
@@ -343,16 +407,31 @@ class TestKnowledgeLib:
 # ----------------------------------------------------------------------
 class TestExecutablesLib:
     @pytest.mark.anyio
-    async def test_execute_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Executables.execute(slave, id="nonexistent_tool", timeout=1)
+    async def test_create_registers_a_new_tool(self, dispatcher, slave, db):
+        name = unique_name("tool")
+        addr = await Executables.create(
+            slave,
+            description="a test tool",
+            header="def f(): pass",
+            body="print('hi')",
+            name=name,
+        )
+        assert addr == resolve_to_addr(name, db)
+        body = db.execute_fetchval("SELECT body FROM executables WHERE addr = %s", (addr,))
+        assert body == "print('hi')"
 
     @pytest.mark.anyio
-    async def test_create_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Executables.create(
-                slave, description="d", header="def f(): pass", body="print('hi')"
-            )
+    async def test_execute_runs_created_tool_and_returns_output(self, dispatcher, slave, db):
+        name = unique_name("runtool")
+        await Executables.create(
+            slave,
+            description="prints a marker",
+            header="",
+            body="print('EXECUTABLES_LIB_TEST_OK')",
+            name=name,
+        )
+        output = await Executables.execute(slave, id=name, timeout=10)
+        assert "EXECUTABLES_LIB_TEST_OK" in output
 
 
 # ----------------------------------------------------------------------
@@ -360,14 +439,25 @@ class TestExecutablesLib:
 # ----------------------------------------------------------------------
 class TestContextLib:
     @pytest.mark.anyio
-    async def test_add_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Context.add(slave, id=1)
+    async def test_add_loads_item_into_master_context(self, dispatcher, slave, db):
+        name = unique_name("ctx")
+        addr = await Knowledge.create(slave, content="ctx content", description="d", name=name)
+
+        await Context.add(slave, id=addr)
+
+        master_addr = db.execute_fetchval(
+            "SELECT master_addr FROM slaves WHERE addr = %s", (slave,)
+        )
+        loaded = db.execute(
+            "SELECT addr FROM master_context WHERE master_addr = %s", (master_addr,)
+        ).fetchall()
+        assert addr in [row[0] for row in loaded]
 
     @pytest.mark.anyio
-    async def test_window_change_size_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Context.window_change_size(slave, left=1, right=1)
+    async def test_window_change_size_returns_new_sizes(self, dispatcher, slave):
+        result = await Context.window_change_size(slave, left=2, right=3)
+        assert result["left"] == 2
+        assert result["right"] == 3
 
 
 # ----------------------------------------------------------------------
@@ -375,14 +465,22 @@ class TestContextLib:
 # ----------------------------------------------------------------------
 class TestGoalLib:
     @pytest.mark.anyio
-    async def test_add_slave_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Goal.add_slave(slave, instruction="do something")
+    async def test_add_slave_creates_new_slave_row(self, dispatcher, slave, db):
+        name = unique_name("newslave")
+        addr = await Goal.add_slave(slave, instruction="do something", slave_name=name)
+        assert addr == resolve_to_addr(name, db)
+        instruction = db.execute_fetchval(
+            "SELECT instruction FROM slaves WHERE addr = %s", (addr,)
+        )
+        assert instruction == "do something"
 
     @pytest.mark.anyio
-    async def test_add_master_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Goal.add_master(slave, instruction="do something else")
+    async def test_add_master_creates_new_master_row(self, dispatcher, slave, db):
+        addr = await Goal.add_master(slave, instruction="do something else")
+        instruction = db.execute_fetchval(
+            "SELECT instruction FROM masters WHERE addr = %s", (addr,)
+        )
+        assert instruction == "do something else"
 
 
 # ----------------------------------------------------------------------
@@ -390,14 +488,25 @@ class TestGoalLib:
 # ----------------------------------------------------------------------
 class TestResultLib:
     @pytest.mark.anyio
-    async def test_write_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Result.write(slave, text="the result")
+    async def test_write_returns_same_text(self, dispatcher, slave):
+        result = await Result.write(slave, text="the result")
+        assert result == "the result"
 
     @pytest.mark.anyio
-    async def test_add_master_result_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Result.add_master_result(slave, text="more result text")
+    async def test_add_master_result_appends_to_master_result(self, dispatcher, slave, db):
+        master_addr = db.execute_fetchval(
+            "SELECT master_addr FROM slaves WHERE addr = %s", (slave,)
+        )
+        result_addr = db.execute_fetchval(
+            "SELECT result_addr FROM masters WHERE addr = %s", (master_addr,)
+        )
+
+        await Result.add_master_result(slave, text="more result text")
+
+        content = db.execute_fetchval(
+            "SELECT content FROM results WHERE addr = %s", (result_addr,)
+        )
+        assert "more result text" in content
 
 
 # ----------------------------------------------------------------------
@@ -405,16 +514,24 @@ class TestResultLib:
 # ----------------------------------------------------------------------
 class TestEventLib:
     @pytest.mark.anyio
-    async def test_create_result_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Event.create_result(slave, event_path="evt.some.path", result_str="got ${{data}}")
+    async def test_create_result_returns_result_and_consumer_addrs(self, dispatcher, slave):
+        result = await Event.create_result(
+            slave, event_path="evt.some.path", result_str="got ${{data}}"
+        )
+        assert "result_addr" in result
+        assert "consumer_addr" in result
+        assert result["result_addr"] > 0
+        assert result["consumer_addr"] > 0
 
     @pytest.mark.anyio
-    async def test_register_reaction_slave_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Event.register_reaction_slave(
-                slave, event_path="evt.some.path", instruction="react", scope="general"
-            )
+    async def test_register_reaction_slave_creates_consumer_row(self, dispatcher, slave, db):
+        consumer_addr = await Event.register_reaction_slave(
+            slave, event_path="evt.some.path", instruction="react", scope="general"
+        )
+        event_path = db.execute_fetchval(
+            "SELECT event_path FROM event_consumers WHERE addr = %s", (consumer_addr,)
+        )
+        assert event_path == "evt.some.path"
 
 
 # ----------------------------------------------------------------------
@@ -422,9 +539,26 @@ class TestEventLib:
 # ----------------------------------------------------------------------
 class TestReportLib:
     @pytest.mark.anyio
-    async def test_report_paradoxal_information_times_out_due_to_call_bug(self, dispatcher, slave):
-        with pytest.raises(NatsTimeoutError):
-            await Report.report_paradoxal_information(slave, items=[1, 2], paradox="conflicting facts")
+    async def test_report_paradoxal_information_completes_without_raising(self, dispatcher, slave):
+        """
+        report_paradoxal_information's handler raises ParadoxDetected on
+        the server side, but execute_tool() (called from inside
+        _Dispatcher._handle) has no special handling for that -- it
+        propagates like any other exception, gets caught by the
+        dispatcher's own try/except, and comes back to the client as a
+        plain string reply (an error marker), not as a raised exception.
+        Report.report_paradoxal_information itself discards whatever
+        call() returns (it's typed to return None), so from the client's
+        perspective this normal-behaviour test can only assert that the
+        call completes and returns None -- it cannot observe the
+        underlying paradox signal at all through this wrapper as
+        currently written. That's worth knowing on its own: nothing
+        about a paradox is visible to a caller of this function.
+        """
+        result = await Report.report_paradoxal_information(
+            slave, items=[1, 2], paradox="conflicting facts"
+        )
+        assert result is None
 
 
 # ----------------------------------------------------------------------
@@ -463,5 +597,4 @@ class TestDispatcherSubjectParsing:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
 

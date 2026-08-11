@@ -19,7 +19,7 @@ import threading
 import queue
 import time
 import dataclasses
-from typing import List, Optional, Callable
+from typing import List, Optional
 
 import flask
 import httpx
@@ -138,6 +138,8 @@ def executor_test(cls):
     """
     Decorator that reads the `steps` class variable and creates a
     parametrized pytest test class. Each step is run in order.
+
+    Replaces ${{slave_addr}} with slave addr and ${{result_addr}} with result_addr.
     """
     # We'll create a new class that inherits from object so pytest discovers it.
     class TestWrapper:
@@ -148,9 +150,6 @@ def executor_test(cls):
 
         @pytest.mark.parametrize("step", cls.steps, ids=lambda s: s.instruction)
         def test_step(self, step):
-            # Enqueue responses for this step
-            for resp in step.llm_responses:
-                self.mock.put_response(resp)
 
             # Create a slave with no dependencies (easy to test)
             slave_addr = self.db.execute_fetchval(
@@ -160,6 +159,18 @@ def executor_test(cls):
             result_addr = self.db.execute_fetchval(
                 "SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,)
             )
+
+
+            # Replace keys with addresses.
+            # ${{slave_addr}} for slave_addr
+            # ${{result_addr}} for result_addr
+            for i in range(len(step.llm_responses)):
+                step.llm_responses[i] = step.llm_responses[i].replace("${{slave_addr}}", str(slave_addr))
+                step.llm_responses[i] = step.llm_responses[i].replace("${{result_addr}}", str(result_addr))
+
+            # Enqueue responses for this step
+            for resp in step.llm_responses:
+                self.mock.put_response(resp)
 
             # Wait for the executor to process it
             wait_for_result(self.db, result_addr)
@@ -240,7 +251,7 @@ def _clean_database(conn: Conn):
         "master_req", "slave_req", "master_load", "master_context",
         "rmt_slaves", "reusable_master_templates",
         "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge", "logs", "addrs",
+        "executables", "knowledge", "addrs",
         "cronjob_once", "cronjob_loop",
         "event_consumers", "event_call_rmt", "event_call_execute_slave",
         "event_call_fill_result",
@@ -265,7 +276,7 @@ class BasicExecution:
     steps = [
         ExecutorStep(
             instruction="Write 'Hello World'",
-            llm_responses=['[{"tool": "result.write", "args": {"text": "Hello World"}}]'],
+            llm_responses=['[{"tool": "result_write", "args": {"text": "Hello World"}}]'],
             expected_content_contains="Hello World",
         ),
     ]
@@ -277,9 +288,9 @@ class ParadoxHandling:
         ExecutorStep(
             instruction="Report a paradox",
             llm_responses=[
-                '[{"tool": "K.report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
-                '[{"tool": "result.write", "args": {"text": "Assume handled."}}]',
-                '[{"tool": "result.write", "args": {"text": "DONE!"}}]'
+                '[{"tool": "k_report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
+                '[{"tool": "result_write", "args": {"text": "assume handled."}}]',
+                '[{"tool": "result_write", "args": {"text": "done!"}}]'
             ],
             expected_content_contains="DONE!"
         ),
@@ -292,8 +303,8 @@ class ErrorRecovery:
         ExecutorStep(
             instruction="Fail then recover",
             llm_responses=[
-                '[{"tool": "nonexistent.tool", "args": {}}]',
-                '[{"tool": "result.write", "args": {"text": "recovered"}}]',
+                '[{"tool": "nonexistent_tool", "args": {}}]',
+                '[{"tool": "result_write", "args": {"text": "recovered"}}]',
             ],
             expected_content_contains="recovered",
         ),
@@ -308,14 +319,14 @@ class CreateAndReadKnowledge:
         ExecutorStep(
             instruction="Create a knowledge item",
             llm_responses=[
-                '[{"tool": "K.create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
+                '[{"tool": "k_create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
             ],
             expected_knowledge_count=1,
         ),
         ExecutorStep(
             instruction="Read that knowledge item (simulate read by checking we can find it)",
             llm_responses=[
-                '[{"tool": "K.read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
+                '[{"tool": "k_read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
             ],
             expected_content_contains="moon is cheese",
         ),
@@ -329,12 +340,32 @@ class CheckNestedNewPaths:
             llm_responses=[
                 '[{"tool": "NOT EXISTS", "args": {}}]',
                 ## Then report a paradox inside of recovery.
-                '[{"tool": "K.report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
+                '[{"tool": "k_report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
                 ## Now recover from paradox, and then recover from the tool error?
-                '[{"tool": "result.write", "args": {"text": "recovered paradox"}}]',
-                '[{"tool": "result.write", "args": {"text": "recovered tool_error"}}]',
+                '[{"tool": "result_write", "args": {"text": "recovered paradox"}}]',
+                '[{"tool": "result_write", "args": {"text": "recovered tool_error"}}]',
             ],
             expected_content_contains="recovered tool_error" # check if the last recovery was executed as expected.
+        )
+    ]
+
+
+uuid = str(uuid.uuid4())
+
+class CheckToolExecuteBuiltinFunc:
+    steps = [
+        ExecutorStep(
+            instruction="Create a test tool that uses a syscall.",
+            llm_responses=[
+                '[{"tool": "tool_create", "args": {"description": "desc", "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, "Content", "description")); print("EXECUTED CORRECTLY.")", "header": "Nothing.", "name": "'+ uuid +'"}}]'
+            ]
+        ),
+        ExecutorStep(
+            instruction="Use the test tool",
+            llm_responses=[
+                '[{"tool": "tool_execute", args:{"id": "' + uuid + '", "kwargs": {}}}]'
+            ],
+            expected_content_contains="EXECUTED_CORRECTLY"
         )
     ]
 

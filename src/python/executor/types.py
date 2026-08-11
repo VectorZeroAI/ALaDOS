@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from functools import partial
 import threading
-from typing import Coroutine, Literal, Sequence, TypeAlias, get_args, Union
-from enum import Enum, auto
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum, auto
+from typing import Literal, Sequence, TypeAlias, Union, get_args
 
 from nats.aio.client import Client
-from nats.aio.msg import Msg
 from pydantic import JsonValue
-from ..utils.connect_nats import connect_nats
-from ..types import ToolCall
-import asyncio
 
+from ..types import ReferenceTo, SyscallsQueue, ToolCall
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
-from ..types import ReferenceTo, SyscallsQueue
-from .exceptions import ParadoxDetected, ContextLimitExceededError
+from .exceptions import ContextLimitExceededError, ParadoxDetected
 
 JsonSerializable: TypeAlias = JsonValue
 
@@ -51,10 +46,6 @@ class Instr:
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 
-def return_nats_connection() -> Client:
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(connect_nats()) 
-
 @dataclass(slots=True)
 class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
@@ -64,7 +55,7 @@ class _ExecToolMetaData:
     context_limit: int
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue
-    nats: Client = field(default_factory=return_nats_connection)
+    nats: Client
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):

@@ -47,6 +47,10 @@ class Uqueue(Generic[T]):
                 return None
 
     def get_all(self) -> list[T]:
+        """
+        Gets all items and returns them as a list.
+        Returns empty list if no items in the queue.
+        """
         items = []
         with self._item_available:
             while self._queue:

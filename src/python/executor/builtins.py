@@ -224,10 +224,20 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
 
     loop = asyncio.new_event_loop()
 
+    stdout: str = ""
+    stderr: str = ""
+
     while process.poll() is None:
         if time.time() - start > timeout:
             process.kill()
             raise TimeoutError("Process Timed out.")
+
+        if process.stdout:
+            stdout = stdout + process.stdout.read()
+        
+        if process.stderr:
+            stderr = stderr + process.stderr.read()
+
         for i in syscall_queue.get_all():
             ret = execute_tool(i[0], _meta)
             loop.run_until_complete(

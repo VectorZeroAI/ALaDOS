@@ -15,7 +15,7 @@ from nats.aio.msg import Msg
 
 from ...events.types import Event
 from ...executor.queue import syscalls_queue_dict_per_slave
-from ...executor.types import ToolCall
+from ...types import ToolCall
 from ..registry import register
 from ..types import CustomConsumer
 

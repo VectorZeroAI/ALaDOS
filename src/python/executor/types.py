@@ -12,6 +12,7 @@ from nats.aio.client import Client
 from nats.aio.msg import Msg
 from pydantic import JsonValue
 from ..utils.connect_nats import connect_nats
+from ..types import ToolCall
 import asyncio
 
 from ..utils.conn_factory import Conn
@@ -47,12 +48,6 @@ class Instr:
     context: str
     slave_addr: int
     scope: SlaveScope_
-
-@dataclass(slots=True)
-class ToolCall:
-    """ A single tool call, directly executable """
-    tool: str
-    args: dict[str, JsonSerializable] = field(default_factory=dict[str, JsonSerializable])
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 

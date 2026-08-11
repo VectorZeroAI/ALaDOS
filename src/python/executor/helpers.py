@@ -5,7 +5,8 @@ import re
 
 from ..utils.conn_factory import Conn
 from .exceptions import ContextLimitExceededError
-from .types import Instr, ToolCallsBlock, ToolCall
+from .types import Instr, ToolCallsBlock
+from ..types import ToolCall
 from .execute_tool import HEADERS_REGISTRY
 from ..utils.logger import log_json
 

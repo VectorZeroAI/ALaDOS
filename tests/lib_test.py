@@ -54,26 +54,19 @@ from unittest.mock import patch
 
 import nats
 import pytest
-
 from nats.aio.msg import Msg
 from nats.errors import TimeoutError as NatsTimeoutError
 
+from lib import Context, Event, Executables, Goal, Knowledge, Report, Result
+from lib._.main import batch_call
+from lib._.main import call as raw_call
+from lib._.main import syscall as SyscallSpec
 from python.executor.execute_tool import execute_tool
 from python.executor.queue import syscalls_queue_dict_per_slave
-from python.executor.types import ToolCall, _ExecToolMetaData
+from python.executor.types import _ExecToolMetaData
+from python.types import ToolCall
 from python.utils.conn_factory import Conn, register_all_the_composite_types
 from python.utils.name_resolver import resolve_to_addr
-
-from lib._.main import call as raw_call, batch_call, syscall as SyscallSpec
-
-from lib import Knowledge
-from lib import Executables
-from lib import Context
-from lib import Goal
-from lib import Result
-from lib import Event
-from lib import Report
-
 
 # ----------------------------------------------------------------------
 # DB fixtures (matches builtins_test.py conventions: real DB, rolled

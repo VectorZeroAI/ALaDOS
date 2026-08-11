@@ -2,7 +2,7 @@
 
 from typing import Callable, ParamSpec, TypeVar, get_args
 
-from ..executor.types import ToolCall
+from ..types import ToolCall
 import inspect
 import re
 from .types import _ExecToolMetaData, SlaveScope_, SlaveScopesList

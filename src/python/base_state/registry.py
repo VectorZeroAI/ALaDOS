@@ -59,11 +59,15 @@ def __item_registerer(item_type: str):
 def __register_item(item: Item, conn: Conn) -> None:
     REGISTERERS_REGISTRY[str(type(item))](item, conn)
 
+def insert_addr(addr: int, conn: Conn) -> None:
+    conn.execute("""
+    INSERT INTO addrs(addr) VALUES(%s)
+                 """, (addr,))
 
-
-@__item_registerer(str(type(EventConsumers)))
+@__item_registerer("<class 'python.base_state.types.EventConsumers'>")
 def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO event_consumers(addr, event_path, action_type) VALUES(%s, %s, %s)
                      """, (item.addr, item.event_path, item.action_type))
@@ -83,9 +87,10 @@ def register_event_consumer(item: EventConsumers, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Rmt)))
+@__item_registerer("<class 'python.base_state.types.Rmt'>")
 def register_rmt(item: Rmt, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         auto_addr = create_from_serial(item.dsl, conn, item.name)
         conn.execute("""
         UPDATE addrs
@@ -99,9 +104,10 @@ def register_rmt(item: Rmt, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Cronjob)))
+@__item_registerer("<class 'python.base_state.types.Cronjob'>")
 def register_cronjob(item: Cronjob, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         if item.type == "once":
             conn.execute("""
             INSERT INTO cronjob_once(addr, name, args, start_after)
@@ -115,9 +121,10 @@ def register_cronjob(item: Cronjob, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Slaves)))
+@__item_registerer("<class 'python.base_state.types.Slaves'>")
 def register_slaves(item: Slaves, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO slaves(addr, instruction, result_addr, scope) VALUES (%s, %s, %s, %s);
                      """, (item.addr, item.instruction, item.result_addr, item.scope))
@@ -131,9 +138,10 @@ def register_slaves(item: Slaves, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Masters)))
+@__item_registerer("<class 'python.base_state.types.Masters'>")
 def register_master(item: Masters, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO masters(addr, instruction, result_addr) VALUES (%s, %s, %s);
                      """, (item.addr, item.instruction, item.result_addr))
@@ -152,9 +160,10 @@ def register_master(item: Masters, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Results)))
+@__item_registerer("<class 'python.base_state.types.Results'>")
 def register_result(item: Results, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
                      """, (item.addr, item.content_str, item.metadata, item.ready))
@@ -165,9 +174,10 @@ def register_result(item: Results, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Executable)))
+@__item_registerer("<class 'python.base_state.types.Executable'>")
 def register_executable(item: Executable, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO executables(addr, header, body) VALUES (%s, %s::TEXT, %s::TEXT);
                      """, (item.addr, item.header, item.body))
@@ -182,9 +192,10 @@ def register_executable(item: Executable, conn: Conn) -> None:
 
 
 
-@__item_registerer(str(type(Knowledge)))
+@__item_registerer("<class 'python.base_state.types.Knowledge'>")
 def register_knowledge(item: Knowledge, conn: Conn) -> None:
     with conn.transaction():
+        insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO knowledge(addr, content) VALUES(%s, %s::TEXT);
                      """, (item.addr, item.content))

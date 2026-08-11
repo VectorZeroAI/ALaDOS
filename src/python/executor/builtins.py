@@ -616,8 +616,7 @@ def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: i
     
     new = conn.execute("""
     UPDATE master_context
-        SET window_size_l = window_size_l + %s
-        SET window_size_r = window_size_r + %s
+        SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s
     WHERE addr = %s
     RETURNING window_size_l, window_size_r;
                  """, (left, right, _meta.master_id)).fetchone()

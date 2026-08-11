@@ -68,7 +68,8 @@ ALL = get_args(SlaveScope)
 searcher_obj = SearxngSearcher()
 
 # def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
-@register_tool("K.create", ['general', 'context'])
+# @register_tool("K.create", ['general', 'context'])
+@register_tool("k_create", ['general', 'context'])
 def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str|None = None) -> str:
     """ 
     Creates a knowledge item.
@@ -101,7 +102,8 @@ def k_create(content: str, description: str, _meta: _ExecToolMetaData, name: str
 #            content_change: SearchAndReplaceBlock|None = None,
 #            ) -> ActionConfirmation:
 
-@register_tool("K.edit", ['general', 'context'])
+# @register_tool("K.edit", ['general', 'context'])
+@register_tool("k_edit", ['general', 'context'])
 def k_edit(_meta: _ExecToolMetaData,
            id: Addr|str,
            description_change: SearchAndReplaceBlock|None = None,
@@ -161,6 +163,7 @@ def k_edit(_meta: _ExecToolMetaData,
 
 
 #def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
+#@register_tool("K.read", ['general', 'context'])
 @register_tool("k_read", ['general', 'context'])
 def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """ Resolve knowledge item by ID. """
@@ -176,7 +179,8 @@ def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> str:
 
 
 # def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> ActionConfirmation:
-@register_tool("tool.execute", ['general'])
+#@register_tool("tool.execute", ['general'])
+@register_tool("tool_execute", ['general']) # TODO : Rename into something like "Execute" cause it executes executables, and last part can be left out.
 def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> str:
     """ 
     Executes a tool beyond buildins, from the database, by id.
@@ -241,7 +245,8 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
 
 
 # def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:
-@register_tool("tool.create", ['context'])
+# @register_tool("tool.create", ['context'])
+@register_tool("tool_create", ['context'])
 def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> str:
     """
     Creates a python tool, to be executed with tool.execute .
@@ -279,7 +284,8 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
 #               new_description: str|None = None,
 #               ) -> ActionConfirmation:
 
-@register_tool("tool.edit", ['general', 'context'])
+# @register_tool("tool.edit", ['general', 'context'])
+@register_tool("tool_edit", ['general', 'context'])
 def edit_tool(_meta: _ExecToolMetaData,
               id: str|Addr,
               header_change: SearchAndReplaceBlock|None = None,
@@ -361,7 +367,8 @@ def edit_tool(_meta: _ExecToolMetaData,
 
 
 # def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
-@register_tool("context.add", ['general', 'context'])
+# @register_tool("context.add", ['general', 'context'])
+@register_tool("context_add", ['general', 'context'])
 def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta.conn
@@ -386,7 +393,8 @@ def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> str:
 #               ) -> ActionConfirmation:
 
 
-@register_tool("goal.add_slave", ['general', 'task'])
+# @register_tool("goal.add_slave", ['general', 'task'])
+@register_tool("goal_add_slave", ['general', 'task'])
 def add_slave(instruction: str,
               _meta: _ExecToolMetaData,
               slave_type: SlaveScope = 'general',
@@ -440,7 +448,8 @@ add_slave.__doc__ = "".join([str(add_slave.__doc__) , "[ " ,  str(get_args(Slave
 
 # def add_replanner_slave(_meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("goal.add_planner_slave", ['task'])
+# @register_tool("goal.add_planner_slave", ['task'])
+@register_tool("goal_add_planner_slave", ['task'])
 def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
     """ Adds a planner step, that adds further steps, ensuring the whole plan of the task is created incrementally. TO ADD PLANNER, USE THIS FUNCTION. """
     conn = _meta.conn
@@ -499,7 +508,8 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
 
 
 # def master_result_add(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
-@register_tool("result.add_master_result", ALL)
+# @register_tool("result.add_master_result", ALL)
+@register_tool("result_add_master_result", ALL)
 def master_result_add(text: str, _meta: _ExecToolMetaData) -> str:
     """
     This funtion writes a result for the whole master, e.g. the task that consists of many slaves.
@@ -517,7 +527,8 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> str:
 
 # def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("context.window.semantic_land", ['context'])
+# @register_tool("context.window.semantic_land", ['context'])
+@register_tool("context_window_semantic_land", ['context'])
 def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> str:
     """
     Lands a viewing window, or a context window, these are the same thing, based on a semantic querry. 
@@ -543,7 +554,8 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> str:
 
 # def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("context.window.land_by_addr", ['context'])
+# @register_tool("context.window.land_by_addr", ['context'])
+@register_tool("context_window_land_by_addr", ['context'])
 def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """
     Lands a viewing window onto an item by id.
@@ -587,7 +599,8 @@ def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
 
 
 
-@register_tool("context.window.change_size", ['context'])
+# @register_tool("context.window.change_size", ['context'])
+@register_tool("context_window_change_size", ['context'])
 def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: int = 0) -> str:
     """ 
     The function for changing viewing windows size. 
@@ -620,7 +633,8 @@ def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: i
 
 # def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("context.window.move_anchor", ['context'])
+# @register_tool("context.window.move_anchor", ['context'])
+@register_tool("context_window_move_anchor", ['context'])
 def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> str:
     """
     Function to move the anchor of the viewing window.
@@ -641,7 +655,8 @@ def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> str:
 
 # def result_write(text: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("result.write", ALL)
+# @register_tool("result.write", ALL)
+@register_tool("result_write", ALL)
 def result_write(text: str, _meta: _ExecToolMetaData) -> str:
     """
     Writes plaintext passed in as the result to your current instruction, NOT to the master instruction, NOT to the user. 
@@ -652,7 +667,8 @@ def result_write(text: str, _meta: _ExecToolMetaData) -> str:
 
 # def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("K.report_paradoxal_information", ALL)
+# @register_tool("K.report_paradoxal_information", ALL)
+@register_tool("k_report_paradoxal_information", ALL)
 def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta: _ExecToolMetaData) -> str:
     """
     Reports paradoxal items. Items are paradoxal if the information contained withhin them is mutually exclusive.
@@ -687,7 +703,8 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
 #                 params: dict[str, Any],
 #                 _meta: _ExecToolMetaData) -> ActionConfirmation:
 
-@register_tool("goal.add_cron_job", ['task', 'general'])
+# @register_tool("goal.add_cron_job", ['task', 'general'])
+@register_tool("goal_add_cron_job", ['task', 'general'])
 def add_cronjob(cronjob_type: Literal['once', 'loop'],
                 action: CronjobActions,
                 time_between_runs: int,
@@ -723,7 +740,8 @@ def add_cronjob(cronjob_type: Literal['once', 'loop'],
 
 # def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
 
-@register_tool("context.unload_item", ["context"])
+# @register_tool("context.unload_item", ["context"])
+@register_tool("context_unload_item", ["context"])
 def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """
     Unloads the item from the context window, by id.
@@ -745,7 +763,8 @@ def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> str:
 
 # def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> ActionConfirmation:
 
-@register_tool("web.search_fulltext", ['general', 'communication'])
+# @register_tool("web.search_fulltext", ['general', 'communication'])
+@register_tool("web_search_fulltext", ['general', 'communication'])
 def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, websites_amount: int = 3) -> str:
     """
     Websearch function that returns fulltext of top websites_amount webpages texts.
@@ -779,7 +798,8 @@ def web_searcher_function_fulltext(query: str, _meta: _ExecToolMetaData, website
 
 
 # def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> ActionConfirmation:
-@register_tool("web.search", ['communication'])
+# @register_tool("web.search", ['communication'])
+@register_tool("web_search", ['communication'])
 def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -> str:
     """
     Returns Json list of websearch results in the following structure:
@@ -815,7 +835,8 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
 #                 return_type: Literal['extracted', 'raw'] = 'extracted',
 #                 headers: dict[str, str] = {}) -> ActionConfirmation:
 
-@register_tool("web.get", ['general', 'communication'])
+# @register_tool("web.get", ['general', 'communication'])
+@register_tool("web_get", ['general', 'communication'])
 def web_request(url: str,
                 _meta: _ExecToolMetaData,
                 timeout: int = 10,
@@ -846,7 +867,8 @@ def web_request(url: str,
 #              payload: str = ""
 #              ) -> ActionConfirmation:
 
-@register_tool('web.post', ['communication'])
+# @register_tool('web.post', ['communication'])
+@register_tool('web_post', ['communication'])
 def web_post(url: str,
              _meta: _ExecToolMetaData,
              timeout: int = 10,
@@ -880,7 +902,8 @@ def web_post(url: str,
 #                   result_name: str|None = None
 #                   ) -> ActionConfirmation:
 
-@register_tool("goal.add_master", ['task'])
+# @register_tool("goal.add_master", ['task'])
+@register_tool("goal_add_master", ['task'])
 def create_master(instruction: str,
                   _meta: _ExecToolMetaData,
                   required_ids: Sequence[str|Addr] = [],
@@ -920,7 +943,8 @@ def create_master(instruction: str,
 #                           description: str,
 #                           name: str|None = None) -> ActionConfirmation:
 
-@register_tool("rmt.create.from_range", ['task'])
+# @register_tool("rmt.create.from_range", ['task'])
+@register_tool("rmt_create_from_range", ['task'])
 def rmt_create_from_range(_meta: _ExecToolMetaData,
                           start_id: Addr|str,
                           end_id: Addr|str,
@@ -950,7 +974,8 @@ def rmt_create_from_range(_meta: _ExecToolMetaData,
 
 # def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> ActionConfirmation:
 
-@register_tool("rmt.serialize", ['task'])
+# @register_tool("rmt.serialize", ['task'])
+@register_tool("rmt_serialize", ['task'])
 def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """
     Serialises an rmt into a readable format.
@@ -970,7 +995,8 @@ def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> str:
 
 # def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, description: str, name: str|None = None) -> ActionConfirmation:
 
-@register_tool("rmt.create.from_dsl", ['task'])
+# @register_tool("rmt.create.from_dsl", ['task'])
+@register_tool("rmt_create_from_dsl", ['task'])
 def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, description: str, name: str|None = None) -> str:
     """
     Creates an rmt from dsl.
@@ -1022,7 +1048,8 @@ def rmt_create_from_serial(_meta: _ExecToolMetaData, dsl: str, description: str,
 #                             description: str,
 #                             name: str|None = None) -> ActionConfirmation:
 
-@register_tool("rmt.create.from_master", ['task'])
+# @register_tool("rmt.create.from_master", ['task'])
+@register_tool("rmt_create_from_master", ['task'])
 def tool_rmt_create_from_master(_meta: _ExecToolMetaData,
                             master_id: Addr|Name,
                             description: str,
@@ -1047,7 +1074,8 @@ def tool_rmt_create_from_master(_meta: _ExecToolMetaData,
 
 # def rmt_edit_description(_meta: _ExecToolMetaData, rmt_id: Addr|Name, new_description: str) -> ActionConfirmation:
 
-@register_tool("rmt.edit.description", ['task'])
+# @register_tool("rmt.edit.description", ['task'])
+@register_tool("rmt_edit_description", ['task'])
 def rmt_edit_description(_meta: _ExecToolMetaData, rmt_id: Addr|Name, new_description: str) -> str:
     """
     Set the rmt description to something new.
@@ -1076,7 +1104,8 @@ def rmt_edit_description(_meta: _ExecToolMetaData, rmt_id: Addr|Name, new_descri
 
 # def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_id: Addr|Name, concatenate: bool = True) -> ActionConfirmation:
 
-@register_tool("rmt.slave.edit.delete_node", ['task'])
+# @register_tool("rmt.slave.edit.delete_node", ['task'])
+@register_tool("rmt_slave_edit_delete_node", ['task'])
 def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_id: Addr|Name, concatenate: bool = True) -> str:
     """
     Deletes a node from rmt.
@@ -1119,7 +1148,8 @@ def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_
 #                 required_by: Sequence[ReferenceTo|str] = []
 #                 ) -> ActionConfirmation:
 
-@register_tool("rmt.slave.edit.insert_node", ['task'])
+# @register_tool("rmt.slave.edit.insert_node", ['task'])
+@register_tool("rmt_slave_edit_insert_node", ['task'])
 def rmt_insert_node(_meta: _ExecToolMetaData,
                 rmt_id: Addr|Name,
                 instruction: str,
@@ -1158,7 +1188,8 @@ def rmt_insert_node(_meta: _ExecToolMetaData,
 #                            required_by: Sequence[Addr|Name] = []
 #                            ) -> ActionConfirmation:
 
-@register_tool("rmt.activate_as_master", ['general', 'task'])
+# @register_tool("rmt.activate_as_master", ['general', 'task'])
+@register_tool("rmt_activate_as_master", ['general', 'task'])
 def rmt_activate_as_master(_meta: _ExecToolMetaData,
                            rmt_id: Addr|Name,
                            inputs: dict[str, str],
@@ -1185,7 +1216,8 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
 
 # def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
 
-@register_tool("rmt.slave.edit.instruction", ['task'])
+# @register_tool("rmt.slave.edit.instruction", ['task'])
+@register_tool("rmt_slave_edit_instruction", ['task'])
 def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block: SearchAndReplaceBlock) -> ActionConfirmation:
     """
     Edits an rmt_slave's instruction.
@@ -1211,7 +1243,8 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
 
 # def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> ActionConfirmation:
 
-@register_tool("rmt.slave.edit.scope", ['task'])
+# @register_tool("rmt.slave.edit.scope", ['task'])
+@register_tool("rmt_slave_edit_scope", ['task'])
 def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: SlaveScope) -> str:
     """
     Changed the scope of an slave in an rmt to the new_scope.
@@ -1242,7 +1275,8 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
 #                                 rmt_id: Addr|Name,
 #                                 args: dict[str, str]) -> ActionConfirmation:
 
-@register_tool("event.register_reaction.rmt", ['task'])
+# @register_tool("event.register_reaction.rmt", ['task'])
+@register_tool("event_register_reaction_rmt", ['task'])
 def tool_register_event_reaction_rmt(_meta: _ExecToolMetaData,
                                 event_path: str,
                                 rmt_id: Addr|Name,
@@ -1274,7 +1308,8 @@ def tool_register_event_reaction_rmt(_meta: _ExecToolMetaData,
 #         scope: SlaveScope
 #         ) -> ActionConfirmation:
 
-@register_tool("event.register_reaction.slave", ['task'])
+# @register_tool("event.register_reaction.slave", ['task'])
+@register_tool("event_register_reaction_slave", ['task'])
 def tool_register_event_reaction_execute_slave(
         _meta: _ExecToolMetaData,
         event_path: str,
@@ -1306,7 +1341,8 @@ def tool_register_event_reaction_execute_slave(
 #         name: str|None = None
 #         ) -> ActionConfirmation:
 
-@register_tool("event.create_result", ['task'])
+# @register_tool("event.create_result", ['task'])
+@register_tool("event_create_result", ['task'])
 def tool_create_result_via_event(
         _meta: _ExecToolMetaData,
         event_path: str, 

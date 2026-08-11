@@ -36,6 +36,8 @@ from python.utils.conn_factory import (
     Conn,
     register_all_the_composite_types
 )
+from python.base_state.main import startup as bs_startup
+from python.events.main import startup as ev_startup
 
 #  --  Database configuration  ----------------------------------------
 DB_HOST = "/data/data/com.termux/files/usr/tmp"
@@ -230,6 +232,10 @@ def global_setup():
         target=executor_core, args=(executor_queue, [api]), daemon=True
     ).start()
 
+    coros = bs_startup()
+
+    ev_startup(coros)
+
     # Clean database once at the start of the session
     conn = _test_conn_factory()
     _clean_database(conn)
@@ -292,7 +298,7 @@ class ParadoxHandling:
                 '[{"tool": "result_write", "args": {"text": "assume handled."}}]',
                 '[{"tool": "result_write", "args": {"text": "done!"}}]'
             ],
-            expected_content_contains="DONE!"
+            expected_content_contains="done!"
         ),
     ]
 

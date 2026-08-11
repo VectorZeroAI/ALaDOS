@@ -644,7 +644,7 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
 
-    # FIXME: The paradox label is never removed. That is wrong after the fact of handling it.
+    # NOTE : The paradox label is removed when new_result is called by the sql function itself.
 
     raise ParadoxDetected(paradox, items)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import partial
 import threading
-from typing import Literal, Sequence, TypeAlias, get_args, Union
+from typing import Coroutine, Literal, Sequence, TypeAlias, get_args, Union
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -51,6 +51,10 @@ class Instr:
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 
+def return_nats_connection() -> Client:
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(connect_nats()) 
+
 @dataclass(slots=True)
 class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
@@ -60,7 +64,7 @@ class _ExecToolMetaData:
     context_limit: int
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue
-    nats: Client = field(default_factory=partial(asyncio.run, connect_nats()))
+    nats: Client = field(default_factory=return_nats_connection)
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 class Cs(Enum):

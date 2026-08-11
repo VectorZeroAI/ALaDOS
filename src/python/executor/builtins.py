@@ -360,7 +360,7 @@ def edit_tool(_meta: _ExecToolMetaData,
     update_timestamp(addr, conn)
 
     return ""
-    return f"Applied the edits to the tool {id if isinstance(id, str) else 'No_Name'}@{addr}"
+    #return f"Applied the edits to the tool {id if isinstance(id, str) else 'No_Name'}@{addr}"
 
 
 

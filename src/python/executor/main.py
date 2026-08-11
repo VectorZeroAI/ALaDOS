@@ -11,7 +11,7 @@ from python.utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import HEADERS_REGISTRY, execute_tool
+from ..executor.execute_tool import HEADERS_REGISTRY, execute_syscall, execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.main import slave_addr_to_instr

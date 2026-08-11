@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
+import inspect
+import re
 from typing import Callable, ParamSpec, TypeVar, get_args
 
 from ..types import ToolCall
-import inspect
-import re
-from .types import _ExecToolMetaData, SlaveScope_, SlaveScopesList
+from .helpers import ToolsManager
+from .types import SlaveScope_, SlaveScopesList, _ExecToolMetaData
 
 TOOL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
@@ -70,8 +71,15 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
         return func
     return decorator
 
-def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
+def execute_syscall(call: ToolCall, _meta: _ExecToolMetaData) -> str:
+    """ Executes a syscall from syscalls table """
     return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
+
+def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
+    """ Execute function from DB """
+    return tools_manager[call.tool](call.args, _meta)
+
+tools_manager: ToolsManager = ToolsManager(100) # TODO : Make it configurable
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

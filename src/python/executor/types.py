@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Literal, Sequence, TypeAlias, Union, get_args
+from typing import Literal, Sequence, TypeAlias, Union, get_args, Any, Callable
 
 from nats.aio.client import Client
 from pydantic import JsonValue
@@ -46,6 +46,7 @@ class Instr:
 
 ToolCallsBlock: TypeAlias = list[ToolCall]
 
+
 @dataclass(slots=True)
 class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
@@ -57,6 +58,9 @@ class _ExecToolMetaData:
     syscalls_queue: SyscallsQueue
     nats: Client
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
+
+
+CachedTool: TypeAlias = Callable[[dict[str, Any], _ExecToolMetaData], str]
 
 class Cs(Enum):
     GET_SLAVE = auto()

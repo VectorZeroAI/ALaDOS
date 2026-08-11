@@ -84,7 +84,7 @@ from ALaDOS.lib import Context, Event, Executables, Goal, Knowledge, Report, Res
 from ALaDOS.lib._.main import batch_call
 from ALaDOS.lib._.main import call as raw_call
 from ALaDOS.lib._.main import syscall as SyscallSpec
-from python.executor.execute_tool import execute_tool
+from python.executor.execute_tool import execute_syscall
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
 from python.types import ToolCall
@@ -229,7 +229,7 @@ class _Dispatcher:
             # the loop free to service NATS while a handler blocks.
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
-                None, execute_tool, ToolCall(tool=tool_name, args=args), meta
+                None, execute_syscall, ToolCall(tool=tool_name, args=args), meta
             )
         except Exception as e:  # noqa: BLE001 -- surfaced to the caller, not swallowed
             result = f"__DISPATCH_ERROR__:{e}"

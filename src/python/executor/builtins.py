@@ -16,18 +16,15 @@ The lib side will have to translate to proper return type.
 
 from dataclasses import asdict
 import json
-import os
-import subprocess
 from functools import partial
-import time
+from tempfile import NamedTemporaryFile, TemporaryFile
 from typing import Any, Literal, Sequence, TypeAlias, get_args
-import asyncio
 
 import httpx
 import psycopg
 from numpy import ndarray
 from psycopg.types.json import Jsonb
-from python.utils.logger import log_json
+from ..utils.logger import log_json
 
 from ..rmt.main import (
     activate_as_master,
@@ -55,7 +52,7 @@ from .cronjobs.parser import insert_cronjob
 from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
-from .execute_tool import execute_tool, register_tool
+from .execute_tool import register_tool, execute_tool, tools_manager
 from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
@@ -182,104 +179,24 @@ def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> str:
 @register_tool("tool_execute", ['general']) # TODO : Rename into something like "Execute" cause it executes executables, and last part can be left out.
 def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: int = 10, kwargs: dict|None=None) -> str:
     """ 
-    Executes a tool beyond buildins, from the database, by id.
-    One of addr or name must not be None. 
-    kwargs are the parameters you pass to the programm. They are json serialised, so do not try to pass in anything other then json.
-    Timeout is the execution timeout, e.g. after how much time to kill the process and call it a failiure, in seconds.
-
+    Executes a tool by id.
     """
+
     conn = _meta.conn
-    
-    addr = resolve_to_addr(id, conn)
 
-    body = conn.execute_fetchval("""
-    SELECT body FROM executables WHERE addr = %s;
-                        """, (addr,))
-    env = os.environ.copy()
-    env["KWARGS"] = json.dumps(kwargs)
 
-    process = subprocess.Popen(
-        ["python3"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        text=True
-    )
-    if process.stdin is not None:
-        process.stdin.write(body)
-        process.stdin.flush()
+    if id is str:
+        name = id
     else:
-        log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": "Process.stdin is None, unable to write."
-        })
-        raise RuntimeError("Unable to execute, process.stdin is none, call the developer!")
+        name = conn.execute_fetchval("""
+        SELECT name FROM names WHERE addr = %s;
+                                     """, (id,))
 
-    start = time.time()
+    if kwargs is None:
+        kwargs = {}
+    kwargs["timeout"] = timeout
 
-    syscall_queue = _meta.syscalls_queue
-
-    loop = asyncio.new_event_loop()
-
-    stdout: str = ""
-    stderr: str = ""
-
-    while process.poll() is None:
-        if time.time() - start > timeout:
-            process.kill()
-            process.wait()
-            raise TimeoutError("Process Timed out.")
-
-        if process.stdout:
-            stdout = stdout + process.stdout.read()
-        
-        if process.stderr:
-            stderr = stderr + process.stderr.read()
-
-        for i in syscall_queue.get_all():
-            ret = execute_tool(i[0], _meta)
-            loop.run_until_complete(
-                i[1].respond(ret.encode())
-            )
-
-    loop.close()
-
-    if not process.stdout:
-        log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": "STDOUT IS NONE"
-        })
-        stdout = "<Empty>"
-    else:
-        stdout = process.stdout.read()
-
-    if not process.stderr:
-        if process.poll() != 0:
-            log_json({
-                "type": "core",
-                "subtype": "tool_execution",
-                "status": "warning",
-                "msg": "STDERR IS NONE"
-            })
-        stderr = "<Empty>"
-    else:
-        stderr = process.stderr.read()
-
-    if process.poll() != 0:
-        log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}."
-        })
-        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
-
-    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
+    return tools_manager[name](kwargs, _meta)
 
 
 # def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:

@@ -43,6 +43,8 @@ def register_reaction_rmt(event_path: str, rmt_addr: ReferenceTo, args: dict[str
     """
     Register the event reaction as an RMT.
     All of the patterns are explained in the consumer load function docs and in builtins.
+
+    Returns consumer addr
     """
     consumer_addr = conn.execute_fetchval("""
     INSERT INTO event_consumers(event_path, action_type) VALUES(%s, 'call_rmt') RETURNING addr;
@@ -59,6 +61,8 @@ def register_reaction_execute_slave(event_path: str, instruction: str, scope: Sl
     """
     Register event reaction as slave.
     All of the patterns are explained in the consumer load function docs and in builtins.
+
+    Returns consumer addr.
     """
     consumer_addr = conn.execute_fetchval("""
     INSERT INTO event_consumers(event_path, action_type) VALUES(%s, 'execute_slave') RETURNING addr;

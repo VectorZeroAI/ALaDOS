@@ -22,7 +22,7 @@ from python.executor.builtins import (
     send_message_to_human_v_webui,
     rmt_create_from_serial, rmt_serialise, rmt_activate_as_master,
     rmt_insert_node, rmt_delete_node, rmt_edit_instruction, rmt_change_scope,
-    tool_create_from_master, create_master, rmt_create_from_range,
+    tool_rmt_create_from_master, create_master, rmt_create_from_range,
     rmt_edit_description,
     tool_create_result_via_event,
     tool_register_event_reaction_rmt,
@@ -465,7 +465,7 @@ class TestRmtTools:
         r1 = conn.execute_fetchval("SELECT resolve_name('res1')")
         conn.execute("SELECT new_slave(%s, 'step2', 's2', ARRAY[%s], NULL, 'res2')", (m_addr, r1))
         rmt_name = unique_name("from_master")
-        res = tool_create_from_master(master_id=m_addr, name=rmt_name, _meta=meta, description="desc")
+        res = tool_rmt_create_from_master(master_id=m_addr, name=rmt_name, _meta=meta, description="desc")
         assert "Created rmt from master" in res
 
     def test_rmt_create_from_range(self, meta):

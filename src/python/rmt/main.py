@@ -351,7 +351,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
                        conn: Conn,
                        depends_on: Sequence[int|str] = [],
                        required_by: Sequence[int|str] = [],
-                       inputs: dict[str, str] = {}) -> None:
+                       inputs: dict[str, str] = {}) -> ReferenceTo:
     """
     Activates the workflow as a dedicated master. Encapsulated insdead of inlined.
 
@@ -359,6 +359,8 @@ def activate_as_master(rmt_addr: ReferenceTo,
         depends_on are backwards facing edges into the DAG
         required_by are the forward facing edges, e.g. they have to be inverse applied.
         inputs are for later when insertable variables come into place.
+
+    Returns activated masters addr.
     """
 
     depends_on = list(depends_on)
@@ -480,6 +482,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
             i['scope']
         ]
     )
+    return master_addr
 
 
 def edit_instruction(node_id: ReferenceTo, sr_block: SearchAndReplaceBlock, conn: Conn) -> None:

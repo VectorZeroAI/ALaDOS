@@ -230,6 +230,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     while process.poll() is None:
         if time.time() - start > timeout:
             process.kill()
+            process.wait()
             raise TimeoutError("Process Timed out.")
 
         if process.stdout:
@@ -722,7 +723,7 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     SET status = 'paradox',
         status_inf = %s
     FROM slaves s
-        JOIN results r ON s.result_addr = s.addr
+        JOIN results r ON s.result_addr = r.addr
     WHERE s.addr = %s;
     """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
 

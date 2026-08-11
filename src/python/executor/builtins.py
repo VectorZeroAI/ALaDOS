@@ -45,7 +45,6 @@ from ..utils.name_resolver import resolve_self, resolve_to_addr, resolve_to_addr
 from ..utils.occ_functions import occ_check, update_timestamp
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from ..events.functions import (
-    ResultViaEventReturn,
     create_result_via_event,
     register_reaction_execute_slave,
     register_reaction_rmt
@@ -1369,3 +1368,4 @@ def tool_create_result_via_event(
     
     return json.dumps(asdict(ret))
     #return f"Created result {name if name is not None else "No Name"}@{ret.result_addr} as result of an event."
+    

@@ -138,22 +138,25 @@ class ToolsManager:
         for i in n_conn.notifies():
             name = i.payload
             if name in self.cache:
-                self.cache.pop(name)
+                with self.lock:
+                    self.cache.pop(name)
 
     def __getitem__(self, name: str, /) -> CachedTool:
         if name in self.cache:
-            self.cache.move_to_end(name, last=False)
-            return self.cache[name]
+            with self.lock:
+                self.cache.move_to_end(name, last=False)
+                return self.cache[name]
 
         func: CachedTool = self.prepare_function(name)
 
         if len(self.cache) > self.limit - 1:
-            self.cache.popitem()
+            with self.lock:
+                self.cache.popitem()
 
-        self.cache[name] = func
-        self.cache.move_to_end(name, last=False)
-
-        return func
+        with self.lock:
+            self.cache[name] = func
+            self.cache.move_to_end(name, last=False)
+            return func
 
     def prepare_function(self, name: str) -> CachedTool:
         """

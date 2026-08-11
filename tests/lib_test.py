@@ -217,7 +217,20 @@ class _Dispatcher:
                           # already-running event loop.
             )
             args = json.loads(msg.data.decode())
-            result = execute_tool(ToolCall(tool=tool_name, args=args), meta)
+            # execute_tool ultimately runs blocking, synchronous code
+            # (subprocess.Popen + a busy-poll loop on process.poll() for
+            # Executables.execute, blocking psycopg calls for DB-backed
+            # handlers). Awaiting it directly on this coroutine would
+            # block *this* event loop -- the same loop nt uses for its
+            # background read/ping tasks -- long enough that nats-py
+            # decides the connection is dead and closes it, which then
+            # makes every subsequent request in the suite fail with
+            # "the connection is closed". Running it in a thread keeps
+            # the loop free to service NATS while a handler blocks.
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None, execute_tool, ToolCall(tool=tool_name, args=args), meta
+            )
         except Exception as e:  # noqa: BLE001 -- surfaced to the caller, not swallowed
             result = f"__DISPATCH_ERROR__:{e}"
         if msg.reply:
@@ -504,7 +517,7 @@ class TestResultLib:
         await Result.add_master_result(slave, text="more result text")
 
         content = db.execute_fetchval(
-            "SELECT content FROM results WHERE addr = %s", (result_addr,)
+            "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
         )
         assert "more result text" in content
 

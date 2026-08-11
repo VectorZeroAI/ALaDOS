@@ -22,7 +22,7 @@ async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str
     nt: Client = await connect_nats()
 
     reply = await nt.request(
-        f"_.syscall.{function_name}",
+        f"_.syscall.{slave_addr}.{function_name}",
         json.dumps(args).encode(),
         5
     )
@@ -34,12 +34,12 @@ class syscall:
     function_name: str
     args: dict[str, Any]
 
-async def batch_call(syscalls: list[syscall], slave_id: int) -> list[str]:
+async def batch_call(syscalls: list[syscall], slave_addr: int) -> list[str]:
     """ Batch syscalls and batch returns. Order is preserved. """
     nt: Client = await connect_nats()
     response: list[Msg] = []
     for i in syscalls:
-        r = await nt.request(f"_.syscall.{slave_id}.{i.function_name}", json.dumps(i.args).encode(), timeout=20)
+        r = await nt.request(f"_.syscall.{slave_addr}.{i.function_name}", json.dumps(i.args).encode(), timeout=20)
         response.append(r)
     
     results: list[str] = []

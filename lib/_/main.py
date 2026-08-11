@@ -15,7 +15,7 @@ import json
 
 from nats.aio.msg import Msg
 
-from ALaDOS.src.python.events.types import connect_nats # pyright: ignore
+from ALaDOS.src.python.utils.connect_nats import connect_nats # pyright: ignore
 
 async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str:
     """ Executes syscall and returns result. """

@@ -11,7 +11,7 @@ from datetime import datetime
 from nats.aio.client import Client
 from nats.aio.msg import Msg
 from pydantic import JsonValue
-from ..events.types import connect_nats
+from ..utils.connect_nats import connect_nats
 import asyncio
 
 from ..utils.conn_factory import Conn

@@ -10,7 +10,8 @@ from nats.aio.client import Client
 from ..utils.config_handlers import load_events_config
 from ..utils.logger import log_json
 from .event_gens_registry import register_event_generator
-from .types import Event, connect_nats
+from .types import Event
+from ..utils.connect_nats import connect_nats
 
 event_config = load_events_config()
 

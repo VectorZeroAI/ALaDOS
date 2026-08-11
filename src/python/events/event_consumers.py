@@ -21,14 +21,14 @@ from psycopg.rows import TupleRow
 from ..rmt.main import activate_as_master
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
+from ..utils.connect_nats import connect_nats
 from .types import (
     ConsumerCallRmt,
     ConsumerData,
     ConsumerExecuteSlave,
     ConsumerFillResult,
     Event,
-    EventConsumer,
-    connect_nats,
+    EventConsumer
 )
 
 

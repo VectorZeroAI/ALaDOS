@@ -17,9 +17,20 @@ from nats.aio.msg import Msg
 
 from ALaDOS.src.python.utils.connect_nats import connect_nats # pyright: ignore
 
+nt: Client|None = None
+
+async def get_nt() -> Client:
+    global nt
+    if isinstance(nt, Client):
+        return nt
+    else:
+        nt = await connect_nats()
+        assert isinstance(nt, Client)
+        return nt
+
 async def call(function_name: str, slave_addr: int, args: dict[str, Any]) -> str:
     """ Executes syscall and returns result. """
-    nt: Client = await connect_nats()
+    nt: Client = await get_nt()
 
     reply = await nt.request(
         f"_.syscall.{slave_addr}.{function_name}",
@@ -36,7 +47,7 @@ class syscall:
 
 async def batch_call(syscalls: list[syscall], slave_addr: int) -> list[str]:
     """ Batch syscalls and batch returns. Order is preserved. """
-    nt: Client = await connect_nats()
+    nt: Client = await get_nt()
     response: list[Msg] = []
     for i in syscalls:
         r = await nt.request(f"_.syscall.{slave_addr}.{i.function_name}", json.dumps(i.args).encode(), timeout=20)
@@ -46,7 +57,7 @@ async def batch_call(syscalls: list[syscall], slave_addr: int) -> list[str]:
 
     for i in response:
         results.append(
-            i.reply
+            i.reply.data.decode() # pyright: ignore
         )
 
     return results

@@ -242,3 +242,15 @@ CREATE OR REPLACE TRIGGER notify_cronjob_loop_added
 AFTER INSERT ON cronjob_loop
 FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
 
+
+
+CREATE OR REPLACE FUNCTION notify_tool_changed()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('tool_changed', (SELECT name FROM names WHERE addr = NEW.addr LIMIT 1;))
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER notify_tool_changed_trg
+AFTER UPDATE ON executables
+FOR EACH ROW EXECUTE FUNCTION notify_tool_changed();

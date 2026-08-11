@@ -1,8 +1,3 @@
-from python.rmt.main import create_from_serial, activate_as_master
+from python.base_state.types import Knowledge, Executable, EventConsumers, CustomConsumer, Cronjob
 
-DSL_STR = """
-START -> (id='1', instruction='Add "CODE ${{color}}" to the master result')
-"""
-
-addr = create_from_serial(DSL_STR)
-activate_as_master(addr, inputs={'color': "GREEN"})
+print(str(type(Knowledge("", "", "", 1))))

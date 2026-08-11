@@ -57,10 +57,10 @@ import pytest
 from nats.aio.msg import Msg
 from nats.errors import TimeoutError as NatsTimeoutError
 
-from lib import Context, Event, Executables, Goal, Knowledge, Report, Result
-from lib._.main import batch_call
-from lib._.main import call as raw_call
-from lib._.main import syscall as SyscallSpec
+from ALaDOS.lib import Context, Event, Executables, Goal, Knowledge, Report, Result
+from ALaDOS.lib._.main import batch_call
+from ALaDOS.lib._.main import call as raw_call
+from ALaDOS.lib._.main import syscall as SyscallSpec
 from python.executor.execute_tool import execute_tool
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
@@ -110,6 +110,12 @@ def slave(db):
 def unique_name(prefix="libtest"):
     import random
     return f"{prefix}_{random.randint(10000, 99999)}"
+
+
+@pytest.fixture
+def anyio_backend():
+    """Pin anyio to the asyncio backend (nats-py/asyncio.run are asyncio-only)."""
+    return "asyncio"
 
 
 # ----------------------------------------------------------------------
@@ -227,12 +233,12 @@ class TestRawCallSubjectBug:
     server, function_name and slave_addr notwithstanding.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_call_times_out_against_live_dispatcher(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await raw_call("k_create", slave, {"content": "x", "description": "y", "name": None})
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_call_publishes_malformed_subject(self):
         """
         Directly proves the subject shape is wrong, independent of
@@ -259,7 +265,7 @@ class TestBatchCallBugs:
     lives in `.data`. This is asserted as current, real behavior.
     """
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_batch_call_subject_matches_dispatcher_pattern(self, dispatcher, slave, db):
         """
         Sanity check that the subject shape itself is correct, by
@@ -282,7 +288,7 @@ class TestBatchCallBugs:
         finally:
             await nt.close()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_batch_call_raises_attributeerror_on_reply_access(self, dispatcher, slave):
         """
         Documents the `.reply` vs `.data` bug: batch_call should raise
@@ -298,12 +304,12 @@ class TestBatchCallBugs:
 # Knowledge
 # ----------------------------------------------------------------------
 class TestKnowledgeLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_create_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Knowledge.create(slave, content="hello", description="desc")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_create_and_read_work_once_call_is_fixed(self, dispatcher, slave, db):
         """
         Demonstrates Knowledge.create/read/edit are otherwise correctly
@@ -323,7 +329,7 @@ class TestKnowledgeLib:
             finally:
                 await nt.close()
 
-        with patch("Knowledge.functions.call", new=fixed_call):
+        with patch("ALaDOS.lib.Knowledge.functions.call", new=fixed_call):
             name = unique_name("kn")
             addr = await Knowledge.create(slave, content="hello", description="desc", name=name)
             assert addr == resolve_to_addr(name, db)
@@ -336,12 +342,12 @@ class TestKnowledgeLib:
 # Executables
 # ----------------------------------------------------------------------
 class TestExecutablesLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_execute_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Executables.execute(slave, id="nonexistent_tool", timeout=1)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_create_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Executables.create(
@@ -353,12 +359,12 @@ class TestExecutablesLib:
 # Context
 # ----------------------------------------------------------------------
 class TestContextLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_add_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Context.add(slave, id=1)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_window_change_size_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Context.window_change_size(slave, left=1, right=1)
@@ -368,12 +374,12 @@ class TestContextLib:
 # Goal
 # ----------------------------------------------------------------------
 class TestGoalLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_add_slave_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Goal.add_slave(slave, instruction="do something")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_add_master_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Goal.add_master(slave, instruction="do something else")
@@ -383,12 +389,12 @@ class TestGoalLib:
 # Result
 # ----------------------------------------------------------------------
 class TestResultLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_write_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Result.write(slave, text="the result")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_add_master_result_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Result.add_master_result(slave, text="more result text")
@@ -398,12 +404,12 @@ class TestResultLib:
 # Event
 # ----------------------------------------------------------------------
 class TestEventLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_create_result_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Event.create_result(slave, event_path="evt.some.path", result_str="got ${{data}}")
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_register_reaction_slave_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Event.register_reaction_slave(
@@ -415,7 +421,7 @@ class TestEventLib:
 # Report
 # ----------------------------------------------------------------------
 class TestReportLib:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_report_paradoxal_information_times_out_due_to_call_bug(self, dispatcher, slave):
         with pytest.raises(NatsTimeoutError):
             await Report.report_paradoxal_information(slave, items=[1, 2], paradox="conflicting facts")
@@ -426,7 +432,7 @@ class TestReportLib:
 # every lib test above is gated on it being correct.
 # ----------------------------------------------------------------------
 class TestDispatcherSubjectParsing:
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_dispatcher_resolves_correct_slave_and_tool_from_subject(self, dispatcher, slave, db):
         nt = await nats.connect()
         try:
@@ -441,7 +447,7 @@ class TestDispatcherSubjectParsing:
         finally:
             await nt.close()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_dispatcher_rejects_unknown_tool_name(self, dispatcher, slave):
         nt = await nats.connect()
         try:
@@ -457,4 +463,5 @@ class TestDispatcherSubjectParsing:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
 

@@ -137,17 +137,26 @@ BEGIN
         UPDATE master_context SET
             window_anchor_knowledge = result_addr,
             window_anchor_exe = NULL,
+            window_anchor_rmt = NULL,
             window_size_l = 12,
             window_size_r = 12
         WHERE addr = master_addr_p;
-    END IF;
-    IF tttt = 'executable' THEN
+    ELSIF tttt = 'executable' THEN
         UPDATE master_context SET
             window_anchor_exe = result_addr,
             window_anchor_knowledge = NULL,
+            window_anchor_rmt = NULL,
             window_size_l = 12,
             window_size_r = 12
         WHERE addr = master_addr_p;
+    ELSIF tttt = 'rmt' THEN
+        UPDATE master_context SET
+            window_anchor_rmt = result_addr,
+            window_anchor_knowledge = NULL,
+            window_anchor_exe = NULL,
+            window_size_l = 12,
+            window_size_r = 12
+
     END IF;
     RETURN result_addr;
 END;

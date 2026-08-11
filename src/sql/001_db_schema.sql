@@ -145,14 +145,20 @@ CREATE TABLE IF NOT EXISTS master_context (
         REFERENCES knowledge(addr) 
             ON DELETE SET NULL 
             ON UPDATE CASCADE,
+    window_anchor_rmt BIGINT
+        REFERENCES reusable_master_template(addr) 
+            ON DELETE SET NULL 
+            ON UPDATE CASCADE,
     window_size_r INT,
     window_size_l INT,
     CONSTRAINT window_full_or_none CHECK (
-        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NULL AND window_size_l IS NULL AND window_size_r IS NULL)
+        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NULL AND window_anchor_rmt IS NULL AND window_size_l IS NULL AND window_size_r IS NULL)
         OR
-        (window_anchor_exe IS NOT NULL AND window_anchor_knowledge IS NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
+        (window_anchor_exe IS NOT NULL AND window_anchor_knowledge IS NULL AND window_anchor_rmt IS NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
         OR
-        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NOT NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
+        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NOT NULL AND window_anchor_rmt IS NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
+        OR
+        (window_anchor_exe IS NULL AND window_anchor_knowledge IS NULL AND window_anchor_rmt IS NOT NULL AND window_size_l IS NOT NULL AND window_size_r IS NOT NULL)
     )
 );
 

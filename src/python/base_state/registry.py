@@ -60,6 +60,11 @@ def __register_item(item: Item, conn: Conn) -> None:
     REGISTERERS_REGISTRY[str(type(item))](item, conn)
 
 def insert_addr(addr: int, conn: Conn) -> None:
+    if conn.execute_fetchval("""
+        SELECT TRUE FROM addrs WHERE addr = %s;
+                             """, (addr,)):
+        return
+
     conn.execute("""
     INSERT INTO addrs(addr) VALUES(%s)
                  """, (addr,))

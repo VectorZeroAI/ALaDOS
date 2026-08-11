@@ -14,4 +14,4 @@ async def edit(id: int|str, slave_addr: int, content_change: str|None, descripti
     """ Edits the knowledge entry. Returns nothing. """
     # TODO : Consider how the raising strategy should work, for for example, occ fail.
 
-    await call("k_edit", slave_addr, {"content_change": content_change, "description_change": description_change})
+    await call("k_edit", slave_addr, {"content_change": content_change, "description_change": description_change, "id": id})

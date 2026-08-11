@@ -208,6 +208,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     )
     if process.stdin is not None:
         process.stdin.write(body)
+        process.stdin.flush()
     else:
         log_json({
             "type": "core",
@@ -235,16 +236,39 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
 
     loop.close()
 
+    if not process.stdout:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": "STDOUT IS NONE"
+        })
+        stdout = "<Empty>"
+    else:
+        stdout = process.stdout.read()
+
+    if not process.stderr:
+        if process.poll() != 0:
+            log_json({
+                "type": "core",
+                "subtype": "tool_execution",
+                "status": "warning",
+                "msg": "STDERR IS NONE"
+            })
+        stderr = "<Empty>"
+    else:
+        stderr = process.stderr.read()
+
     if process.poll() != 0:
         log_json({
             "type": "core",
             "subtype": "tool_execution",
             "status": "error",
-            "msg": f"Tool failed with exit code {process.poll()}, output: {process.stdout.read() if process.stdout is not None else "Std Out is None"} and error {process.stderr.read() if process.stderr is not None else 'stderr is none.'}."
+            "msg": f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}."
         })
-        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {process.stdout.read() if process.stdout is not None else "Std Out is None"} and error {process.stderr.read() if process.stderr is not None else 'stderr is none.'}.")
+        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
 
-    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {process.stdout.read() if process.stdout is not None else "Std Out is None"}{f"; and error output: {process.stderr}" if process.stderr else ""}."
+    return f"Executed tool {id if isinstance(id, str) else "No Name"}@{addr} with output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
 
 
 # def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:

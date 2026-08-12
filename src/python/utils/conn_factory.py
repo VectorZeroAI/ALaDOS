@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 from typing import Any, Literal, LiteralString, Sequence, overload
 
 import psycopg
@@ -55,13 +56,13 @@ class Conn(psycopg.Connection):
             else:
                 return None
 
-def conn_factory() -> Conn:
+def conn_factory(db_name: str = os.environ.get("ALADOS_DB_NAME","alados")) -> Conn:
     """
     The factory function for connecting to the database.
     Credentials are hardcoded, because the application sets the DB up internally,
     and there is no user API available for changing it.
     """
-    conn = conn_factory_raw()
+    conn = conn_factory_raw(db_name)
 
     conn = register_all_the_composite_types(conn)
 
@@ -76,10 +77,10 @@ def register_all_the_composite_types(conn: Conn) -> Conn:
     conn.RmtNodeClass = RmtNodeClass # pyright: ignore
     return conn
 
-def conn_factory_raw() -> Conn:
+def conn_factory_raw(db_name: str = "alados") -> Conn:
     conn = Conn.connect(
         host='/data/data/com.termux/files/usr/tmp',
-        dbname='alados',
+        dbname=db_name,
     )
     conn.autocommit = True
     return conn

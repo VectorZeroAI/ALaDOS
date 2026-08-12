@@ -58,7 +58,6 @@ class _ExecToolMetaData:
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue
     nats: Client
-    tools_manager: ToolsManager
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 

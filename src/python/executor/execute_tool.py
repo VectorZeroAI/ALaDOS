@@ -90,7 +90,7 @@ def execute_syscall(call: ToolCall, _meta: _ExecToolMetaData) -> str:
 
 def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     """ Execute function from DB """
-    return _meta.tools_manager[call.tool](call.args, _meta)
+    return tools_manager[call.tool](call.args, _meta)
 
 class ToolsManager:
     def __init__(self, limit: int):
@@ -249,6 +249,8 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
         raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
 
     return f"Executed tool, and got output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
+
+tools_manager = ToolsManager(100)
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

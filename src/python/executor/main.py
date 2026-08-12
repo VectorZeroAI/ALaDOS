@@ -226,7 +226,6 @@ Further documentation of the states inlined as docstrings in the match statement
                         config.get('context_limit', 40000),
                         syscalls_queue=syscalls_queue_dict_per_slave[curr.instr.slave_addr],
                         nats=asyncio.run(connect_nats()),
-                        tools_manager=ToolsManager(100), # TODO : Make configurable
                         occ_last_change=curr.occ_timestamp
                     )
 

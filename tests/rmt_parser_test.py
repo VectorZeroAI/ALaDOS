@@ -281,3 +281,4 @@ def test_parse_scope():
     expr = "START -> (id='1', instruction='do', scope='task') -> END"
     result = parse(expr)
     assert result[0].scope == "task"
+

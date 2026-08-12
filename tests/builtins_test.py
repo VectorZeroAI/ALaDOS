@@ -45,7 +45,10 @@ class TestKnowledgeTools:
     def test_k_edit_content(self, meta):
         name = unique_name("kn_edit")
         k_create(content="old text", description="desc", name=name, _meta=meta)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s",
+            (resolve_to_addr(name, meta.conn),),
+        )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -55,7 +58,10 @@ class TestKnowledgeTools:
     def test_k_edit_description(self, meta):
         name = unique_name("kn_desc")
         k_create(content="c", description="old d", name=name, _meta=meta)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s",
+            (resolve_to_addr(name, meta.conn),),
+        )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, description_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -65,7 +71,10 @@ class TestKnowledgeTools:
     def test_k_edit_both(self, meta):
         name = unique_name("kn_both")
         k_create(content="old c", description="old d", name=name, _meta=meta)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s",
+            (resolve_to_addr(name, meta.conn),),
+        )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, description_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -203,13 +212,30 @@ class TestGoalTools:
         assert req_rel == result_addr
 
     def test_add_slave_planner_type(self, meta):
-        res = add_slave(instruction="do plan", slave_type="planner", _meta=meta) # FIXME: Move this behaviour from builtins, e.g. syscalls to DB tool side.
-        assert res == ""
-        # Verify a planner slave was created
-        cnt = meta.conn.execute_fetchval(
-            "SELECT count(*) FROM slaves WHERE instruction='do plan' AND scope='task'"
+        before = meta.conn.execute_fetchval(
+            "SELECT count(*) FROM slaves WHERE master_addr = %s AND scope = 'task'",
+            (meta.master_id,),
         )
-        assert cnt == 1
+        res = add_slave(
+            instruction="do plan",
+            slave_type="planner",
+            _meta=meta,
+        )
+        assert res == ""
+
+        after = meta.conn.execute_fetchval(
+            "SELECT count(*) FROM slaves WHERE master_addr = %s AND scope = 'task'",
+            (meta.master_id,),
+        )
+        assert after == before + 1
+
+        planner_instruction = meta.conn.execute_fetchval(
+            "SELECT instruction FROM slaves "
+            "WHERE master_addr = %s AND scope = 'task' "
+            "ORDER BY addr DESC LIMIT 1",
+            (meta.master_id,),
+        )
+        assert "Your task is to decide how to further proceed" in planner_instruction
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
@@ -247,7 +273,9 @@ class TestToolTools:
         name = unique_name("tool_edit")
         create_tool(description="desc", header="old h", body="old b", name=name, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (addr,)
+        )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         edit_tool(id=name, header_change=sr, body_change=sr, _meta=meta)
         new_header = meta.conn.execute_fetchval("SELECT header FROM executables WHERE addr=%s", (addr,))
@@ -259,7 +287,9 @@ class TestToolTools:
         name = unique_name("tool_desc")
         create_tool(description="old desc", header="h", body="b", name=name, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (addr,)
+        )
         edit_tool(id=name, new_description="new desc", _meta=meta)
         desc = meta.conn.execute_fetchval("SELECT description FROM vector_ops WHERE addr=%s", (addr,))
         assert desc == "new desc"
@@ -419,7 +449,9 @@ class TestRmtTools:
         name = unique_name("rmt_desc")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="old desc")
         rmt_addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         rmt_edit_description(rmt_id=rmt_addr, new_description="new desc", _meta=meta)
         desc = meta.conn.execute_fetchval("SELECT description FROM vector_ops WHERE addr=%s", (rmt_addr,))
         assert desc == "new desc"
@@ -434,11 +466,15 @@ class TestRmtTools:
         )
         node_name = unique_name("n1_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         new_name = unique_name("new_node")
         rmt_insert_node(rmt_id=rmt_addr, instruction="new", name=new_name, depends_on=[node_name], _meta=meta)
         new_addr = resolve_to_addr(new_name, meta.conn)
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         rmt_delete_node(rmt_slave_id=new_addr, template_id=rmt_addr, concatenate=False, _meta=meta)
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM rmt_slaves WHERE template_addr=%s AND instruction='new'", (rmt_addr,)
@@ -455,7 +491,9 @@ class TestRmtTools:
         )
         node1_name = unique_name("n1_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node1_addr, node1_name))
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         new_name = unique_name("new_reqby")
         rmt_insert_node(rmt_id=rmt_addr, instruction="second", name=new_name,
                         required_by=[node1_name], _meta=meta)
@@ -498,7 +536,9 @@ class TestRmtTools:
         )
         node_name = unique_name("editme_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         rmt_edit_instruction(node_id=node_name, sr_block="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
         new_instr = meta.conn.execute_fetchval("SELECT instruction FROM rmt_slaves WHERE addr=%s", (node_addr,))
         assert new_instr == "new text"
@@ -513,7 +553,9 @@ class TestRmtTools:
         )
         node_name = unique_name("sc_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         rmt_change_scope(node_id=node_name, new_scope='task', _meta=meta)
         scope = meta.conn.execute_fetchval("SELECT scope FROM rmt_slaves WHERE addr=%s", (node_addr,))
         assert scope == 'task'
@@ -529,7 +571,9 @@ class TestRmtTools:
         nodeA = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='A'", (rmt_addr,)
         )
-        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
+        meta.occ_last_change = meta.conn.execute_fetchval(
+            "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
+        )
         rmt_delete_node(rmt_slave_id=nodeB, template_id=rmt_addr, concatenate=True, _meta=meta)
         remaining = meta.conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr=%s", (rmt_addr,)
@@ -592,3 +636,4 @@ class TestEventTools:
 def test_report_paradox(meta):
     with pytest.raises(ParadoxDetected):
         report_paradoxal_information(items=[1], paradox="conflict", _meta=meta)
+

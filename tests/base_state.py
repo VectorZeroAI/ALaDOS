@@ -2,12 +2,11 @@
 """
 Tests for the base_state subsystem (python/base_state/*).
 """
-import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from python.utils.conn_factory import Conn, register_all_the_composite_types
+from python.utils.conn_factory import Conn
 from python.base_state.types import (
     Cronjob,
     EventConsumers,
@@ -117,70 +116,79 @@ class TestItemDataclasses:
 
 class TestRegisterBookkeeping:
     def test_appends_addr_to_system_addrs_list(self, db, isolate_registry):
-        item = Knowledge("desc", "content", "name", 999001)
+        addr = insert_addr(db)
+        item = Knowledge("desc", "content", "name", addr)
         with patch.object(registry_mod, "conn_factory", return_value=db):
             register(item)
-        assert 999001 in SYSTEM_ADDRS_LIST
+        assert addr in SYSTEM_ADDRS_LIST
 
     def test_registers_callable_under_addr_register(self, db, isolate_registry):
-        item = Knowledge("desc", "content", "name", 999002)
+        addr = insert_addr(db)
+        item = Knowledge("desc", "content", "name", addr)
         with patch.object(registry_mod, "conn_factory", return_value=db):
             register(item)
-        assert 999002 in ADDR_REGISTER
-        assert callable(ADDR_REGISTER[999002])
+        assert addr in ADDR_REGISTER
+        assert callable(ADDR_REGISTER[addr])
 
     def test_returns_the_item_unchanged(self, db, isolate_registry):
-        item = Knowledge("desc", "content", "name", 999003)
+        addr = insert_addr(db)
+        item = Knowledge("desc", "content", "name", addr)
         with patch.object(registry_mod, "conn_factory", return_value=db):
             returned = register(item)
         assert returned is item
 
     def test_duplicate_addr_registered_twice_appears_twice_in_list(self, db, isolate_registry):
-        item_a = Knowledge("desc a", "content a", "name a", 999004)
-        item_b = Knowledge("desc b", "content b", "name b", 999004)
+        addr = insert_addr(db)
+        item_a = Knowledge("desc a", "content a", "name a", addr)
+        item_b = Knowledge("desc b", "content b", "name b", addr)
         with patch.object(registry_mod, "conn_factory", return_value=db):
             register(item_a)
             register(item_b)
-        assert SYSTEM_ADDRS_LIST.count(999004) == 2
+        assert SYSTEM_ADDRS_LIST.count(addr) == 2
 
 
-# Positive dispatch tests: verify each item type dispatches to the correct registerer.
+# Positive dispatch tests: verify register() stores a callable that dispatches
+# through REGISTERERS_REGISTRY to the registerer for the concrete item type.
 class TestRegisterDispatch:
-    @pytest.mark.parametrize("item_type,registerer_func", [
-        (Knowledge, register_knowledge),
-        (Executable, register_executable),
-        (Masters, register_master),
-        (Slaves, register_slaves),
-        (Cronjob, register_cronjob),
-        (Rmt, register_rmt),
-        (EventConsumers, register_event_consumer),
-        # Results also tested separately.
-    ])
-    def test_register_dispatches_to_correct_function(self, db, isolate_registry, item_type, registerer_func):
+    @pytest.mark.parametrize(
+        "item_type",
+        [Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers],
+    )
+    def test_register_dispatches_to_correct_function(
+        self, db, item_type, monkeypatch
+    ):
         addr = insert_addr(db)
-        if item_type == Knowledge:
+
+        if item_type is Knowledge:
             item = Knowledge("desc", "content", "name", addr)
-        elif item_type == Executable:
+        elif item_type is Executable:
             item = Executable("desc", "body", "header", "name", addr)
-        elif item_type == Masters:
+        elif item_type is Results:
+            item = Results("content", {"k": "v"}, "name", addr, True)
+        elif item_type is Masters:
             result_addr = insert_result(db)
             item = Masters("instr", result_addr, [], "name", addr)
-        elif item_type == Slaves:
+        elif item_type is Slaves:
             result_addr = insert_result(db)
             item = Slaves(None, "instr", result_addr, [], "general", addr)
-        elif item_type == Cronjob:
+        elif item_type is Cronjob:
             item = Cronjob("once", 60, "some_action", {"a": 1}, addr)
-        elif item_type == Rmt:
-            item = Rmt("START -> END", "desc", "name", addr)
-        elif item_type == EventConsumers:
-            item = EventConsumers("path", "call_rmt", addr, {}, addr)
+        elif item_type is Rmt:
+            item = Rmt("START -> (instruction='x') -> END", "desc", "name", addr)
         else:
-            pytest.skip("unhandled type")
+            item = EventConsumers("path", "execute_slave", "react", "general", addr)
+
+        spy = MagicMock()
+        key = str(type(item))
+        old_registerer = registry_mod.REGISTERERS_REGISTRY[key]
+        monkeypatch.setitem(registry_mod.REGISTERERS_REGISTRY, key, spy)
 
         with patch.object(registry_mod, "conn_factory", return_value=db):
             register(item)
-        # Invoke the ADDR_REGISTER callable; it must not raise.
+
         ADDR_REGISTER[addr]()
+        spy.assert_called_once_with(item, db)
+        assert ADDR_REGISTER[addr] is not None
 
 
 class TestRegisterKnowledgeSQL:
@@ -377,3 +385,4 @@ class TestBaseStateStartup:
              patch.object(base_state_main, "SYSTEM_ADDRS_LIST", []), \
              patch.object(base_state_main, "ADDR_REGISTER", {}):
             base_state_main.startup()  # should not raise
+

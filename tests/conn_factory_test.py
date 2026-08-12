@@ -70,3 +70,4 @@ def test_conn_factory_raw_with_db_name():
     db_name = conn.execute_fetchval("SELECT current_database()")
     assert db_name == "alados_test"
     conn.close()
+

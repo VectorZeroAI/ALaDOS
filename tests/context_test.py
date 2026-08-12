@@ -113,7 +113,7 @@ class TestResolveWindow:
     def test_no_window_placeholder(self, db):
         m = insert_master(db)
         result = resolve_window(m, db)
-        assert result == "WINDOW DOES NOT EXIST YET."
+        assert result == "WINDOW IS EMPTY"
 
 
 class TestResolveReqResults:
@@ -143,3 +143,4 @@ class TestResolveContext:
         slave_obj = SlaveObj(addr=s, instruction="ins", master_addr=m, result_name="r", scope="general")
         ctx = resolve_context(slave_obj, db)
         assert "WINDOW DOES NOT EXIST YET." in ctx
+

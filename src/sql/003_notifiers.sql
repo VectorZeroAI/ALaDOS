@@ -247,7 +247,7 @@ FOR EACH ROW EXECUTE FUNCTION notify_cronjob_changes();
 CREATE OR REPLACE FUNCTION notify_tool_changed()
 RETURNS TRIGGER AS $$
 BEGIN
-    PERFORM pg_notify('tool_changed', (SELECT name FROM names WHERE addr = NEW.addr LIMIT 1;))
+    PERFORM pg_notify('tool_changed', (SELECT name FROM names WHERE addr = NEW.addr LIMIT 1));
 END;
 $$ LANGUAGE plpgsql;
 

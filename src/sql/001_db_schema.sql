@@ -8,7 +8,8 @@ CREATE SEQUENCE IF NOT EXISTS global_rmt_activation_serial;
 
 CREATE SEQUENCE IF NOT EXISTS next_internal_id
     START WITH 0
-    INCREMENT BY -1;
+    INCREMENT BY -1
+    MAXVALUE 1;
 
 CREATE SEQUENCE IF NOT EXISTS vector_ops_position
     START WITH 100

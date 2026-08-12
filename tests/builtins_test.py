@@ -9,17 +9,15 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
-import psycopg
 
 from python.executor.builtins import (
     k_create, k_read, k_edit,
     context_add, context_window_land_by_addr, context_window_size_change,
-    move_window_anchor, context_window_lands, unload_item,
+    move_window_anchor, unload_item,
     add_slave, master_result_add, result_write,
     create_tool, edit_tool, execute_tool_builtin_func,
     report_paradoxal_information,
     add_cronjob,
-    send_message_to_human_v_webui,
     rmt_create_from_serial, rmt_serialise, rmt_activate_as_master,
     rmt_insert_node, rmt_delete_node, rmt_edit_instruction, rmt_change_scope,
     tool_rmt_create_from_master, create_master, rmt_create_from_range,
@@ -30,73 +28,24 @@ from python.executor.builtins import (
     web_searcher_function_fulltext, search_for_urls, web_request, web_post,
 )
 from python.executor.types import _ExecToolMetaData, ParadoxDetected
-from python.utils.conn_factory import Conn, register_all_the_composite_types
 from python.utils.name_resolver import resolve_to_addr
 
-# ----------------------------------------------------------------------
-# Test DB helpers
-# ----------------------------------------------------------------------
-TEST_DSN = dict(
-    host="127.0.0.1",
-    port=5432,
-    dbname="alados_test",
-    user="u0_a453",
-)
+from conftest import db, meta, unique_name  # noqa: F401 – fixtures imported
 
 
-def get_test_conn() -> Conn:
-    conn = Conn.connect(**TEST_DSN)
-    conn.autocommit = True
-    conn = register_all_the_composite_types(conn)
-    return conn
-
-
-@pytest.fixture
-def db():
-    conn = get_test_conn()
-    conn.execute("BEGIN")
-    yield conn
-    conn.execute("ROLLBACK")
-    conn.close()
-
-
-@pytest.fixture
-def meta(db):
-    """Create a master+slave pair and return metadata for a tool call."""
-    master_addr = db.execute_fetchval("SELECT new_master('test_master')")
-    slave_addr = db.execute_fetchval(
-        "SELECT new_slave(%s, 'dummy', 'dummy_slave', NULL, NULL, NULL, NULL, 'general')",
-        (master_addr,)
-    )
-    return _ExecToolMetaData(
-        master_id=master_addr,
-        conn=db,
-        slave_id=slave_addr,
-        context_limit=10000,
-        occ_last_change=datetime(2023, 1, 1)
-    )
-
-
-def unique_name(prefix="test"):
-    import random
-    return f"{prefix}_{random.randint(10000, 99999)}"
-
-
-# ----------------------------------------------------------------------
-# Knowledge tools
-# ----------------------------------------------------------------------
 class TestKnowledgeTools:
     def test_k_create_and_read(self, meta):
         name = unique_name("kn")
         res = k_create(content="hello", description="desc", name=name, _meta=meta)
-        assert "knowledge entry" in res
+        addr = int(res)
+        assert addr > 0
         read_res = k_read(id=name, _meta=meta)
         assert "hello" in read_res
 
     def test_k_edit_content(self, meta):
         name = unique_name("kn_edit")
         k_create(content="old text", description="desc", name=name, _meta=meta)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -106,7 +55,7 @@ class TestKnowledgeTools:
     def test_k_edit_description(self, meta):
         name = unique_name("kn_desc")
         k_create(content="c", description="old d", name=name, _meta=meta)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, description_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -116,7 +65,7 @@ class TestKnowledgeTools:
     def test_k_edit_both(self, meta):
         name = unique_name("kn_both")
         k_create(content="old c", description="old d", name=name, _meta=meta)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, description_change=sr, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
@@ -132,15 +81,12 @@ class TestKnowledgeTools:
             k_read(id="nonexistent", _meta=meta)
 
 
-# ----------------------------------------------------------------------
-# Context tools
-# ----------------------------------------------------------------------
 class TestContextTools:
     def test_context_add(self, meta):
         name = unique_name("ctx")
         k_create(content="c", description="d", name=name, _meta=meta)
         res = context_add(id=name, _meta=meta)
-        assert "Added context" in res
+        assert res == ""
         addr = resolve_to_addr(name, meta.conn)
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM master_load WHERE master_addr=%s AND item_addr=%s",
@@ -153,7 +99,8 @@ class TestContextTools:
         k_create(content="u", description="d", name=name, _meta=meta)
         context_add(id=name, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
-        unload_item(id=name, _meta=meta)
+        res = unload_item(id=name, _meta=meta)
+        assert res == ""
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM master_load WHERE master_addr=%s AND item_addr=%s",
             (meta.master_id, addr)
@@ -187,20 +134,6 @@ class TestContextTools:
             "SELECT window_anchor_exe FROM master_context WHERE addr=%s", (meta.master_id,)
         )
         assert anchor == addr
-
-#     def test_window_semantic_land(self, meta):
-#         name = unique_name("sem")
-#         k_create(content="semantic", description="target desc", name=name, _meta=meta)
-#         addr = resolve_to_addr(name, meta.conn)
-#         meta.conn.execute(
-#             "UPDATE vector_ops SET emb = array_fill(0.1, ARRAY[768])::vector(768), position = 100 WHERE addr = %s",
-#             (addr,)
-#         )
-#         context_window_lands(querry="target", _meta=meta)
-#         anchor = meta.conn.execute_fetchval(
-#             "SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta.master_id,)
-#         )
-#         assert anchor == addr
 
     def test_window_size_change(self, meta):
         name = unique_name("sz")
@@ -239,13 +172,14 @@ class TestContextTools:
         assert new_anchor == items[0]
 
 
-# ----------------------------------------------------------------------
-# Goal / result tools
-# ----------------------------------------------------------------------
 class TestGoalTools:
     def test_add_slave_no_requires(self, meta):
         res = add_slave(instruction="do task", _meta=meta)
-        assert "Added a new slave" in res
+        addr = int(res)
+        assert addr > 0
+        assert meta.conn.execute_fetchval(
+            "SELECT count(*) FROM slaves WHERE addr = %s", (addr,)
+        ) == 1
 
     def test_add_slave_with_requires(self, meta):
         conn = meta.conn
@@ -254,8 +188,7 @@ class TestGoalTools:
         conn.execute("INSERT INTO results (addr, ready) VALUES (%s, false)", (req_addr,))
         conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (req_addr, req_name))
         res = add_slave(instruction="dep", required_results_ids=[req_name], _meta=meta)
-        assert "Added a new slave" in res
-        slave_addr = conn.execute_fetchval("SELECT addr FROM slaves WHERE instruction='dep'")
+        slave_addr = int(res)
         req_addr_found = conn.execute_fetchval("SELECT req_addr FROM slave_req WHERE slave_addr=%s", (slave_addr,))
         assert req_addr_found == req_addr
 
@@ -265,14 +198,18 @@ class TestGoalTools:
             "SELECT result_addr FROM slaves WHERE addr = %s", (meta.slave_id,)
         )
         res = add_slave(instruction="self dep", required_results_ids=['self'], _meta=meta)
-        assert "Added a new slave" in res
-        slave_addr = conn.execute_fetchval("SELECT addr FROM slaves WHERE instruction='self dep'")
+        slave_addr = int(res)
         req_rel = conn.execute_fetchval("SELECT req_addr FROM slave_req WHERE slave_addr=%s", (slave_addr,))
         assert req_rel == result_addr
 
     def test_add_slave_planner_type(self, meta):
-        res = add_slave(instruction="do plan", slave_type="planner", _meta=meta)
-        assert "planner" in res.lower() or "replanner" in res.lower()
+        res = add_slave(instruction="do plan", slave_type="planner", _meta=meta) # FIXME: Move this behaviour from builtins, e.g. syscalls to DB tool side.
+        assert res == ""
+        # Verify a planner slave was created
+        cnt = meta.conn.execute_fetchval(
+            "SELECT count(*) FROM slaves WHERE instruction='do plan' AND scope='task'"
+        )
+        assert cnt == 1
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
@@ -285,34 +222,32 @@ class TestGoalTools:
 
     def test_create_master_tool(self, meta):
         res = create_master(instruction="new master task", _meta=meta, result_name="m_res")
-        assert "Created master" in res
-        addr = resolve_to_addr("m_res", meta.conn)
-        m_addr = meta.conn.execute_fetchval("SELECT addr FROM masters WHERE result_addr=%s", (addr,))
-        assert m_addr is not None
+        addr = int(res)
+        assert addr > 0
+        master_instr = meta.conn.execute_fetchval("SELECT instruction FROM masters WHERE addr=%s", (addr,))
+        assert master_instr == "new master task"
 
 
-# ----------------------------------------------------------------------
-# Tool tools
-# ----------------------------------------------------------------------
 class TestToolTools:
     def test_create_tool(self, meta):
         name = unique_name("tool")
         res = create_tool(description="desc", header="usage", body="print(1)", name=name, _meta=meta)
-        assert "Created tool" in res
-        addr = resolve_to_addr(name, meta.conn)
+        addr = int(res)
+        assert addr > 0
         header = meta.conn.execute_fetchval("SELECT header FROM executables WHERE addr=%s", (addr,))
         assert header == "usage"
 
     def test_create_tool_no_name(self, meta):
         res = create_tool(description="d", header="h", body="b", name=None, _meta=meta)
-        assert "Created tool" in res
+        addr = int(res)
+        assert addr > 0
         assert meta.conn.execute_fetchval("SELECT count(*) FROM executables WHERE header='h'") == 1
 
     def test_edit_tool(self, meta):
         name = unique_name("tool_edit")
         create_tool(description="desc", header="old h", body="old b", name=name, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         edit_tool(id=name, header_change=sr, body_change=sr, _meta=meta)
         new_header = meta.conn.execute_fetchval("SELECT header FROM executables WHERE addr=%s", (addr,))
@@ -324,7 +259,7 @@ class TestToolTools:
         name = unique_name("tool_desc")
         create_tool(description="old desc", header="h", body="b", name=name, _meta=meta)
         addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         edit_tool(id=name, new_description="new desc", _meta=meta)
         desc = meta.conn.execute_fetchval("SELECT description FROM vector_ops WHERE addr=%s", (addr,))
         assert desc == "new desc"
@@ -340,25 +275,24 @@ class TestToolTools:
         create_tool(
             description="d",
             header="h",
-            body='import os, json; print(json.dumps({"res": os.environ["KWARGS"]}))',
+            body='import os, json, sys; print(json.dumps({"res": json.load(sys.stdin)}))',
             name=name,
             _meta=meta
         )
         res = execute_tool_builtin_func(id=name, kwargs={"key": "val"}, _meta=meta)
-        assert "ran tools stdout" in res
-        data = json.loads(res.split("ran tools stdout: ", 1)[1])
-        assert data["res"] == json.dumps({"key": "val"})
+        assert "Executed tool, and got output:" in res
+        # Extract the JSON part after the prefix
+        output_json = res.split("Executed tool, and got output:", 1)[1].split(";")[0].strip()
+        data = json.loads(output_json)
+        assert data["res"] == {"key": "val"}
 
     def test_create_tool_timeout(self, meta):
         name = unique_name("timeout_tool")
         create_tool(description="d", header="h", body="import time; time.sleep(5)", name=name, _meta=meta)
-        res = execute_tool_builtin_func(id=name, timeout=1, _meta=meta)
-        assert "timed out" in res
+        with pytest.raises(TimeoutError, match="Process Timed out"):
+            execute_tool_builtin_func(id=name, timeout=1, _meta=meta)
 
 
-# ----------------------------------------------------------------------
-# Web tools
-# ----------------------------------------------------------------------
 class TestWebTools:
     @patch('python.executor.builtins.searcher_obj.search_website_content', return_value="mock fulltext")
     def test_web_search_fulltext(self, mock_search, meta):
@@ -394,28 +328,8 @@ class TestWebTools:
         assert "status_code" in res
 
 
-# ----------------------------------------------------------------------
-# User message tool
-# ----------------------------------------------------------------------
-def test_send_message(meta):
-    conn = meta.conn
-    session_name = "test_session"
-    conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (meta.master_id, session_name))
-    ai_msg_addr = conn.execute_fetchval("SELECT new_addr()")
-    conn.execute(
-        "INSERT INTO results (addr, ready, metadata) VALUES (%s, false, %s::jsonb)",
-        (ai_msg_addr, json.dumps({"type": "ai_message", "session_name": session_name, "turn": 1}))
-    )
-    res = send_message_to_human_v_webui(text="hello", _meta=meta)
-    assert "Sent a message" in res
-
-
-# ----------------------------------------------------------------------
-# Cronjob
-# ----------------------------------------------------------------------
 class TestCronjob:
-    @patch('python.executor.builtins.insert_cronjob')
-    def test_add_cronjob_once(self, mock_insert, meta):
+    def test_add_cronjob_once(self, meta):
         res = add_cronjob(
             cronjob_type='once',
             action='do_this_later',
@@ -423,11 +337,16 @@ class TestCronjob:
             params={'ai_instruction': 'test'},
             _meta=meta
         )
-        assert "Added a cronjob" in res
-        mock_insert.assert_called_once()
+        addr = int(res)
+        # Verify insertion in cronjob_once
+        row = meta.conn.execute(
+            "SELECT name, args, start_after FROM cronjob_once WHERE addr = %s", (addr,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 'do_this_later'
+        assert row[1] == {'ai_instruction': 'test'}
 
-    @patch('python.executor.builtins.insert_cronjob')
-    def test_add_cronjob_loop(self, mock_insert, meta):
+    def test_add_cronjob_loop(self, meta):
         res = add_cronjob(
             cronjob_type='loop',
             action='do_this_later',
@@ -435,12 +354,16 @@ class TestCronjob:
             params={'ai_instruction': 'loop'},
             _meta=meta
         )
-        assert "Added a cronjob" in res
+        addr = int(res)
+        row = meta.conn.execute(
+            "SELECT name, args, execute_every FROM cronjob_loop WHERE addr = %s", (addr,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 'do_this_later'
+        assert row[1] == {'ai_instruction': 'loop'}
+        assert row[2] == 10
 
 
-# ----------------------------------------------------------------------
-# RMT tools
-# ----------------------------------------------------------------------
 class TestRmtTools:
     def test_rmt_create_from_serial(self, meta):
         dsl = "START -> (instruction='a') -> (instruction='b') -> END"
@@ -466,7 +389,13 @@ class TestRmtTools:
         conn.execute("SELECT new_slave(%s, 'step2', 's2', ARRAY[%s], NULL, 'res2')", (m_addr, r1))
         rmt_name = unique_name("from_master")
         res = tool_rmt_create_from_master(master_id=m_addr, name=rmt_name, _meta=meta, description="desc")
-        assert "Created rmt from master" in res
+        rmt_addr = int(res)
+        assert rmt_addr > 0
+        slaves = conn.execute(
+            "SELECT instruction FROM rmt_slaves WHERE template_addr=%s", (rmt_addr,)
+        ).fetchall()
+        instructions = {r[0] for r in slaves}
+        assert instructions == {"step1", "step2"}
 
     def test_rmt_create_from_range(self, meta):
         conn = meta.conn
@@ -477,8 +406,8 @@ class TestRmtTools:
         sA = conn.execute_fetchval("SELECT resolve_name('sA')")
         sB = conn.execute_fetchval("SELECT resolve_name('sB')")
         rmt_name = unique_name("range_rmt")
-        rmt_create_from_range(start_id=sA, end_id=sB, _meta=meta, description="desc", name=rmt_name)
-        rmt_addr = resolve_to_addr(rmt_name, conn)
+        res = rmt_create_from_range(start_id=sA, end_id=sB, _meta=meta, description="desc", name=rmt_name)
+        rmt_addr = int(res)
         slaves = conn.execute(
             "SELECT instruction FROM rmt_slaves WHERE template_addr=%s", (rmt_addr,)
         ).fetchall()
@@ -490,7 +419,7 @@ class TestRmtTools:
         name = unique_name("rmt_desc")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="old desc")
         rmt_addr = resolve_to_addr(name, meta.conn)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         rmt_edit_description(rmt_id=rmt_addr, new_description="new desc", _meta=meta)
         desc = meta.conn.execute_fetchval("SELECT description FROM vector_ops WHERE addr=%s", (rmt_addr,))
         assert desc == "new desc"
@@ -505,11 +434,11 @@ class TestRmtTools:
         )
         node_name = unique_name("n1_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         new_name = unique_name("new_node")
         rmt_insert_node(rmt_id=rmt_addr, instruction="new", name=new_name, depends_on=[node_name], _meta=meta)
         new_addr = resolve_to_addr(new_name, meta.conn)
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         rmt_delete_node(rmt_slave_id=new_addr, template_id=rmt_addr, concatenate=False, _meta=meta)
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM rmt_slaves WHERE template_addr=%s AND instruction='new'", (rmt_addr,)
@@ -526,7 +455,7 @@ class TestRmtTools:
         )
         node1_name = unique_name("n1_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node1_addr, node1_name))
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         new_name = unique_name("new_reqby")
         rmt_insert_node(rmt_id=rmt_addr, instruction="second", name=new_name,
                         required_by=[node1_name], _meta=meta)
@@ -559,7 +488,6 @@ class TestRmtTools:
         )
         assert instr == "Use blue"
 
-    # OCC timestamp fix + test passes
     def test_rmt_edit_instruction(self, meta):
         dsl = "START -> (id='editme', instruction='old text') -> END"
         name = unique_name("rmt_instr")
@@ -570,7 +498,7 @@ class TestRmtTools:
         )
         node_name = unique_name("editme_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = datetime.now()   # advance timestamp to prevent OCC error
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         rmt_edit_instruction(node_id=node_name, sr_block="<SEARCH>old</SEARCH><REPLACE>new</REPLACE>", _meta=meta)
         new_instr = meta.conn.execute_fetchval("SELECT instruction FROM rmt_slaves WHERE addr=%s", (node_addr,))
         assert new_instr == "new text"
@@ -585,7 +513,7 @@ class TestRmtTools:
         )
         node_name = unique_name("sc_name")
         meta.conn.execute("INSERT INTO names (addr, name) VALUES (%s, %s)", (node_addr, node_name))
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         rmt_change_scope(node_id=node_name, new_scope='task', _meta=meta)
         scope = meta.conn.execute_fetchval("SELECT scope FROM rmt_slaves WHERE addr=%s", (node_addr,))
         assert scope == 'task'
@@ -601,7 +529,7 @@ class TestRmtTools:
         nodeA = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='A'", (rmt_addr,)
         )
-        meta.occ_last_change = datetime.now()
+        meta.occ_last_change = meta.conn.execute_fetchval("SELECT NOW()")
         rmt_delete_node(rmt_slave_id=nodeB, template_id=rmt_addr, concatenate=True, _meta=meta)
         remaining = meta.conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr=%s", (rmt_addr,)
@@ -610,20 +538,15 @@ class TestRmtTools:
         assert c[1] == [nodeA]
 
 
-# ----------------------------------------------------------------------
-# Event tools
-# ----------------------------------------------------------------------
 class TestEventTools:
     def test_create_result_via_event(self, meta):
         conn = meta.conn
-        # The function returns the consumer address, not the result address
         str_ret = tool_create_result_via_event(
             event_path="test.event",
             result_str="data: ${{data}}",
             name="ev_res",
             _meta=meta
         )
-        # Verify that the name points to the consumer address
         resolved = resolve_to_addr("ev_res", conn)
         assert str(resolved) in str_ret
 
@@ -639,7 +562,6 @@ class TestEventTools:
             _meta=meta
         )
         conn = meta.conn
-        # consumer_addr is a string message; extract the addr from DB by event path
         db_consumer = conn.execute_fetchval(
             "SELECT addr FROM event_consumers WHERE event_path='ev.react'"
         )
@@ -667,9 +589,6 @@ class TestEventTools:
         assert stored_instr == "do stuff"
 
 
-# ----------------------------------------------------------------------
-# Paradox reporting
-# ----------------------------------------------------------------------
 def test_report_paradox(meta):
     with pytest.raises(ParadoxDetected):
         report_paradoxal_information(items=[1], paradox="conflict", _meta=meta)

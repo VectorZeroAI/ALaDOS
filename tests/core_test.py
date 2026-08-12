@@ -1,74 +1,33 @@
 #!/usr/bin/env python3
 """
 My core testing framework.
-Uses a decorator to turn classes with steps: list[ExecutorStep] into actual tests
-and runs them against actual executor thread. 
-
-Usage doc:
-    ExecutorStep fields are self explanatory.
-    Multiple LLM outputs are allowed when required, as that property is a list of strings.
-    Each Step is its own Slave to be executed.
-    Each class is its own test case to be executed. 
-    You are not required to name classes with Test...
-    DB is cleared between classes, e.g. test cases, not between individual Steps. 
-
-!!! RUN THE SQL AT THE BOTTOM AGAINST THE alados_test DB YOURSELF ELSE EVERYTHING TIMES OUT. !!!
 """
-
-import threading
-import queue
-import time
 import dataclasses
+import json
+import os
+import queue
+import threading
+import time
+import uuid
 from typing import List, Optional
 
 import flask
 import httpx
 import psycopg
 import pytest
-import uuid
 
-#  --  System modules  -------------------------------------------------
 from python.executor.main import core as executor_core
 from python.executor.queue import executor_queue
 from python.executor.types import Api
 from python.sceduler.main import setup as scheduler_setup
-from python.utils.conn_factory import (
-    Conn,
-    register_all_the_composite_types
-)
+from python.utils.conn_factory import conn_factory
 from python.base_state.main import startup as bs_startup
 from python.events.main import startup as ev_startup
 
-#  --  Database configuration  ----------------------------------------
-DB_HOST = "/data/data/com.termux/files/usr/tmp"
-DB_NAME = "alados_test"
+
+os.environ.setdefault("ALADOS_DB_NAME", "alados_test")  # ensure test DB
 
 
-def _test_conn_factory_raw():
-    conn = Conn.connect(host=DB_HOST, dbname=DB_NAME)
-    conn.autocommit = True
-    return conn
-
-
-def _test_conn_factory():
-    raw = _test_conn_factory_raw()
-    conn = register_all_the_composite_types(raw)
-    return conn
-
-
-#  --  Monkey‑patch all modules that use conn_factory  ----------------
-def _patch_connection_factories():
-    import python.executor.main as executor_main
-    import python.sceduler.main as scheduler_main
-    import python.utils.logger as logger_mod
-    executor_main.conn_factory = _test_conn_factory
-    scheduler_main.conn_factory = _test_conn_factory
-    logger_mod.conn_factory = _test_conn_factory
-    import python.utils.conn_factory as conn_mod
-    conn_mod.conn_factory_raw = _test_conn_factory_raw
-
-
-#  --  Flask LLM mock  ------------------------------------------------
 class LLMMockServer:
     def __init__(self):
         self.app = flask.Flask(__name__)
@@ -105,15 +64,8 @@ class LLMMockServer:
         self.response_queue.put(json_string)
 
 
-#  --  Helper: wait for result using LISTEN/NOTIFY  -------------------
-def wait_for_result(db_conn: Conn, result_addr: int, timeout: float = 10.0):
-    """
-    Block until the given result is marked ready.
-    Uses the 'result_ready' notification channel.
-    """
-    # We need a separate connection for listening because
-    # psycopg can't listen on a connection that's also doing other work.
-    with psycopg.connect(host=DB_HOST, dbname=DB_NAME) as listen_conn:
+def wait_for_result(db_conn, result_addr: int, timeout: float = 10.0):
+    with psycopg.connect(host="/data/data/com.termux/files/usr/tmp", dbname="alados_test") as listen_conn:
         listen_conn.autocommit = True
         listen_conn.execute("LISTEN result_ready")
         deadline = time.time() + timeout
@@ -124,36 +76,24 @@ def wait_for_result(db_conn: Conn, result_addr: int, timeout: float = 10.0):
         raise TimeoutError(f"Result {result_addr} not ready within {timeout}s")
 
 
-#  --  Declarative test step  -----------------------------------------
 @dataclasses.dataclass
 class ExecutorStep:
-    """One step of an executor test scenario."""
     instruction: str
-    llm_responses: List[str]                    # will be queued in order
+    llm_responses: List[str]
     expected_content_contains: Optional[str] = None
     expected_status: Optional[str] = None
-    expected_knowledge_count: Optional[int] = None  # example of a DB assertion
+    expected_knowledge_count: Optional[int] = None
 
 
-#  --  Decorator that turns a step class into a pytest test class  ----
 def executor_test(cls):
-    """
-    Decorator that reads the `steps` class variable and creates a
-    parametrized pytest test class. Each step is run in order.
-
-    Replaces ${{slave_addr}} with slave addr and ${{result_addr}} with result_addr.
-    """
-    # We'll create a new class that inherits from object so pytest discovers it.
     class TestWrapper:
         @pytest.fixture(autouse=True)
         def _setup(self, global_setup, clean_database):
-            self.mock = global_setup          # the LLMMockServer instance
-            self.db = _test_conn_factory()    # fresh connection for the test
+            self.mock = global_setup
+            self.db = conn_factory("alados_test")
 
         @pytest.mark.parametrize("step", cls.steps, ids=lambda s: s.instruction)
         def test_step(self, step):
-
-            # Create a slave with no dependencies (easy to test)
             slave_addr = self.db.execute_fetchval(
                 "SELECT new_slave(NULL, %s, NULL, NULL, NULL, NULL, NULL, 'general')",
                 (step.instruction,),
@@ -161,104 +101,64 @@ def executor_test(cls):
             result_addr = self.db.execute_fetchval(
                 "SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,)
             )
-
-
-            # Replace keys with addresses.
-            # ${{slave_addr}} for slave_addr
-            # ${{result_addr}} for result_addr
+            # substitute placeholders
             for i in range(len(step.llm_responses)):
                 step.llm_responses[i] = step.llm_responses[i].replace("${{slave_addr}}", str(slave_addr))
                 step.llm_responses[i] = step.llm_responses[i].replace("${{result_addr}}", str(result_addr))
-
-            # Enqueue responses for this step
             for resp in step.llm_responses:
                 self.mock.put_response(resp)
-
-            # Wait for the executor to process it
             wait_for_result(self.db, result_addr)
-
-            # Run the user‑specified assertions
             if step.expected_content_contains is not None:
                 content = self.db.execute_fetchval(
                     "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
                 )
                 assert step.expected_content_contains in content, (
-                    f"Expected '{step.expected_content_contains}' in result, "
-                    f"got: {content}"
+                    f"Expected '{step.expected_content_contains}' in result, got: {content}"
                 )
-
             if step.expected_status is not None:
                 status = self.db.execute_fetchval(
                     "SELECT status FROM results WHERE addr = %s", (result_addr,)
                 )
-                assert status == step.expected_status, (
-                    f"Expected status '{step.expected_status}', got '{status}'"
-                )
-
+                assert status == step.expected_status
             if step.expected_knowledge_count is not None:
                 cnt = self.db.execute_fetchval("SELECT count(*) FROM knowledge")
-                assert cnt == step.expected_knowledge_count, (
-                    f"Expected {step.expected_knowledge_count} knowledge items, "
-                    f"found {cnt}"
-                )
+                assert cnt == step.expected_knowledge_count
 
-    # Give the wrapper a nice name for pytest output
     TestWrapper.__name__ = "Test" + cls.__name__
     TestWrapper.__qualname__ = "Test" + cls.__qualname__
-    
     globals()[TestWrapper.__name__] = TestWrapper
     globals()[TestWrapper.__qualname__] = TestWrapper
-
     return TestWrapper
 
 
-#  --  Session‑scoped fixture for the executor and mock server  -------
 @pytest.fixture(scope="session", autouse=True)
 def global_setup():
-    """Patch factories, start scheduler and executor with mock API."""
-    _patch_connection_factories()
-
     mock_llm = LLMMockServer()
     port = mock_llm.start()
-    api = Api(
-        url=f"http://127.0.0.1:{port}/v1/chat/completions",
-        key="test",
-        model="mock",
-        max_tokens=8000,
-    )
-
+    api = Api(url=f"http://127.0.0.1:{port}/v1/chat/completions", key="test", model="mock", max_tokens=8000)
     scheduler_setup()
-    threading.Thread(
-        target=executor_core, args=(executor_queue, [api]), daemon=True
-    ).start()
-
-
-    # Clean database once at the start of the session
-    conn = _test_conn_factory()
+    threading.Thread(target=executor_core, args=(executor_queue, [api]), daemon=True).start()
+    conn = conn_factory("alados_test")
     _clean_database(conn)
     conn.close()
-
     coros = bs_startup()
-
     ev_startup(coros)
-
     yield mock_llm
 
 
 @pytest.fixture(autouse=True, scope="class")
 def clean_database():
-    """Clean tables before each test function."""
-    conn = _test_conn_factory()
+    conn = conn_factory("alados_test")
     _clean_database(conn)
     conn.close()
 
 
-def _clean_database(conn: Conn):
+def _clean_database(conn):
     tables = [
         "master_req", "slave_req", "master_load", "master_context",
         "rmt_slaves", "reusable_master_templates",
         "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge", "addrs",
+        "executables", "knowledge",
         "cronjob_once", "cronjob_loop",
         "event_consumers", "event_call_rmt", "event_call_execute_slave",
         "event_call_fill_result",
@@ -269,14 +169,14 @@ def _clean_database(conn: Conn):
                 conn.execute(f"DELETE FROM {t} CASCADE")  # pyright: ignore
             except Exception:
                 pass
+        # Delete only user‑created addresses (positive ids) to keep base‑state items (negative ids)
+        conn.execute("DELETE FROM addrs WHERE addr > 0")
         conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
 
 
-#  ======================================================================
-#  Example test cases – just add classes like these
-#  ======================================================================
+# ----------------- test cases -----------------
 
 @executor_test
 class BasicExecution:
@@ -318,7 +218,6 @@ class ErrorRecovery:
     ]
 
 name = str(uuid.uuid4())
-print(f"NAME = {name}")
 
 @executor_test
 class CreateAndReadKnowledge:
@@ -333,7 +232,7 @@ class CreateAndReadKnowledge:
         ExecutorStep(
             instruction="Read that knowledge item (simulate read by checking we can find it)",
             llm_responses=[
-                '[{"tool": "k_read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
+                '[{"tool": "k_read", "args": {"id": "' + name + '"}}]'
             ],
             expected_content_contains="moon is cheese",
         ),
@@ -347,16 +246,13 @@ class CheckNestedNewPaths:
             instruction="Start wrongly.",
             llm_responses=[
                 '[{"tool": "NOT EXISTS", "args": {}}]',
-                ## Then report a paradox inside of recovery.
                 '[{"tool": "k_report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
-                ## Now recover from paradox, and then recover from the tool error?
                 '[{"tool": "result_write", "args": {"text": "recovered paradox"}}]',
                 '[{"tool": "result_write", "args": {"text": "recovered tool_error"}}]',
             ],
-            expected_content_contains="recovered tool_error" # check if the last recovery was executed as expected.
+            expected_content_contains="recovered tool_error"
         )
     ]
-
 
 uuid = str(uuid.uuid4())
 
@@ -371,7 +267,7 @@ class CheckToolExecuteBuiltinFunc:
                         "tool": "tool_create",
                         "args": {
                             "description": "desc",
-                            "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, \"Content\", \"description\")); print(\"EXECUTED CORRECTLY.\")",
+                            "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, \\"Content\\", \\"description\\")); print(\\"EXECUTED CORRECTLY.\\")",
                             "header": "Nothing.",
                             "name": "'''+ uuid +'"}}]'
             ]
@@ -381,26 +277,6 @@ class CheckToolExecuteBuiltinFunc:
             llm_responses=[
                 '[{"tool": "tool_execute", args:{"id": "' + uuid + '", "kwargs": {}}}]'
             ],
-            expected_content_contains="EXECUTED_CORRECTLY"
+            expected_content_contains="EXECUTED CORRECTLY."
         )
     ]
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-
-"""
-CREATE OR REPLACE FUNCTION notify_result_ready()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.ready AND NOT OLD.ready THEN
-        PERFORM pg_notify('result_ready', NEW.addr::TEXT);
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_result_ready
-AFTER UPDATE ON results
-FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
-"""

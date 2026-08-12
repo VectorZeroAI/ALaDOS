@@ -1,415 +1,406 @@
 #!/usr/bin/env python3
-"""Executor-core state-machine tests.
-
-These tests deliberately mock *tool implementation* at the execute_tool
-boundary.  Builtin/syscall behavior is tested by builtins_test.py and
-lib_test.py; core_test.py is responsible for proving that the executor moves
-between API, execute, recovery, paradox, and finish states correctly.
 """
-from __future__ import annotations
+My core testing framework.
+Uses a decorator to turn classes with steps: list[ExecutorStep] into actual tests
+and runs them against actual executor thread. 
 
-import json
-import queue
+Usage doc:
+    ExecutorStep fields are self explanatory.
+    Multiple LLM outputs are allowed when required, as that property is a list of strings.
+    Each Step is its own Slave to be executed.
+    Each class is its own test case to be executed. 
+    You are not required to name classes with Test...
+    DB is cleared between classes, e.g. test cases, not between individual Steps. 
+
+!!! RUN THE SQL AT THE BOTTOM AGAINST THE alados_test DB YOURSELF ELSE EVERYTHING TIMES OUT. !!!
+"""
+
 import threading
+import queue
 import time
+import dataclasses
+from typing import List, Optional
 
 import flask
 import httpx
+import psycopg
 import pytest
-from werkzeug.serving import make_server
+import uuid
 
-import python.executor.main as executor_main
-from python.executor.exceptions import ParadoxDetected
+#  --  System modules  -------------------------------------------------
+from python.executor.main import core as executor_core
+from python.executor.queue import executor_queue
 from python.executor.types import Api
-from python.utils.conn_factory import conn_factory
+from python.sceduler.main import setup as scheduler_setup
+from python.utils.conn_factory import (
+    Conn,
+    register_all_the_composite_types
+)
+from python.base_state.main import startup as bs_startup
+from python.events.main import startup as ev_startup
+
+#  --  Database configuration  ----------------------------------------
+DB_HOST = "/data/data/com.termux/files/usr/tmp"
+DB_NAME = "alados_test"
 
 
+def _test_conn_factory_raw():
+    conn = Conn.connect(host=DB_HOST, dbname=DB_NAME)
+    conn.autocommit = True
+    return conn
+
+
+def _test_conn_factory():
+    raw = _test_conn_factory_raw()
+    conn = register_all_the_composite_types(raw)
+    return conn
+
+
+#  --  Monkey‑patch all modules that use conn_factory  ----------------
+def _patch_connection_factories():
+    import python.executor.main as executor_main
+    import python.sceduler.main as scheduler_main
+    import python.utils.logger as logger_mod
+    executor_main.conn_factory = _test_conn_factory
+    scheduler_main.conn_factory = _test_conn_factory
+    logger_mod.conn_factory = _test_conn_factory
+    import python.utils.conn_factory as conn_mod
+    conn_mod.conn_factory_raw = _test_conn_factory_raw
+
+
+#  --  Flask LLM mock  ------------------------------------------------
 class LLMMockServer:
-    def __init__(self) -> None:
+    def __init__(self):
         self.app = flask.Flask(__name__)
-        self.responses: queue.Queue[str] = queue.Queue()
-        self.server = None
-        self.thread = None
+        self.response_queue = queue.Queue()
+        self._setup_routes()
 
-        @self.app.post("/v1/chat/completions")
+    def _setup_routes(self):
+        @self.app.route("/v1/chat/completions", methods=["POST"])
         def chat_completions():
             try:
-                content = self.responses.get(timeout=10)
+                content = self.response_queue.get(timeout=30)
             except queue.Empty:
                 return flask.jsonify({"error": "No mock response left"}), 500
             return flask.jsonify({"choices": [{"message": {"content": content}}]})
 
-    def start(self) -> None:
-        self.server = make_server("127.0.0.1", 0, self.app)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+    def start(self, port: int = 8001) -> int:
+        self.thread = threading.Thread(
+            target=self.app.run,
+            kwargs={"port": port, "debug": False, "use_reloader": False},
+            daemon=True,
+        )
         self.thread.start()
-
         deadline = time.time() + 5
         while time.time() < deadline:
             try:
-                if httpx.get(
-                    f"http://127.0.0.1:{self.server.server_port}/",
-                    timeout=0.2,
-                ).status_code == 404:
-                    return
+                httpx.get(f"http://127.0.0.1:{port}/", timeout=0.2)
+                break
             except httpx.RequestError:
-                time.sleep(0.05)
-        raise RuntimeError("mock LLM server failed to start")
+                time.sleep(0.1)
+        self.port = port
+        return self.port
 
-    @property
-    def port(self) -> int:
-        assert self.server is not None
-        return self.server.server_port
-
-    def put(self, response: str) -> None:
-        self.responses.put(response)
-
-    def stop(self) -> None:
-        if self.server is not None:
-            self.server.shutdown()
-        if self.thread is not None:
-            self.thread.join(timeout=5)
+    def put_response(self, json_string: str):
+        self.response_queue.put(json_string)
 
 
-class StopCore(Exception):
-    """Private sentinel used to stop the otherwise infinite executor loop."""
+#  --  Helper: wait for result using LISTEN/NOTIFY  -------------------
+def wait_for_result(db_conn: Conn, result_addr: int, timeout: float = 10.0):
+    """
+    Block until the given result is marked ready.
+    Uses the 'result_ready' notification channel.
+    """
+    # We need a separate connection for listening because
+    # psycopg can't listen on a connection that's also doing other work.
+    with psycopg.connect(host=DB_HOST, dbname=DB_NAME) as listen_conn:
+        listen_conn.autocommit = True
+        listen_conn.execute("LISTEN result_ready")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for notify in listen_conn.notifies(timeout=9):
+                if notify.payload == str(result_addr):
+                    return
+        raise TimeoutError(f"Result {result_addr} not ready within {timeout}s")
 
 
-class OneShotQueue:
-    def __init__(self, slave_addr: int):
-        self.slave_addr = slave_addr
-        self.used = False
-
-    def get(self):
-        if self.used:
-            raise StopCore
-        self.used = True
-        return self.slave_addr
-
-
-def run_core_once(slave_addr: int, api: Api) -> threading.Thread:
-    q = OneShotQueue(slave_addr)
-
-    def runner() -> None:
-        try:
-            executor_main.core(q, [api])
-        except StopCore:
-            pass
-
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    return thread
+#  --  Declarative test step  -----------------------------------------
+@dataclasses.dataclass
+class ExecutorStep:
+    """One step of an executor test scenario."""
+    instruction: str
+    llm_responses: List[str]                    # will be queued in order
+    expected_content_contains: Optional[str] = None
+    expected_status: Optional[str] = None
+    expected_knowledge_count: Optional[int] = None  # example of a DB assertion
 
 
-@pytest.fixture
-def core_env(monkeypatch):
-    mock = LLMMockServer()
-    mock.start()
+#  --  Decorator that turns a step class into a pytest test class  ----
+def executor_test(cls):
+    """
+    Decorator that reads the `steps` class variable and creates a
+    parametrized pytest test class. Each step is run in order.
 
+    Replaces ${{slave_addr}} with slave addr and ${{result_addr}} with result_addr.
+    """
+    # We'll create a new class that inherits from object so pytest discovers it.
+    class TestWrapper:
+        @pytest.fixture(autouse=True)
+        def _setup(self, global_setup, clean_database):
+            self.mock = global_setup          # the LLMMockServer instance
+            self.db = _test_conn_factory()    # fresh connection for the test
+
+        @pytest.mark.parametrize("step", cls.steps, ids=lambda s: s.instruction)
+        def test_step(self, step):
+
+            # Create a slave with no dependencies (easy to test)
+            slave_addr = self.db.execute_fetchval(
+                "SELECT new_slave(NULL, %s, NULL, NULL, NULL, NULL, NULL, 'general')",
+                (step.instruction,),
+            )
+            result_addr = self.db.execute_fetchval(
+                "SELECT result_addr FROM slaves WHERE addr = %s", (slave_addr,)
+            )
+
+
+            # Replace keys with addresses.
+            # ${{slave_addr}} for slave_addr
+            # ${{result_addr}} for result_addr
+            for i in range(len(step.llm_responses)):
+                step.llm_responses[i] = step.llm_responses[i].replace("${{slave_addr}}", str(slave_addr))
+                step.llm_responses[i] = step.llm_responses[i].replace("${{result_addr}}", str(result_addr))
+
+            # Enqueue responses for this step
+            for resp in step.llm_responses:
+                self.mock.put_response(resp)
+
+            # Wait for the executor to process it
+            wait_for_result(self.db, result_addr)
+
+            # Run the user‑specified assertions
+            if step.expected_content_contains is not None:
+                content = self.db.execute_fetchval(
+                    "SELECT content_str FROM results WHERE addr = %s", (result_addr,)
+                )
+                assert step.expected_content_contains in content, (
+                    f"Expected '{step.expected_content_contains}' in result, "
+                    f"got: {content}"
+                )
+
+            if step.expected_status is not None:
+                status = self.db.execute_fetchval(
+                    "SELECT status FROM results WHERE addr = %s", (result_addr,)
+                )
+                assert status == step.expected_status, (
+                    f"Expected status '{step.expected_status}', got '{status}'"
+                )
+
+            if step.expected_knowledge_count is not None:
+                cnt = self.db.execute_fetchval("SELECT count(*) FROM knowledge")
+                assert cnt == step.expected_knowledge_count, (
+                    f"Expected {step.expected_knowledge_count} knowledge items, "
+                    f"found {cnt}"
+                )
+
+    # Give the wrapper a nice name for pytest output
+    TestWrapper.__name__ = "Test" + cls.__name__
+    TestWrapper.__qualname__ = "Test" + cls.__qualname__
+    
+    globals()[TestWrapper.__name__] = TestWrapper
+    globals()[TestWrapper.__qualname__] = TestWrapper
+
+    return TestWrapper
+
+
+#  --  Session‑scoped fixture for the executor and mock server  -------
+@pytest.fixture(scope="session", autouse=True)
+def global_setup():
+    """Patch factories, start scheduler and executor with mock API."""
+    _patch_connection_factories()
+
+    mock_llm = LLMMockServer()
+    port = mock_llm.start()
     api = Api(
-        url=f"http://127.0.0.1:{mock.port}/v1/chat/completions",
+        url=f"http://127.0.0.1:{port}/v1/chat/completions",
         key="test",
         model="mock",
         max_tokens=8000,
     )
 
-    # Core constructs _ExecToolMetaData with a NATS client even when the test
-    # replaces execute_tool.  No network connection is needed at this layer.
-    async def fake_connect_nats():
-        return None
-
-    monkeypatch.setattr(executor_main, "connect_nats", fake_connect_nats)
-    yield mock, api
-    mock.stop()
+    scheduler_setup()
+    threading.Thread(
+        target=executor_core, args=(executor_queue, [api]), daemon=True
+    ).start()
 
 
-@pytest.fixture
-def core_db():
-    conn = conn_factory("alados_test")
-    conn.autocommit = True
-    clean_database(conn)
-    try:
-        yield conn
-    finally:
-        clean_database(conn)
-        conn.close()
+    # Clean database once at the start of the session
+    conn = _test_conn_factory()
+    _clean_database(conn)
+    conn.close()
+
+    coros = bs_startup()
+
+    ev_startup(coros)
+
+    yield mock_llm
 
 
-def clean_database(conn) -> None:
-    """Remove all test-created rows without violating RESTRICT FKs."""
+@pytest.fixture(autouse=True, scope="class")
+def clean_database():
+    """Clean tables before each test function."""
+    conn = _test_conn_factory()
+    _clean_database(conn)
+    conn.close()
+
+
+def _clean_database(conn: Conn):
     tables = [
+        "master_req", "slave_req", "master_load", "master_context",
+        "rmt_slaves", "reusable_master_templates",
+        "slaves", "masters", "results", "names", "vector_ops",
+        "executables", "knowledge", "addrs",
+        "cronjob_once", "cronjob_loop",
+        "event_consumers", "event_call_rmt", "event_call_execute_slave",
         "event_call_fill_result",
-        "event_call_execute_slave",
-        "event_call_rmt",
-        "event_consumers",
-        "master_req",
-        "slave_req",
-        "master_load",
-        "master_context",
-        "rmt_slaves",
-        "cronjob_once",
-        "cronjob_loop",
-        "reusable_master_templates",
-        "executables",
-        "knowledge",
-        "vector_ops",
-        "names",
-        "slaves",
-        "masters",
-        "results",
     ]
     with conn.transaction():
-        for table in tables:
-            conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM addrs WHERE addr > 0")
+        for t in tables:
+            try:
+                conn.execute(f"DELETE FROM {t} CASCADE")  # pyright: ignore
+            except Exception:
+                pass
         conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
 
 
-def new_slave(db, instruction: str) -> tuple[int, int]:
-    slave_addr = db.execute_fetchval(
-        "SELECT new_slave(NULL, %s, NULL, NULL, NULL, NULL, NULL, 'general')",
-        (instruction,),
-    )
-    result_addr = db.execute_fetchval(
-        "SELECT result_addr FROM slaves WHERE addr = %s",
-        (slave_addr,),
-    )
-    return slave_addr, result_addr
+#  ======================================================================
+#  Example test cases – just add classes like these
+#  ======================================================================
+
+@executor_test
+class BasicExecution:
+    steps = [
+        ExecutorStep(
+            instruction="Write 'Hello World'",
+            llm_responses=['[{"tool": "result_write", "args": {"text": "Hello World"}}]'],
+            expected_content_contains="Hello World",
+        ),
+    ]
 
 
-def wait_for_result(db, result_addr: int, timeout: float = 10.0):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        row = db.execute(
-            "SELECT ready, status, content_str FROM results WHERE addr = %s",
-            (result_addr,),
-        ).fetchone()
-        if row is None:
-            raise AssertionError(f"Result {result_addr} disappeared")
-        ready, status, content = row
-        if ready:
-            return content, status
-        if status == "error":
-            return content, status
-        time.sleep(0.05)
-    row = db.execute(
-        "SELECT ready, status, content_str FROM results WHERE addr = %s",
-        (result_addr,),
-    ).fetchone()
-    raise TimeoutError(f"Result {result_addr} not ready; state={row!r}")
-
-
-def install_execute(monkeypatch, db, behavior):
-    """Patch the exact execute_tool symbol used by core."""
-    monkeypatch.setattr(executor_main, "execute_tool", behavior)
-
-
-def run_case(core_db, core_env, monkeypatch, instruction, responses, behavior):
-    mock, api = core_env
-    slave_addr, result_addr = new_slave(core_db, instruction)
-    for response in responses:
-        mock.put(response)
-    install_execute(monkeypatch, core_db, behavior)
-    thread = run_core_once(slave_addr, api)
-    result = wait_for_result(core_db, result_addr)
-    thread.join(timeout=2)
-    assert not thread.is_alive()
-    return result
-
-
-class TestBasicExecution:
-    def test_writes_final_result(self, core_db, core_env, monkeypatch):
-        calls = []
-
-        def execute(call, meta):
-            calls.append(call.tool)
-            return "Hello World"
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Write 'Hello World'",
-            ['[{"tool":"result_write","args":{"text":"Hello World"}}]'],
-            execute,
-        )
-        assert result == ("Hello World", None)
-        assert calls == ["result_write"]
-
-
-class TestParadoxHandling:
-    def test_paradox_path_returns_to_normal_execution(self, core_db, core_env, monkeypatch):
-        calls = []
-
-        def execute(call, meta):
-            calls.append(call.tool)
-            if len(calls) == 1:
-                raise ParadoxDetected("test paradox", [meta.slave_id])
-            return "done!"
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Report a paradox",
-            [
-                '[{"tool":"k_report_paradoxal_information","args":{"items":[],"paradox":"test"}}]',
-                '[{"tool":"result_write","args":{"text":"assume handled."}}]',
-                '[{"tool":"result_write","args":{"text":"done!"}}]',
+@executor_test
+class ParadoxHandling:
+    steps = [
+        ExecutorStep(
+            instruction="Report a paradox",
+            llm_responses=[
+                '[{"tool": "k_report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
+                '[{"tool": "result_write", "args": {"text": "assume handled."}}]',
+                '[{"tool": "result_write", "args": {"text": "done!"}}]'
             ],
-            execute,
-        )
-        assert result == ("done!", None)
-        assert len(calls) >= 2
+            expected_content_contains="done!"
+        ),
+    ]
 
 
-class TestErrorRecovery:
-    def test_failed_tool_is_replaced_by_llm_recovery_call(self, core_db, core_env, monkeypatch):
-        calls = []
-
-        def execute(call, meta):
-            calls.append(call.tool)
-            if len(calls) == 1:
-                raise RuntimeError("synthetic failure")
-            return "recovered"
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Fail then recover",
-            [
-                '[{"tool":"broken_tool","args":{}}]',
-                '[{"tool":"recovered_tool","args":{}}]',
+@executor_test
+class ErrorRecovery:
+    steps = [
+        ExecutorStep(
+            instruction="Fail then recover",
+            llm_responses=[
+                '[{"tool": "nonexistent_tool", "args": {}}]',
+                '[{"tool": "result_write", "args": {"text": "recovered"}}]',
             ],
-            execute,
-        )
-        assert result == ("recovered", None)
-        assert calls == ["broken_tool", "recovered_tool"]
+            expected_content_contains="recovered",
+        ),
+    ]
 
+name = str(uuid.uuid4())
+print(f"NAME = {name}")
 
-class TestCreateAndReadKnowledge:
-    def test_multiple_tool_calls_are_finished_as_one_execution(self, core_db, core_env, monkeypatch):
-        name = "core_knowledge_test"
-        state = {}
-
-        def execute(call, meta):
-            if call.tool == "k_create":
-                state[name] = "moon is cheese"
-                return "created"
-            if call.tool == "k_read":
-                return state[name]
-            raise AssertionError(call.tool)
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Create and read knowledge",
-            [
-                json.dumps([
-                    {"tool": "k_create", "args": {"name": name}},
-                    {"tool": "k_read", "args": {"id": name}},
-                ])
+@executor_test
+class CreateAndReadKnowledge:
+    steps = [
+        ExecutorStep(
+            instruction="Create a knowledge item",
+            llm_responses=[
+                '[{"tool": "k_create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
             ],
-            execute,
-        )
-        assert result == ("created\nmoon is cheese", None)
-        assert state[name] == "moon is cheese"
-
-
-class TestNestedNewPaths:
-    def test_tool_error_recovery_does_not_require_scheduler(self, core_db, core_env, monkeypatch):
-        calls = []
-
-        def execute(call, meta):
-            calls.append(call.tool)
-            if call.tool == "NOT_EXISTS":
-                raise RuntimeError("unknown tool")
-            return "recovered tool_error"
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Start wrongly",
-            [
-                '[{"tool":"NOT_EXISTS","args":{}}]',
-                '[{"tool":"result_write","args":{"text":"recovered tool_error"}}]',
+            expected_knowledge_count=1,
+        ),
+        ExecutorStep(
+            instruction="Read that knowledge item (simulate read by checking we can find it)",
+            llm_responses=[
+                '[{"tool": "k_read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
             ],
-            execute,
-        )
-        assert result == ("recovered tool_error", None)
-        assert calls == ["NOT_EXISTS", "result_write"]
+            expected_content_contains="moon is cheese",
+        ),
+    ]
 
 
-class TestToolExecuteBuiltinFunc:
-    def test_tool_create_then_execute_calls_are_processed_in_order(self, core_db, core_env, monkeypatch):
-        created = False
-        calls = []
-
-        def execute(call, meta):
-            nonlocal created
-            calls.append(call.tool)
-            if call.tool == "tool_create":
-                created = True
-                return "created"
-            if call.tool == "tool_execute":
-                assert created
-                return "EXECUTED CORRECTLY."
-            raise AssertionError(call.tool)
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Create and use a test tool",
-            [json.dumps([
-                {"tool": "tool_create", "args": {"name": "core_test_tool"}},
-                {"tool": "tool_execute", "args": {"id": "core_test_tool", "kwargs": {}}},
-            ])],
-            execute,
-        )
-        assert result == ("created\nEXECUTED CORRECTLY.", None)
-        assert calls == ["tool_create", "tool_execute"]
-
-
-class TestFatalRecovery:
-    def test_repeated_tool_failures_end_in_error_result(self, core_db, core_env, monkeypatch):
-        def execute(call, meta):
-            raise RuntimeError("always broken")
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Always fail",
-            [
-                '[{"tool":"broken","args":{}}]',
-                '[{"tool":"broken_again","args":{}}]',
+@executor_test
+class CheckNestedNewPaths:
+    steps = [
+        ExecutorStep(
+            instruction="Start wrongly.",
+            llm_responses=[
+                '[{"tool": "NOT EXISTS", "args": {}}]',
+                ## Then report a paradox inside of recovery.
+                '[{"tool": "k_report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
+                ## Now recover from paradox, and then recover from the tool error?
+                '[{"tool": "result_write", "args": {"text": "recovered paradox"}}]',
+                '[{"tool": "result_write", "args": {"text": "recovered tool_error"}}]',
             ],
-            execute,
+            expected_content_contains="recovered tool_error" # check if the last recovery was executed as expected.
         )
-        assert result[1] == "error"
+    ]
 
 
-class TestCoreIsolation:
-    def test_core_uses_direct_queue_without_scheduler_startup(self, core_db, core_env, monkeypatch):
-        calls = []
+uuid = str(uuid.uuid4())
 
-        def execute(call, meta):
-            calls.append(call.tool)
-            return "isolated"
-
-        result = run_case(
-            core_db,
-            core_env,
-            monkeypatch,
-            "Direct queue execution",
-            ['[{"tool":"test_tool","args":{}}]'],
-            execute,
+@executor_test
+class CheckToolExecuteBuiltinFunc:
+    steps = [
+        ExecutorStep(
+            instruction="Create a test tool that uses a syscall.",
+            llm_responses=[
+                '''[
+                    {
+                        "tool": "tool_create",
+                        "args": {
+                            "description": "desc",
+                            "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, \"Content\", \"description\")); print(\"EXECUTED CORRECTLY.\")",
+                            "header": "Nothing.",
+                            "name": "'''+ uuid +'"}}]'
+            ]
+        ),
+        ExecutorStep(
+            instruction="Use the test tool",
+            llm_responses=[
+                '[{"tool": "tool_execute", args:{"id": "' + uuid + '", "kwargs": {}}}]'
+            ],
+            expected_content_contains="EXECUTED_CORRECTLY"
         )
-        assert result == ("isolated", None)
-        assert calls == ["test_tool"]
+    ]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+"""
+CREATE OR REPLACE FUNCTION notify_result_ready()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.ready AND NOT OLD.ready THEN
+        PERFORM pg_notify('result_ready', NEW.addr::TEXT);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_result_ready
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+"""

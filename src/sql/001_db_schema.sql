@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS master_context (
             ON DELETE SET NULL 
             ON UPDATE CASCADE,
     window_anchor_rmt BIGINT
-        REFERENCES reusable_master_template(addr) 
+        REFERENCES reusable_master_templates(addr) 
             ON DELETE SET NULL 
             ON UPDATE CASCADE,
     window_size_r INT,

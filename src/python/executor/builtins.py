@@ -108,9 +108,6 @@ def k_edit(_meta: _ExecToolMetaData,
     Edits a knowledge entry. 
     Either addr or name must be provided
     change is in the same format as tool.edits change format.
-
-    Also the function signature is this way because I didnt find a better way
-    to make addr and name optional while keeping _meta the last argument.
     """
     conn = _meta.conn
 

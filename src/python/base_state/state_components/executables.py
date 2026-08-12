@@ -208,6 +208,8 @@ register(
             "body_change": "SearchAndReplaceBlock (optional).",
             "new_description": "str (optional)."
         }
+        NOTES: 
+            !One of the changes must be present!
         """,
         name="Tool.edit",
         

@@ -1,3 +1,7 @@
+import os
+
+os.environ["ALADOS_DB_NAME"] = "alados_test"
+
 import pytest
 from python.utils.conn_factory import conn_factory
 from python.executor.types import _ExecToolMetaData
@@ -5,6 +9,7 @@ from datetime import datetime
 
 
 TEST_DB_NAME = "alados_test"
+
 
 
 @pytest.fixture

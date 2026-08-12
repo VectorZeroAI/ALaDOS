@@ -15,6 +15,3 @@ from .functions import insert_node as insert_node
 from .functions import activate_as_master as activate_as_master
 from .functions import edit_node_instruction as edit_node_instruction
 from .functions import change_node_scope as change_node_scope
-from .functions import register_reaction_rmt as register_reaction_rmt
-from .functions import register_reaction_slave as register_reaction_slave
-from .functions import create_result_via_event as create_result_via_event

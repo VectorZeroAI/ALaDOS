@@ -57,7 +57,7 @@ async def batch_call(syscalls: list[syscall], slave_addr: int) -> list[str]:
 
     for i in response:
         results.append(
-            i.reply.data.decode() # pyright: ignore
+            i.data.decode()
         )
 
     return results

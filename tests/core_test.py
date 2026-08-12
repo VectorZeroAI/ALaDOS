@@ -232,14 +232,15 @@ def global_setup():
         target=executor_core, args=(executor_queue, [api]), daemon=True
     ).start()
 
-    coros = bs_startup()
-
-    ev_startup(coros)
 
     # Clean database once at the start of the session
     conn = _test_conn_factory()
     _clean_database(conn)
     conn.close()
+
+    coros = bs_startup()
+
+    ev_startup(coros)
 
     yield mock_llm
 
@@ -339,6 +340,7 @@ class CreateAndReadKnowledge:
     ]
 
 
+@executor_test
 class CheckNestedNewPaths:
     steps = [
         ExecutorStep(
@@ -358,12 +360,20 @@ class CheckNestedNewPaths:
 
 uuid = str(uuid.uuid4())
 
+@executor_test
 class CheckToolExecuteBuiltinFunc:
     steps = [
         ExecutorStep(
             instruction="Create a test tool that uses a syscall.",
             llm_responses=[
-                '[{"tool": "tool_create", "args": {"description": "desc", "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, "Content", "description")); print("EXECUTED CORRECTLY.")", "header": "Nothing.", "name": "'+ uuid +'"}}]'
+                '''[
+                    {
+                        "tool": "tool_create",
+                        "args": {
+                            "description": "desc",
+                            "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, \"Content\", \"description\")); print(\"EXECUTED CORRECTLY.\")",
+                            "header": "Nothing.",
+                            "name": "'''+ uuid +'"}}]'
             ]
         ),
         ExecutorStep(

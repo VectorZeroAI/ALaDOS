@@ -12,7 +12,7 @@ from python.rmt.main import (
     activate_as_master,
     serialize,
 )
-from conftest import db  # noqa: F401 – common fixture
+from .conftest import db  # noqa: F401 – common fixture
 
 
 class TestDSLParser:

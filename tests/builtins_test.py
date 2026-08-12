@@ -30,7 +30,7 @@ from python.executor.builtins import (
 from python.executor.types import _ExecToolMetaData, ParadoxDetected
 from python.utils.name_resolver import resolve_to_addr
 
-from conftest import db, meta, unique_name  # noqa: F401 – fixtures imported
+from .conftest import db, meta, unique_name  # noqa: F401 – fixtures imported
 
 
 class TestKnowledgeTools:

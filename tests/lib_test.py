@@ -22,7 +22,7 @@ from python.executor.types import _ExecToolMetaData
 from python.types import ToolCall
 from python.utils.name_resolver import resolve_to_addr
 
-from conftest import db, meta, unique_name  # noqa: F401
+from .conftest import db, meta, unique_name  # noqa: F401
 
 
 @pytest.fixture

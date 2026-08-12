@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 pytestmark = pytest.mark.anyio
 
-from conftest import db  # noqa: F401
+from .conftest import db  # noqa: F401
 
 from python.events.types import Event, ConsumerCallRmt, ConsumerExecuteSlave, ConsumerFillResult
 from python.events.event_consumers import (

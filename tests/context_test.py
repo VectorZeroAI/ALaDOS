@@ -7,7 +7,7 @@ import pytest
 from python.context.main import resolve_context, resolve_window, resolve_loads, resolve_req_results
 from python.context.item_loaders_registry import load_item
 from python.context.types import SlaveObj
-from conftest import db, unique_name  # noqa: F401
+from .conftest import db, unique_name  # noqa: F401
 
 
 def insert_knowledge(db, name, content, description):

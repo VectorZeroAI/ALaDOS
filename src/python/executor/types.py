@@ -5,11 +5,12 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Literal, Sequence, TypeAlias, Union, get_args, Any, Callable
+from typing import Any, Callable, Literal, Sequence, TypeAlias, Union, get_args
 
 from nats.aio.client import Client
 from pydantic import JsonValue
 
+from ..executor.execute_tool import ToolsManager
 from ..types import ReferenceTo, SyscallsQueue, ToolCall
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
@@ -57,6 +58,7 @@ class _ExecToolMetaData:
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue
     nats: Client
+    tools_manager: ToolsManager
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 

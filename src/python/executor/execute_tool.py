@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 
+import asyncio
 import inspect
+import json
 import re
-from typing import Callable, ParamSpec, TypeVar, get_args
+import subprocess
+import threading
+import time
+from collections import OrderedDict
+from functools import partial
+from tempfile import (
+    NamedTemporaryFile,
+    _TemporaryFileWrapper,
+)
+from threading import RLock
+from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
 from ..types import ToolCall
-from .helpers import ToolsManager
-from .types import SlaveScope_, SlaveScopesList, _ExecToolMetaData
+from ..utils.conn_factory import conn_factory
+from ..utils.logger import log_json
+from .types import CachedTool, SlaveScope_, SlaveScopesList, _ExecToolMetaData
 
 TOOL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
@@ -77,9 +90,165 @@ def execute_syscall(call: ToolCall, _meta: _ExecToolMetaData) -> str:
 
 def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     """ Execute function from DB """
-    return tools_manager[call.tool](call.args, _meta)
+    return _meta.tools_manager[call.tool](call.args, _meta)
 
-tools_manager: ToolsManager = ToolsManager(100) # TODO : Make it configurable
+class ToolsManager:
+    def __init__(self, limit: int):
+        self.cache = OrderedDict[str, CachedTool]()
+        self.lock = RLock()
+        self.limit = limit
+        self.conn = conn_factory()
+
+        threading.Thread(target=self.invalidator_func, daemon=True).start()
+
+
+    def invalidator_func(self):
+        n_conn = conn_factory()
+        n_conn.execute("LISTEN tool_changed;")
+        for i in n_conn.notifies():
+            name = i.payload
+            if name in self.cache:
+                with self.lock:
+                    self.cache.pop(name)
+
+    def __getitem__(self, name: str, /) -> CachedTool:
+        if name in self.cache:
+            with self.lock:
+                self.cache.move_to_end(name, last=False)
+                return self.cache[name]
+
+        func: CachedTool = self.prepare_function(name)
+
+        if len(self.cache) > self.limit - 1:
+            with self.lock:
+                self.cache.popitem()
+
+        with self.lock:
+            self.cache[name] = func
+            self.cache.move_to_end(name, last=False)
+            return func
+
+    def prepare_function(self, name: str) -> CachedTool:
+        """
+        This function loads a function from DB,
+        and then builds the function in such a way that only arguments are left to fill in,
+        basically readying it for instant usage.
+        """
+        conn = self.conn
+
+        body = conn.execute_fetchval("""
+        SELECT body FROM executables WHERE addr = resolve_name(%s);
+                     """, (name,))
+
+        tmp_file = NamedTemporaryFile("+rw", suffix=".py")
+        tmp_file.write(body)
+        tmp_file.flush()
+
+        return partial(_execute_tool, tmp_file)
+
+
+
+
+
+def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _ExecToolMetaData) -> str:
+    """ 
+    Executes the given tool body from the DB.
+
+    The tool is generally structured the same way as the syscall, except it gets file and not id.
+    """
+    if "timeout" in kwargs:
+        timeout = kwargs.pop("timeout")
+    else:
+        timeout = 5
+
+    kwargs['slave_id'] = _meta.slave_id
+    kwargs['master_id'] = _meta.master_id
+
+    kwargs_str: str = json.dumps(kwargs)
+
+    process = subprocess.Popen(
+        ["python3", file.name],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    if process.stdin is not None:
+        process.stdin.write(kwargs_str)
+        process.stdin.close()
+    else:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": "Process.stdin is None, unable to write."
+        })
+        raise RuntimeError("Unable to execute, process.stdin is none, call the developer!")
+
+    start = time.time()
+
+    syscall_queue = _meta.syscalls_queue
+
+    loop = asyncio.new_event_loop()
+
+    stdout: str = ""
+    stderr: str = ""
+
+    while process.poll() is None:
+        if time.time() - start > timeout:
+            process.kill()
+            process.wait()
+            raise TimeoutError("Process Timed out.")
+
+        try:
+            out_chunk, err_chunk = process.communicate(timeout=0.05)
+            stdout = stdout + out_chunk
+            stderr = stderr + err_chunk
+        except subprocess.TimeoutExpired:
+            pass
+
+        for i in syscall_queue.get_all():
+            ret = execute_syscall(i[0], _meta)
+            loop.run_until_complete(
+                i[1].respond(ret.encode())
+            )
+
+    loop.close()
+
+    out_chunk, err_chunk = process.communicate(timeout=0.3)
+
+    stdout = stdout + out_chunk
+    stderr = stderr + err_chunk
+
+    if not stdout:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": "STDOUT IS NONE"
+        })
+        stdout = "<Empty>"
+
+    if not stderr:
+        if process.poll() != 0:
+            log_json({
+                "type": "core",
+                "subtype": "tool_execution",
+                "status": "warning",
+                "msg": "STDERR IS NONE"
+            })
+        stderr = "<Empty>"
+
+    if process.poll() != 0:
+        log_json({
+            "type": "core",
+            "subtype": "tool_execution",
+            "status": "error",
+            "msg": f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}."
+        })
+        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
+
+    return f"Executed tool, and got output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

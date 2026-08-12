@@ -11,7 +11,7 @@ from python.utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import HEADERS_REGISTRY, execute_syscall, execute_tool
+from ..executor.execute_tool import HEADERS_REGISTRY, ToolsManager, execute_syscall, execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.main import slave_addr_to_instr
@@ -226,6 +226,7 @@ Further documentation of the states inlined as docstrings in the match statement
                         config.get('context_limit', 40000),
                         syscalls_queue=syscalls_queue_dict_per_slave[curr.instr.slave_addr],
                         nats=asyncio.run(connect_nats()),
+                        tools_manager=ToolsManager(100), # TODO : Make configurable
                         occ_last_change=curr.occ_timestamp
                     )
 

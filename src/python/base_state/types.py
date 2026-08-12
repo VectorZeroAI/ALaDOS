@@ -14,7 +14,7 @@ from ..utils.conn_factory import conn_factory
 
 def new_addr() -> int:
     conn = conn_factory()
-    return conn.execute_fetchval("SELECT new_addr();")
+    return conn.execute_fetchval("SELECT new_internal_addr();")
 
 @dataclass(slots=True)
 class Knowledge:

@@ -462,7 +462,7 @@ RETURNS BIGINT AS $$
 DECLARE
     v_addr BIGINT;
 BEGIN
-    v_addr := next_val('next_internal_id');
+    v_addr := nextval('next_internal_id');
     INSERT INTO addrs(addr) VALUES(v_addr);
     RETURN v_addr;
 END

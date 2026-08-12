@@ -7,13 +7,12 @@ from typing import Any, Callable, Literal, TypeAlias, Union
 
 from nats.aio.client import Client
 from nats.aio.msg import Msg
-from python.events.types import ConsumerData, Event
 
 from ..executor.types import JsonSerializable
-from ..utils.conn_factory import conn_factory
+from ..utils.conn_factory import conn_factory_raw
 
 def new_addr() -> int:
-    conn = conn_factory()
+    conn = conn_factory_raw()
     return conn.execute_fetchval("SELECT new_internal_addr();")
 
 @dataclass(slots=True)

@@ -136,28 +136,27 @@ def core_db():
 
 
 def clean_database(conn) -> None:
-    # Child tables must be removed before their referenced parents.  SQL
-    # `DELETE ... CASCADE` does not turn a normal FK into a cascading delete.
+    """Remove all test-created rows without violating RESTRICT FKs."""
     tables = [
         "event_call_fill_result",
         "event_call_execute_slave",
         "event_call_rmt",
         "event_consumers",
-        "cronjob_once",
-        "cronjob_loop",
-        "rmt_slaves",
         "master_req",
         "slave_req",
         "master_load",
         "master_context",
+        "rmt_slaves",
+        "cronjob_once",
+        "cronjob_loop",
         "reusable_master_templates",
         "executables",
         "knowledge",
         "vector_ops",
         "names",
-        "results",
         "slaves",
         "masters",
+        "results",
     ]
     with conn.transaction():
         for table in tables:

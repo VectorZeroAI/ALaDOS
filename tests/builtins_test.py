@@ -235,7 +235,7 @@ class TestGoalTools:
             "ORDER BY addr DESC LIMIT 1",
             (meta.master_id,),
         )
-        assert "Your task is to decide how to further proceed" in planner_instruction
+        assert "decide how to further proceed" in planner_instruction
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
@@ -267,7 +267,10 @@ class TestToolTools:
         res = create_tool(description="d", header="h", body="b", name=None, _meta=meta)
         addr = int(res)
         assert addr > 0
-        assert meta.conn.execute_fetchval("SELECT count(*) FROM executables WHERE header='h'") == 1
+        assert meta.conn.execute_fetchval(
+            "SELECT count(*) FROM executables WHERE addr = %s AND header = 'h'",
+            (addr,),
+        ) == 1
 
     def test_edit_tool(self, meta):
         name = unique_name("tool_edit")
@@ -508,10 +511,10 @@ class TestRmtTools:
         name = unique_name("rmt_act")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
         rmt_addr = resolve_to_addr(name, meta.conn)
-        rmt_activate_as_master(rmt_id=rmt_addr, inputs={}, _meta=meta)
+        activated_master_addr = int(rmt_activate_as_master(rmt_id=rmt_addr, inputs={}, _meta=meta))
         slave_count = meta.conn.execute_fetchval(
-            "SELECT count(*) FROM slaves WHERE instruction='do work' AND master_addr IN "
-            "(SELECT addr FROM masters WHERE instruction='NONE')"
+            "SELECT count(*) FROM slaves WHERE instruction='do work' AND master_addr = %s",
+            (activated_master_addr,),
         )
         assert slave_count == 1
 
@@ -585,14 +588,14 @@ class TestRmtTools:
 class TestEventTools:
     def test_create_result_via_event(self, meta):
         conn = meta.conn
+        name = unique_name("ev_res")
         str_ret = tool_create_result_via_event(
             event_path="test.event",
             result_str="data: ${{data}}",
-            name="ev_res",
+            name=name,
             _meta=meta
         )
-        resolved = resolve_to_addr("ev_res", conn)
-        assert str(resolved) in str_ret
+        assert str(resolve_to_addr(name, conn)) in str_ret
 
     def test_register_reaction_rmt(self, meta):
         dsl = "START -> (instruction='react') -> END"

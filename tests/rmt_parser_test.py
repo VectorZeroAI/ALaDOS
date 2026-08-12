@@ -229,9 +229,9 @@ class TestActivateAsMaster:
     def test_activation_basic(self, db):
         dsl = "START -> (id='1', instruction='step1') -> (id='2', instruction='step2') -> END"
         rmt_addr = create_from_serial(dsl, name="basic_template", conn=db)
-        activate_as_master(rmt_addr, inputs={}, conn=db)
+        activated_master = activate_as_master(rmt_addr, inputs={}, conn=db)
         conn = db
-        master = conn.execute("SELECT * FROM masters WHERE instruction = 'NONE'").fetchone()
+        master = conn.execute("SELECT * FROM masters WHERE addr = %s", [activated_master]).fetchone()
         assert master is not None
         slaves = conn.execute(
             "SELECT instruction FROM slaves WHERE master_addr = %s ORDER BY instruction", [master[0]]
@@ -243,10 +243,11 @@ class TestActivateAsMaster:
     def test_activation_with_placeholders(self, db):
         dsl = "START -> (id='1', instruction='Add \"CODE ${{color}}\" to the master result') -> END"
         rmt_addr = create_from_serial(dsl, conn=db)
-        activate_as_master(rmt_addr, inputs={"color": "GREEN"}, conn=db)
+        activated_master = activate_as_master(rmt_addr, inputs={"color": "GREEN"}, conn=db)
         conn = db
         slave = conn.execute(
-            "SELECT instruction FROM slaves WHERE master_addr = (SELECT addr FROM masters WHERE instruction = 'NONE' LIMIT 1)"
+            "SELECT instruction FROM slaves WHERE master_addr = %s ORDER BY addr DESC LIMIT 1",
+            [activated_master],
         ).fetchone()
         assert slave is not None
         assert "GREEN" in slave[0]

@@ -17,11 +17,18 @@ os.environ["ALADOS_DB_NAME"] = TEST_DB_NAME
 
 @pytest.fixture
 def db():
-    """A real transaction: every test gets an isolated DB view and rolls back."""
+    """Give each DB test a transaction that is ALWAYS rolled back."""
     conn = conn_factory(TEST_DB_NAME)
-    with conn.transaction():
+    conn.autocommit = False
+    conn.rollback()
+    conn.execute("BEGIN")
+    try:
         yield conn
-    conn.close()
+    finally:
+        try:
+            conn.rollback()
+        finally:
+            conn.close()
 
 
 @pytest.fixture

@@ -32,14 +32,27 @@ TEST_DB_NAME = "alados_test"
 
 
 def clean_database(conn):
-    # Delete FK children before their parents.  `DELETE ... CASCADE` is not
-    # PostgreSQL syntax for making the statement itself cascade through FKs.
+    """Remove all test-created rows without violating RESTRICT FKs."""
     tables = [
-        "event_call_fill_result", "event_call_execute_slave", "event_call_rmt",
-        "event_consumers", "cronjob_once", "cronjob_loop",
-        "rmt_slaves", "master_req", "slave_req", "master_load",
-        "master_context", "reusable_master_templates", "executables",
-        "knowledge", "vector_ops", "names", "results", "slaves", "masters",
+        "event_call_fill_result",
+        "event_call_execute_slave",
+        "event_call_rmt",
+        "event_consumers",
+        "master_req",
+        "slave_req",
+        "master_load",
+        "master_context",
+        "rmt_slaves",
+        "cronjob_once",
+        "cronjob_loop",
+        "reusable_master_templates",
+        "executables",
+        "knowledge",
+        "vector_ops",
+        "names",
+        "slaves",
+        "masters",
+        "results",
     ]
     with conn.transaction():
         for table in tables:

@@ -52,15 +52,30 @@ def insert_rmt_template(db):
 
 @pytest.fixture(autouse=True)
 def isolate_registry():
-    """Prevent tests from leaking registry state."""
+    """Prevent global registry state and un-awaited consumer coroutines leaking."""
     old_system = list(registry_mod.SYSTEM_ADDRS_LIST)
     old_addr_reg = dict(registry_mod.ADDR_REGISTER)
-    old_custom = list(registry_mod.CUSTOM_CONSUMERS)
+
+    # Import-time registration creates coroutine objects for custom consumers.
+    # These tests do not run the event-consumer service, so keep them out of
+    # the test process and explicitly close them instead of letting pytest's
+    # unraisable-exception hook report "coroutine was never awaited".
+    for consumer in registry_mod.CUSTOM_CONSUMERS:
+        close = getattr(consumer, "close", None)
+        if close is not None:
+            close()
+    registry_mod.CUSTOM_CONSUMERS.clear()
+
     yield
+
+    for consumer in registry_mod.CUSTOM_CONSUMERS:
+        close = getattr(consumer, "close", None)
+        if close is not None:
+            close()
+    registry_mod.CUSTOM_CONSUMERS.clear()
     registry_mod.SYSTEM_ADDRS_LIST[:] = old_system
     registry_mod.ADDR_REGISTER.clear()
     registry_mod.ADDR_REGISTER.update(old_addr_reg)
-    registry_mod.CUSTOM_CONSUMERS[:] = old_custom
 
 
 class TestNewAddr:

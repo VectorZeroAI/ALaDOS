@@ -32,21 +32,22 @@ TEST_DB_NAME = "alados_test"
 
 
 def clean_database(conn):
+    # Delete FK children before their parents.  `DELETE ... CASCADE` is not
+    # PostgreSQL syntax for making the statement itself cascade through FKs.
     tables = [
-        "master_req", "slave_req", "master_load", "master_context",
-        "rmt_slaves", "reusable_master_templates",
-        "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge",
-        "cronjob_once", "cronjob_loop",
-        "event_consumers", "event_call_rmt",
-        "event_call_execute_slave", "event_call_fill_result",
+        "event_call_fill_result", "event_call_execute_slave", "event_call_rmt",
+        "event_consumers", "cronjob_once", "cronjob_loop",
+        "rmt_slaves", "master_req", "slave_req", "master_load",
+        "master_context", "reusable_master_templates", "executables",
+        "knowledge", "vector_ops", "names", "results", "slaves", "masters",
     ]
-    for table in tables:
-        conn.execute(f"DELETE FROM {table} CASCADE")
-    conn.execute("DELETE FROM addrs WHERE addr > 0")
-    conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
-    conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
-    conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
+    with conn.transaction():
+        for table in tables:
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM addrs WHERE addr > 0")
+        conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
 
 
 @pytest.fixture
@@ -60,13 +61,14 @@ def lib_db():
 
 
 class _Dispatcher:
+    """Real NATS syscall endpoint used by the library integration tests."""
+
     def __init__(self):
         self._loop = None
         self._thread = None
         self._nc = None
-        self._ready = threading.Event()
-        self._stop = threading.Event()
         self._db = None
+        self._ready = threading.Event()
 
     def start(self):
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -75,13 +77,16 @@ class _Dispatcher:
             raise RuntimeError("dispatcher failed to start")
 
     def stop(self):
-        self._stop.set()
         if self._loop is not None and self._nc is not None:
-            future = asyncio.run_coroutine_threadsafe(self._nc.close(), self._loop)
+            future = asyncio.run_coroutine_threadsafe(self._nc.drain(), self._loop)
             try:
                 future.result(timeout=5)
             except Exception:
-                pass
+                future = asyncio.run_coroutine_threadsafe(self._nc.close(), self._loop)
+                try:
+                    future.result(timeout=5)
+                except Exception:
+                    pass
         if self._thread is not None:
             self._thread.join(timeout=5)
             assert not self._thread.is_alive()
@@ -95,28 +100,23 @@ class _Dispatcher:
             self._loop.close()
 
     async def _main(self):
-        conn = conn_factory(TEST_DB_NAME)
-        conn.autocommit = True
-        self._db = conn
-
+        self._db = conn_factory(TEST_DB_NAME)
+        self._db.autocommit = True
         nt = await nats.connect()
         self._nc = nt
-        sub = await nt.subscribe("_.syscall.*.*")
+
+        async def handler(msg):
+            await self._handle(msg, nt)
+
+        await nt.subscribe("_.syscall.*.*", cb=handler)
+        await nt.flush()
         self._ready.set()
 
         try:
-            while not self._stop.is_set() and not nt.is_closed:
-                try:
-                    msg = await asyncio.wait_for(sub.next_msg(timeout=0.25), timeout=0.5)
-                except (asyncio.TimeoutError, nats.errors.TimeoutError):
-                    continue
-                await self._handle(msg, nt)
+            while not nt.is_closed:
+                await asyncio.sleep(0.05)
         finally:
             if not nt.is_closed:
-                try:
-                    await sub.unsubscribe()
-                except nats.errors.ConnectionClosedError:
-                    pass
                 await nt.close()
             if self._db is not None:
                 self._db.close()
@@ -131,10 +131,7 @@ class _Dispatcher:
             master_addr = self._db.execute_fetchval(
                 "SELECT master_addr FROM slaves WHERE addr = %s",
                 (slave_addr,),
-            )
-            if master_addr is None:
-                master_addr = 0
-
+            ) or 0
             args = json.loads(msg.data.decode())
             meta = _ExecToolMetaData(
                 master_id=master_addr,
@@ -171,8 +168,8 @@ def dispatcher(lib_db, monkeypatch):
 def slave(lib_db):
     master_addr = lib_db.execute_fetchval("SELECT new_master('lib_test_master')")
     slave_addr = lib_db.execute_fetchval(
-        "SELECT new_slave(%s, 'dummy', 'dummy_slave', NULL, NULL, NULL, NULL, 'general')",
-        (master_addr,),
+        "SELECT new_slave(%s, 'dummy', %s, NULL, NULL, NULL, NULL, 'general')",
+        (master_addr, unique_name("lib_slave")),
     )
     return slave_addr
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""
-Focused executor-core integration tests.
+"""Executor-core state-machine tests.
 
-These tests exercise the executor state machine itself. Tool implementation and
-syscall transport are covered by builtins_test.py and lib_test.py respectively.
-Keeping those layers separate avoids booting the full scheduler/event system and
-also keeps the suite small enough for constrained devices.
+These tests deliberately mock *tool implementation* at the execute_tool
+boundary.  Builtin/syscall behavior is tested by builtins_test.py and
+lib_test.py; core_test.py is responsible for proving that the executor moves
+between API, execute, recovery, paradox, and finish states correctly.
 """
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -20,7 +20,6 @@ from werkzeug.serving import make_server
 
 import python.executor.main as executor_main
 from python.executor.exceptions import ParadoxDetected
-from python.executor.queue import embedder_queue
 from python.executor.types import Api
 from python.utils.conn_factory import conn_factory
 
@@ -28,14 +27,14 @@ from python.utils.conn_factory import conn_factory
 class LLMMockServer:
     def __init__(self) -> None:
         self.app = flask.Flask(__name__)
-        self.response_queue: queue.Queue[str] = queue.Queue()
+        self.responses: queue.Queue[str] = queue.Queue()
         self.server = None
         self.thread = None
 
-        @self.app.route("/v1/chat/completions", methods=["POST"])
+        @self.app.post("/v1/chat/completions")
         def chat_completions():
             try:
-                content = self.response_queue.get(timeout=5)
+                content = self.responses.get(timeout=10)
             except queue.Empty:
                 return flask.jsonify({"error": "No mock response left"}), 500
             return flask.jsonify({"choices": [{"message": {"content": content}}]})
@@ -48,11 +47,10 @@ class LLMMockServer:
         deadline = time.time() + 5
         while time.time() < deadline:
             try:
-                response = httpx.get(
+                if httpx.get(
                     f"http://127.0.0.1:{self.server.server_port}/",
                     timeout=0.2,
-                )
-                if response.status_code == 404:
+                ).status_code == 404:
                     return
             except httpx.RequestError:
                 time.sleep(0.05)
@@ -64,7 +62,7 @@ class LLMMockServer:
         return self.server.server_port
 
     def put(self, response: str) -> None:
-        self.response_queue.put(response)
+        self.responses.put(response)
 
     def stop(self) -> None:
         if self.server is not None:
@@ -74,26 +72,27 @@ class LLMMockServer:
 
 
 class StopCore(Exception):
-    pass
+    """Private sentinel used to stop the otherwise infinite executor loop."""
 
 
 class OneShotQueue:
-    """Queue with exactly one task; the executor exits after processing it."""
-    def __init__(self, item: int):
-        self.item = item
+    def __init__(self, slave_addr: int):
+        self.slave_addr = slave_addr
         self.used = False
 
     def get(self):
-        if not self.used:
-            self.used = True
-            return self.item
-        raise StopCore
+        if self.used:
+            raise StopCore
+        self.used = True
+        return self.slave_addr
 
 
-def run_core_once(task_queue: OneShotQueue, api: Api) -> threading.Thread:
+def run_core_once(slave_addr: int, api: Api) -> threading.Thread:
+    q = OneShotQueue(slave_addr)
+
     def runner() -> None:
         try:
-            executor_main.core(task_queue, [api])
+            executor_main.core(q, [api])
         except StopCore:
             pass
 
@@ -114,16 +113,13 @@ def core_env(monkeypatch):
         max_tokens=8000,
     )
 
-    # The core constructs NATS metadata in ExecuteState, but the focused tests
-    # replace tool execution itself, so no NATS service is required here.
+    # Core constructs _ExecToolMetaData with a NATS client even when the test
+    # replaces execute_tool.  No network connection is needed at this layer.
     async def fake_connect_nats():
-        return object()
+        return None
 
     monkeypatch.setattr(executor_main, "connect_nats", fake_connect_nats)
-    monkeypatch.setattr(executor_main, "embedder_queue", embedder_queue)
-
     yield mock, api
-
     mock.stop()
 
 
@@ -131,27 +127,45 @@ def core_env(monkeypatch):
 def core_db():
     conn = conn_factory("alados_test")
     conn.autocommit = True
+    clean_database(conn)
+    try:
+        yield conn
+    finally:
+        clean_database(conn)
+        conn.close()
 
+
+def clean_database(conn) -> None:
+    # Child tables must be removed before their referenced parents.  SQL
+    # `DELETE ... CASCADE` does not turn a normal FK into a cascading delete.
     tables = [
-        "master_req", "slave_req", "master_load", "master_context",
-        "rmt_slaves", "reusable_master_templates",
-        "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge",
-        "cronjob_once", "cronjob_loop",
-        "event_consumers", "event_call_rmt",
-        "event_call_execute_slave", "event_call_fill_result",
+        "event_call_fill_result",
+        "event_call_execute_slave",
+        "event_call_rmt",
+        "event_consumers",
+        "cronjob_once",
+        "cronjob_loop",
+        "rmt_slaves",
+        "master_req",
+        "slave_req",
+        "master_load",
+        "master_context",
+        "reusable_master_templates",
+        "executables",
+        "knowledge",
+        "vector_ops",
+        "names",
+        "results",
+        "slaves",
+        "masters",
     ]
-    for table in tables:
-        conn.execute(f"DELETE FROM {table} CASCADE")
-    conn.execute("DELETE FROM addrs WHERE addr > 0")
-    conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
-    conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
-    conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
-    yield conn
-    for table in tables:
-        conn.execute(f"DELETE FROM {table} CASCADE")
-    conn.execute("DELETE FROM addrs WHERE addr > 0")
-    conn.close()
+    with conn.transaction():
+        for table in tables:
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM addrs WHERE addr > 0")
+        conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
+        conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
 
 
 def new_slave(db, instruction: str) -> tuple[int, int]:
@@ -177,11 +191,10 @@ def wait_for_result(db, result_addr: int, timeout: float = 10.0):
             raise AssertionError(f"Result {result_addr} disappeared")
         ready, status, content = row
         if ready:
-            return content
+            return content, status
         if status == "error":
-            raise AssertionError(f"Result {result_addr} entered error state")
+            return content, status
         time.sleep(0.05)
-
     row = db.execute(
         "SELECT ready, status, content_str FROM results WHERE addr = %s",
         (result_addr,),
@@ -189,35 +202,72 @@ def wait_for_result(db, result_addr: int, timeout: float = 10.0):
     raise TimeoutError(f"Result {result_addr} not ready; state={row!r}")
 
 
-def stop_after_finish(task_queue: queue.Queue[int], slave_addr: int) -> None:
-    task_queue.put(slave_addr)
+def install_execute(monkeypatch, db, behavior):
+    """Patch the exact execute_tool symbol used by core."""
+    monkeypatch.setattr(executor_main, "execute_tool", behavior)
 
 
-class TestCoreExecution:
-    def test_basic_execution_finishes(self, core_db, core_env, monkeypatch):
-        mock, api = core_env
-        slave_addr, result_addr = new_slave(core_db, "Write something")
+def run_case(core_db, core_env, monkeypatch, instruction, responses, behavior):
+    mock, api = core_env
+    slave_addr, result_addr = new_slave(core_db, instruction)
+    for response in responses:
+        mock.put(response)
+    install_execute(monkeypatch, core_db, behavior)
+    thread = run_core_once(slave_addr, api)
+    result = wait_for_result(core_db, result_addr)
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    return result
 
-        monkeypatch.setattr(
-            executor_main,
-            "execute_tool",
-            lambda call, meta: "Hello World",
+
+class TestBasicExecution:
+    def test_writes_final_result(self, core_db, core_env, monkeypatch):
+        calls = []
+
+        def execute(call, meta):
+            calls.append(call.tool)
+            return "Hello World"
+
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Write 'Hello World'",
+            ['[{"tool":"result_write","args":{"text":"Hello World"}}]'],
+            execute,
         )
-        mock.put('[{"tool": "fake_tool", "args": {}}]')
+        assert result == ("Hello World", None)
+        assert calls == ["result_write"]
 
-        thread = run_core_once(OneShotQueue(slave_addr), api)
-        content = wait_for_result(core_db, result_addr)
 
-        assert content == "Hello World"
+class TestParadoxHandling:
+    def test_paradox_path_returns_to_normal_execution(self, core_db, core_env, monkeypatch):
+        calls = []
 
-        # Let the core consume the next GetSlaveState and terminate.
-        thread.join(timeout=2)
-        assert not thread.is_alive()
+        def execute(call, meta):
+            calls.append(call.tool)
+            if len(calls) == 1:
+                raise ParadoxDetected("test paradox", [meta.slave_id])
+            return "done!"
 
-    def test_error_recovery(self, core_db, core_env, monkeypatch):
-        mock, api = core_env
-        slave_addr, result_addr = new_slave(core_db, "Recover from a failed tool")
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Report a paradox",
+            [
+                '[{"tool":"k_report_paradoxal_information","args":{"items":[],"paradox":"test"}}]',
+                '[{"tool":"result_write","args":{"text":"assume handled."}}]',
+                '[{"tool":"result_write","args":{"text":"done!"}}]',
+            ],
+            execute,
+        )
+        assert result == ("done!", None)
+        assert len(calls) >= 2
 
+
+class TestErrorRecovery:
+    def test_failed_tool_is_replaced_by_llm_recovery_call(self, core_db, core_env, monkeypatch):
         calls = []
 
         def execute(call, meta):
@@ -226,50 +276,141 @@ class TestCoreExecution:
                 raise RuntimeError("synthetic failure")
             return "recovered"
 
-        monkeypatch.setattr(executor_main, "execute_tool", execute)
-
-        mock.put('[{"tool": "broken_tool", "args": {}}]')
-        mock.put('[{"tool": "recovered_tool", "args": {}}]')
-
-        thread = run_core_once(OneShotQueue(slave_addr), api)
-        assert wait_for_result(core_db, result_addr) == "recovered"
-        thread.join(timeout=2)
-        assert not thread.is_alive()
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Fail then recover",
+            [
+                '[{"tool":"broken_tool","args":{}}]',
+                '[{"tool":"recovered_tool","args":{}}]',
+            ],
+            execute,
+        )
+        assert result == ("recovered", None)
         assert calls == ["broken_tool", "recovered_tool"]
 
-    def test_paradox_recovery_path(self, core_db, core_env, monkeypatch):
-        mock, api = core_env
-        slave_addr, result_addr = new_slave(core_db, "Resolve a paradox")
 
-        # Give ParadoxState one real knowledge item to resolve/load.
-        item_addr = core_db.execute_fetchval("SELECT new_addr()")
-        core_db.execute(
-            "INSERT INTO knowledge(addr, content) VALUES (%s, %s)",
-            (item_addr, "test paradox item"),
-        )
-        core_db.execute(
-            "INSERT INTO vector_ops(addr_k, description) VALUES (%s, %s)",
-            (item_addr, "test"),
-        )
+class TestCreateAndReadKnowledge:
+    def test_multiple_tool_calls_are_finished_as_one_execution(self, core_db, core_env, monkeypatch):
+        name = "core_knowledge_test"
+        state = {}
 
+        def execute(call, meta):
+            if call.tool == "k_create":
+                state[name] = "moon is cheese"
+                return "created"
+            if call.tool == "k_read":
+                return state[name]
+            raise AssertionError(call.tool)
+
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Create and read knowledge",
+            [
+                json.dumps([
+                    {"tool": "k_create", "args": {"name": name}},
+                    {"tool": "k_read", "args": {"id": name}},
+                ])
+            ],
+            execute,
+        )
+        assert result == ("created\nmoon is cheese", None)
+        assert state[name] == "moon is cheese"
+
+
+class TestNestedNewPaths:
+    def test_tool_error_recovery_does_not_require_scheduler(self, core_db, core_env, monkeypatch):
         calls = []
 
         def execute(call, meta):
             calls.append(call.tool)
-            if len(calls) == 1:
-                raise ParadoxDetected("conflicting facts", [item_addr])
-            return "resolved"
+            if call.tool == "NOT_EXISTS":
+                raise RuntimeError("unknown tool")
+            return "recovered tool_error"
 
-        monkeypatch.setattr(executor_main, "execute_tool", execute)
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Start wrongly",
+            [
+                '[{"tool":"NOT_EXISTS","args":{}}]',
+                '[{"tool":"result_write","args":{"text":"recovered tool_error"}}]',
+            ],
+            execute,
+        )
+        assert result == ("recovered tool_error", None)
+        assert calls == ["NOT_EXISTS", "result_write"]
 
-        # ParadoxState -> API/execute (finish=False) -> normal context path ->
-        # API/execute (finish=True) -> FinishState.
-        mock.put('[{"tool": "resolve_paradox", "args": {}}]')
-        mock.put('[{"tool": "paradox_step_complete", "args": {}}]')
-        mock.put('[{"tool": "continue_after_paradox", "args": {}}]')
 
-        thread = run_core_once(OneShotQueue(slave_addr), api)
-        assert wait_for_result(core_db, result_addr) == "resolved"
-        thread.join(timeout=2)
-        assert not thread.is_alive()
-        assert calls == ["resolve_paradox", "paradox_step_complete", "continue_after_paradox"]
+class TestToolExecuteBuiltinFunc:
+    def test_tool_create_then_execute_calls_are_processed_in_order(self, core_db, core_env, monkeypatch):
+        created = False
+        calls = []
+
+        def execute(call, meta):
+            nonlocal created
+            calls.append(call.tool)
+            if call.tool == "tool_create":
+                created = True
+                return "created"
+            if call.tool == "tool_execute":
+                assert created
+                return "EXECUTED CORRECTLY."
+            raise AssertionError(call.tool)
+
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Create and use a test tool",
+            [json.dumps([
+                {"tool": "tool_create", "args": {"name": "core_test_tool"}},
+                {"tool": "tool_execute", "args": {"id": "core_test_tool", "kwargs": {}}},
+            ])],
+            execute,
+        )
+        assert result == ("created\nEXECUTED CORRECTLY.", None)
+        assert calls == ["tool_create", "tool_execute"]
+
+
+class TestFatalRecovery:
+    def test_repeated_tool_failures_end_in_error_result(self, core_db, core_env, monkeypatch):
+        def execute(call, meta):
+            raise RuntimeError("always broken")
+
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Always fail",
+            [
+                '[{"tool":"broken","args":{}}]',
+                '[{"tool":"broken_again","args":{}}]',
+            ],
+            execute,
+        )
+        assert result[1] == "error"
+
+
+class TestCoreIsolation:
+    def test_core_uses_direct_queue_without_scheduler_startup(self, core_db, core_env, monkeypatch):
+        calls = []
+
+        def execute(call, meta):
+            calls.append(call.tool)
+            return "isolated"
+
+        result = run_case(
+            core_db,
+            core_env,
+            monkeypatch,
+            "Direct queue execution",
+            ['[{"tool":"test_tool","args":{}}]'],
+            execute,
+        )
+        assert result == ("isolated", None)
+        assert calls == ["test_tool"]

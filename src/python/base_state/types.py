@@ -26,8 +26,8 @@ class Knowledge:
 @dataclass(slots=True)
 class Executable:
     description: str
-    body: str
-    header: str # TODO : Refactor the executables to include "entrypoint" into the file and also langauge.
+    body: str # TODO : Allow passing in a pathlib.Path object.
+    header: str # TODO : Refactor the executables to include langauge.
     name: str = field()
     addr: int = field(default_factory=new_addr)
 

@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
 Executables base state file, here all the executables in the base state belong.
+
+They basically wrap all the syscalls and maybe give a bit nicer output string,
+basically including what the hell the output is of,
+so not just the content for example but also where from.
+
+Addresses should be negative,because its system internall tools,
+and thus system internal addresses are used, and they are always negative integers.
 """
 
 from ..types import Executable
 from ..registry import register
-
-register(
-    Executable(
-        "Test Executable",
-        "print('Test')",
-        "Prints test when executed.",
-        "test_tool",
-        -1
-    )
-)
 
 register(
     Executable(
@@ -39,6 +36,6 @@ register(
         }
         """,
         name="K.read",
-        addr=-2
+        addr=-1
     )
 )

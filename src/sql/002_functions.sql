@@ -456,3 +456,14 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION new_internal_addr()
+RETURNS BIGINT AS $$
+DECLARE
+    v_addr BIGINT;
+BEGIN
+    v_addr := next_val('next_internal_id');
+    INSERT INTO addrs(addr) VALUES(v_addr);
+    RETURN v_addr;
+END
+$$ LANGUAGE plpgsql;

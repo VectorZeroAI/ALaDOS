@@ -130,7 +130,6 @@ BEGIN
     
     IF result_addr IS NULL THEN
         RAISE exception'No item to anchor on found.';
-        RETURN;
     END IF;
     
     IF tttt = 'knowledge' THEN

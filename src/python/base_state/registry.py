@@ -170,7 +170,7 @@ def register_result(item: Results, conn: Conn) -> None:
     with conn.transaction():
         insert_addr(item.addr, conn)
         conn.execute("""
-        INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s);
+        INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s, %s);
                      """, (item.addr, item.content_str, item.metadata, item.ready))
         if item.name:
             conn.execute("""

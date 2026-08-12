@@ -71,3 +71,4 @@ def test_conn_factory_raw_with_db_name():
     assert db_name == "alados_test"
     conn.close()
 
+

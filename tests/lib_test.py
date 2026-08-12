@@ -34,30 +34,22 @@ TEST_DB_NAME = "alados_test"
 def clean_database(conn):
     """Remove all test-created rows without violating RESTRICT FKs."""
     tables = [
-        "event_call_fill_result",
-        "event_call_execute_slave",
-        "event_call_rmt",
+        "event_call_fill_result", "event_call_execute_slave", "event_call_rmt",
         "event_consumers",
-        "master_req",
-        "slave_req",
-        "master_load",
-        "master_context",
+        "master_req", "slave_req", "master_load", "master_context",
         "rmt_slaves",
-        "cronjob_once",
-        "cronjob_loop",
+        "cronjob_once", "cronjob_loop",
         "reusable_master_templates",
-        "executables",
-        "knowledge",
         "vector_ops",
+        "executables", "knowledge",
         "names",
-        "slaves",
-        "masters",
+        "slaves", "masters",
         "results",
+        "addrs",
     ]
     with conn.transaction():
         for table in tables:
             conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM addrs WHERE addr > 0")
         conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
@@ -374,3 +366,4 @@ class TestDispatcherSubjectParsing:
             assert reply.data.decode().startswith("__DISPATCH_ERROR__:")
         finally:
             await nt.close()
+

@@ -380,3 +380,4 @@ class TestEventSend:
         await event.send()
         mock_client.publish.assert_awaited_once_with("some.path", b"hello")
 
+

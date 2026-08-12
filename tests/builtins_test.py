@@ -235,7 +235,7 @@ class TestGoalTools:
             "ORDER BY addr DESC LIMIT 1",
             (meta.master_id,),
         )
-        assert "decide how to further proceed" in planner_instruction
+        assert "You task is to decide how to further proceed" in planner_instruction
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
@@ -247,7 +247,7 @@ class TestGoalTools:
         assert "direct" in res
 
     def test_create_master_tool(self, meta):
-        res = create_master(instruction="new master task", _meta=meta, result_name="m_res")
+        res = create_master(instruction="new master task", _meta=meta, result_name=unique_name("master_result"))
         addr = int(res)
         assert addr > 0
         master_instr = meta.conn.execute_fetchval("SELECT instruction FROM masters WHERE addr=%s", (addr,))
@@ -417,9 +417,13 @@ class TestRmtTools:
     def test_rmt_create_from_master(self, meta):
         conn = meta.conn
         m_addr = conn.execute_fetchval("SELECT new_master('convert me')")
-        conn.execute("SELECT new_slave(%s, 'step1', 's1', NULL, NULL, 'res1')", (m_addr,))
-        r1 = conn.execute_fetchval("SELECT resolve_name('res1')")
-        conn.execute("SELECT new_slave(%s, 'step2', 's2', ARRAY[%s], NULL, 'res2')", (m_addr, r1))
+        s1_name = unique_name('s1')
+        r1_name = unique_name('res1')
+        s2_name = unique_name('s2')
+        r2_name = unique_name('res2')
+        conn.execute("SELECT new_slave(%s, 'step1', %s, NULL, NULL, %s)", (m_addr, s1_name, r1_name))
+        r1 = conn.execute_fetchval("SELECT resolve_name(%s)", (r1_name,))
+        conn.execute("SELECT new_slave(%s, 'step2', %s, ARRAY[%s], NULL, %s)", (m_addr, s2_name, r1, r2_name))
         rmt_name = unique_name("from_master")
         res = tool_rmt_create_from_master(master_id=m_addr, name=rmt_name, _meta=meta, description="desc")
         rmt_addr = int(res)
@@ -433,11 +437,15 @@ class TestRmtTools:
     def test_rmt_create_from_range(self, meta):
         conn = meta.conn
         m_addr = conn.execute_fetchval("SELECT new_master('range')")
-        conn.execute("SELECT new_slave(%s, 'A', 'sA', NULL, NULL, 'rA')", (m_addr,))
-        rA = conn.execute_fetchval("SELECT resolve_name('rA')")
-        conn.execute("SELECT new_slave(%s, 'B', 'sB', ARRAY[%s], NULL, 'rB')", (m_addr, rA))
-        sA = conn.execute_fetchval("SELECT resolve_name('sA')")
-        sB = conn.execute_fetchval("SELECT resolve_name('sB')")
+        sA_name = unique_name('sA')
+        sB_name = unique_name('sB')
+        rA_name = unique_name('rA')
+        rB_name = unique_name('rB')
+        conn.execute("SELECT new_slave(%s, 'A', %s, NULL, NULL, %s)", (m_addr, sA_name, rA_name))
+        rA = conn.execute_fetchval("SELECT resolve_name(%s)", (rA_name,))
+        conn.execute("SELECT new_slave(%s, 'B', %s, ARRAY[%s], NULL, %s)", (m_addr, sB_name, rA, rB_name))
+        sA = conn.execute_fetchval("SELECT resolve_name(%s)", (sA_name,))
+        sB = conn.execute_fetchval("SELECT resolve_name(%s)", (sB_name,))
         rmt_name = unique_name("range_rmt")
         res = rmt_create_from_range(start_id=sA, end_id=sB, _meta=meta, description="desc", name=rmt_name)
         rmt_addr = int(res)
@@ -639,4 +647,5 @@ class TestEventTools:
 def test_report_paradox(meta):
     with pytest.raises(ParadoxDetected):
         report_paradoxal_information(items=[1], paradox="conflict", _meta=meta)
+
 

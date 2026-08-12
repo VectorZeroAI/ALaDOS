@@ -144,3 +144,4 @@ class TestResolveContext:
         ctx = resolve_context(slave_obj, db)
         assert "WINDOW DOES NOT EXIST YET." in ctx
 
+

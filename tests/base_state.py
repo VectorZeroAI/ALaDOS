@@ -80,19 +80,29 @@ def isolate_registry():
 
 
 class TestRealNewAddr:
+    @staticmethod
+    def _raw_proxy(db):
+        # real_new_addr() owns the raw connection and closes it. Keep that close
+        # from closing pytest's transaction connection while still executing the
+        # real SQL against it.
+        proxy = MagicMock()
+        proxy.execute_fetchval.side_effect = db.execute_fetchval
+        proxy.close.return_value = None
+        return proxy
+
     def test_returns_int(self, db):
-        with patch("python.base_state.types.conn_factory_raw", return_value=db):
+        with patch("python.base_state.types.conn_factory_raw", return_value=self._raw_proxy(db)):
             addr = real_new_addr()
         assert isinstance(addr, int)
 
     def test_inserts_real_row_into_addrs(self, db):
-        with patch("python.base_state.types.conn_factory_raw", return_value=db):
+        with patch("python.base_state.types.conn_factory_raw", return_value=self._raw_proxy(db)):
             addr = real_new_addr()
         found = db.execute_fetchval("SELECT addr FROM addrs WHERE addr = %s", (addr,))
         assert found == addr
 
     def test_successive_calls_return_distinct_real_addrs(self, db):
-        with patch("python.base_state.types.conn_factory_raw", return_value=db):
+        with patch("python.base_state.types.conn_factory_raw", side_effect=lambda: self._raw_proxy(db)):
             a1 = real_new_addr()
             a2 = real_new_addr()
         assert a1 != a2
@@ -415,4 +425,5 @@ class TestBaseStateStartup:
              patch.object(base_state_main, "SYSTEM_ADDRS_LIST", []), \
              patch.object(base_state_main, "ADDR_REGISTER", {}):
             base_state_main.startup()  # should not raise
+
 

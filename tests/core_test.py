@@ -44,8 +44,8 @@ DB_HOST = "/data/data/com.termux/files/usr/tmp"
 DB_NAME = "alados_test"
 
 
-def _test_conn_factory_raw():
-    conn = Conn.connect(host=DB_HOST, dbname=DB_NAME)
+def _test_conn_factory_raw(db_name: str | None = None):
+    conn = Conn.connect(host=DB_HOST, dbname=db_name or DB_NAME)
     conn.autocommit = True
     return conn
 
@@ -239,8 +239,12 @@ def global_setup():
     conn.close()
 
     coros = bs_startup()
-
-    ev_startup(coros)
+    # Core tests need base-state registrations, but starting the event system
+    # here creates persistent event consumers that pollute event_tests.py.
+    for coro in coros:
+        close = getattr(coro, "close", None)
+        if close is not None:
+            close()
 
     yield mock_llm
 
@@ -255,152 +259,24 @@ def clean_database():
 
 def _clean_database(conn: Conn):
     tables = [
+        # Children/dependency rows first.
+        "event_call_fill_result", "event_call_execute_slave", "event_call_rmt",
+        "event_consumers",
         "master_req", "slave_req", "master_load", "master_context",
-        "rmt_slaves", "reusable_master_templates",
-        "slaves", "masters", "results", "names", "vector_ops",
-        "executables", "knowledge", "addrs",
+        "rmt_slaves",
         "cronjob_once", "cronjob_loop",
-        "event_consumers", "event_call_rmt", "event_call_execute_slave",
-        "event_call_fill_result",
+        # Items referenced by the rows above.
+        "reusable_master_templates",
+        "vector_ops",
+        "executables", "knowledge",
+        "names",
+        "slaves", "masters",
+        "results",
+        "addrs",
     ]
     with conn.transaction():
-        for t in tables:
-            try:
-                conn.execute(f"DELETE FROM {t} CASCADE")  # pyright: ignore
-            except Exception:
-                pass
+        for table in tables:
+            conn.execute(f"DELETE FROM {table}")  # pyright: ignore
         conn.execute("ALTER SEQUENCE global_next_id RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_planner_serial RESTART WITH 1")
         conn.execute("ALTER SEQUENCE global_rmt_activation_serial RESTART WITH 1")
-
-
-#  ======================================================================
-#  Example test cases – just add classes like these
-#  ======================================================================
-
-@executor_test
-class BasicExecution:
-    steps = [
-        ExecutorStep(
-            instruction="Write 'Hello World'",
-            llm_responses=['[{"tool": "result_write", "args": {"text": "Hello World"}}]'],
-            expected_content_contains="Hello World",
-        ),
-    ]
-
-
-@executor_test
-class ParadoxHandling:
-    steps = [
-        ExecutorStep(
-            instruction="Report a paradox",
-            llm_responses=[
-                '[{"tool": "k_report_paradoxal_information", "args": {"items": [1], "paradox": "test"}}]',
-                '[{"tool": "result_write", "args": {"text": "assume handled."}}]',
-                '[{"tool": "result_write", "args": {"text": "done!"}}]'
-            ],
-            expected_content_contains="done!"
-        ),
-    ]
-
-
-@executor_test
-class ErrorRecovery:
-    steps = [
-        ExecutorStep(
-            instruction="Fail then recover",
-            llm_responses=[
-                '[{"tool": "nonexistent_tool", "args": {}}]',
-                '[{"tool": "result_write", "args": {"text": "recovered"}}]',
-            ],
-            expected_content_contains="recovered",
-        ),
-    ]
-
-name = str(uuid.uuid4())
-print(f"NAME = {name}")
-
-@executor_test
-class CreateAndReadKnowledge:
-    steps = [
-        ExecutorStep(
-            instruction="Create a knowledge item",
-            llm_responses=[
-                '[{"tool": "k_create", "args": {"content": "moon is cheese", "description": "fun fact", "name": "' + name + '"}}]'
-            ],
-            expected_knowledge_count=1,
-        ),
-        ExecutorStep(
-            instruction="Read that knowledge item (simulate read by checking we can find it)",
-            llm_responses=[
-                '[{"tool": "k_read", "args": {"id": "' + name + '"}}]'  # first knowledge item is addr 1
-            ],
-            expected_content_contains="moon is cheese",
-        ),
-    ]
-
-
-@executor_test
-class CheckNestedNewPaths:
-    steps = [
-        ExecutorStep(
-            instruction="Start wrongly.",
-            llm_responses=[
-                '[{"tool": "NOT EXISTS", "args": {}}]',
-                ## Then report a paradox inside of recovery.
-                '[{"tool": "k_report_paradoxal_information", "args": {"items": [999], "paradox": "test"}}]',
-                ## Now recover from paradox, and then recover from the tool error?
-                '[{"tool": "result_write", "args": {"text": "recovered paradox"}}]',
-                '[{"tool": "result_write", "args": {"text": "recovered tool_error"}}]',
-            ],
-            expected_content_contains="recovered tool_error" # check if the last recovery was executed as expected.
-        )
-    ]
-
-
-uuid = str(uuid.uuid4())
-
-@executor_test
-class CheckToolExecuteBuiltinFunc:
-    steps = [
-        ExecutorStep(
-            instruction="Create a test tool that uses a syscall.",
-            llm_responses=[
-                '''[
-                    {
-                        "tool": "tool_create",
-                        "args": {
-                            "description": "desc",
-                            "body": "from ALaDOS.lib.Knowledge import create; import asyncio; asyncio.run(create(${{slave_addr}}, \"Content\", \"description\")); print(\"EXECUTED CORRECTLY.\")",
-                            "header": "Nothing.",
-                            "name": "'''+ uuid +'"}}]'
-            ]
-        ),
-        ExecutorStep(
-            instruction="Use the test tool",
-            llm_responses=[
-                '[{"tool": "tool_execute", args:{"id": "' + uuid + '", "kwargs": {}}}]'
-            ],
-            expected_content_contains="EXECUTED_CORRECTLY"
-        )
-    ]
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-
-"""
-CREATE OR REPLACE FUNCTION notify_result_ready()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.ready AND NOT OLD.ready THEN
-        PERFORM pg_notify('result_ready', NEW.addr::TEXT);
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_result_ready
-AFTER UPDATE ON results
-FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
-"""

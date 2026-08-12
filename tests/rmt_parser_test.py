@@ -12,7 +12,7 @@ from python.rmt.main import (
     activate_as_master,
     serialize,
 )
-from .conftest import db  # noqa: F401 – common fixture
+from .conftest import db, unique_name  # noqa: F401 – common fixtures
 
 
 class TestDSLParser:
@@ -68,7 +68,7 @@ class TestDSLParser:
 class TestSerializationRoundTrip:
     def test_roundtrip_linear(self, db):
         dsl = "START -> (id='1', instruction='task1') -> (id='2', instruction='task2') -> END"
-        addr = create_from_serial(dsl, name="test_rmt", conn=db)
+        addr = create_from_serial(dsl, name=unique_name("test_rmt"), conn=db)
         serialized = serialize(addr, conn=db)
         reparsed = parse(serialized)
         assert len(reparsed) == 2
@@ -105,7 +105,7 @@ class TestCreateFromSerial:
 
     def test_create_with_name(self, db):
         dsl = "START -> (id='1', instruction='run') -> END"
-        addr = create_from_serial(dsl, name="cool_template", conn=db)
+        addr = create_from_serial(dsl, name=unique_name("cool_template"), conn=db)
         row = db.execute("SELECT name FROM names WHERE addr = %s", [addr]).fetchone()
         assert row[0] == "cool_template"
 
@@ -120,7 +120,7 @@ class TestCreateFromMaster:
         conn.execute("SELECT new_slave(%s, 'step 1', 'slave1', NULL, NULL, 'r1', NULL, 'general')", [master_addr])
         r1_addr = conn.execute_fetchval("SELECT resolve_name('r1')")
         conn.execute("SELECT new_slave(%s, 'step 2', 'slave2', ARRAY[%s], NULL, 'r2', NULL, 'general')", [master_addr, r1_addr])
-        rmt_addr = create_from_master(master_addr, name="from_master", conn=db)
+        rmt_addr = create_from_master(master_addr, name=unique_name("from_master"), conn=db)
         slaves = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s ORDER BY instruction", [rmt_addr]
         ).fetchall()
@@ -163,7 +163,7 @@ class TestCreateFromRange:
         conn.execute("SELECT new_slave(%s, 'C', 'sC', ARRAY[%s], NULL, 'rC')", [master_addr, rB])
         sA_addr = conn.execute_fetchval("SELECT resolve_name('sA')")
         sC_addr = conn.execute_fetchval("SELECT resolve_name('sC')")
-        rmt_addr = create_from_range(start_node_id=sA_addr, conn=db, end_node_id=sC_addr, name="range_test")
+        rmt_addr = create_from_range(start_node_id=sA_addr, conn=db, end_node_id=sC_addr, name=unique_name("range_test"))
         slaves = conn.execute(
             "SELECT instruction, deps FROM rmt_slaves WHERE template_addr = %s ORDER BY instruction", [rmt_addr]
         ).fetchall()
@@ -228,7 +228,7 @@ class TestDeleteNode:
 class TestActivateAsMaster:
     def test_activation_basic(self, db):
         dsl = "START -> (id='1', instruction='step1') -> (id='2', instruction='step2') -> END"
-        rmt_addr = create_from_serial(dsl, name="basic_template", conn=db)
+        rmt_addr = create_from_serial(dsl, name=unique_name("basic_template"), conn=db)
         activated_master = activate_as_master(rmt_addr, inputs={}, conn=db)
         conn = db
         master = conn.execute("SELECT * FROM masters WHERE addr = %s", [activated_master]).fetchone()
@@ -282,4 +282,5 @@ def test_parse_scope():
     expr = "START -> (id='1', instruction='do', scope='task') -> END"
     result = parse(expr)
     assert result[0].scope == "task"
+
 

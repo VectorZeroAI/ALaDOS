@@ -61,6 +61,9 @@ def conn_factory(db_name: str = os.environ.get("ALADOS_DB_NAME","alados")) -> Co
     The factory function for connecting to the database.
     Credentials are hardcoded, because the application sets the DB up internally,
     and there is no user API available for changing it.
+
+    ALADOS_DB_NAME enviroment variable is read ofr the DB name,
+    or DB name can be passed into the function.
     """
     conn = conn_factory_raw(db_name)
 

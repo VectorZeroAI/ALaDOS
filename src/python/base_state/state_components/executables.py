@@ -15,3 +15,30 @@ register(
         -1
     )
 )
+
+register(
+    Executable(
+        description="Read Knowledge Item.",
+        body="""
+        from ALaDOS.lib.Knowledge import read
+        import json
+        import sys
+        import asyncio
+        
+        args = json.load(sys.stdin)
+        
+        id = args.get("id")
+        if not id:
+            raise ValueError("Id not given.")
+
+        return f"Knowledge Entry at id {id}, content: {asyncio.run(read(id, args["slave_id"]))}."
+        """,
+        header="""
+        args = {
+            "id": "knowledge entry id."
+        }
+        """,
+        name="K.read",
+        addr=-2
+    )
+)

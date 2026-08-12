@@ -191,6 +191,9 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     else:
         timeout = 5
 
+    kwargs['slave_id'] = _meta.slave_id
+    kwargs['master_id'] = _meta.master_id
+
     kwargs_str: str = json.dumps(kwargs)
 
     process = subprocess.Popen(

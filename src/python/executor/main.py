@@ -141,7 +141,7 @@ Further documentation of the states inlined as docstrings in the match statement
             case GetSlaveState():
                 """ This is just the state of awaiting next task. """
                 slave_addr = queue.get()
-                set_next_state(ContextGetState(slave_addr, True))
+                set_next_state(ContextGetState(slave_addr, finish=True))
 
             case ContextGetState():
                 """
@@ -171,7 +171,7 @@ Further documentation of the states inlined as docstrings in the match statement
 
                 str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
-                set_next_state(ApiCallsState(str_instr, instr, datetime.now(), finish=True))
+                set_next_state(ApiCallsState(str_instr, instr, datetime.now(), finish=curr.finish))
 
             case ApiCallsState():
                 """

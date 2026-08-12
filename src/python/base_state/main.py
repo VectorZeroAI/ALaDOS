@@ -20,7 +20,6 @@ from ..utils.conn_factory import conn_factory
 from ..utils.logger import log_json
 from .registry import SYSTEM_ADDRS_LIST, ADDR_REGISTER, CUSTOM_CONSUMERS
 from traceback import format_exception
-from . import state_components # noqa # pyright: ignore
 
 def startup() -> list[Coroutine[None, None, None]]:
     conn = conn_factory()
@@ -32,6 +31,8 @@ def startup() -> list[Coroutine[None, None, None]]:
                            """, (SYSTEM_ADDRS_LIST,)).fetchall()
 
     results = [r[0] for r in results]
+
+    from . import state_components # noqa # pyright: ignore
 
     for i in results:
         try:

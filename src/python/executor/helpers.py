@@ -1,27 +1,14 @@
 #!/usr/bin/env python3
 
-import asyncio
-import json
 import re
-import subprocess
-import threading
-import time
-from collections import OrderedDict
 from dataclasses import asdict
-from functools import partial
-from tempfile import (
-    NamedTemporaryFile,
-    _TemporaryFileWrapper,
-)
-from threading import RLock
-from typing import Any
 
 from ..types import ToolCall
-from ..utils.conn_factory import Conn, conn_factory
+from ..utils.conn_factory import Conn
 from ..utils.logger import log_json
 from .exceptions import ContextLimitExceededError
-from .execute_tool import HEADERS_REGISTRY, execute_syscall
-from .types import CachedTool, Instr, ToolCallsBlock, _ExecToolMetaData
+from .execute_tool import HEADERS_REGISTRY
+from .types import Instr, ToolCallsBlock
 
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,

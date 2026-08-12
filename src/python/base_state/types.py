@@ -11,16 +11,32 @@ from nats.aio.msg import Msg
 from ..executor.types import JsonSerializable
 from ..utils.conn_factory import conn_factory_raw
 
-def new_addr() -> int:
+virtual_addr_counter: int = 0
+
+def real_new_addr() -> int:
+    """ This creates a real DB level internal new address. """
     conn = conn_factory_raw()
-    return conn.execute_fetchval("SELECT new_internal_addr();")
+    val = conn.execute_fetchval("SELECT new_internal_addr();")
+    conn.close()
+    return val
+
+def virtual_new_addr() -> int:
+    """
+    This just returns a new addr from a virtual counter. 
+    This means this can be re used across startups to always get the exact same addr for exact same object,
+    and when you do need a real addr you insert a real one.
+    """
+    global virtual_addr_counter
+    virtual_addr_counter =+ 1
+    return virtual_addr_counter
+    
 
 @dataclass(slots=True)
 class Knowledge:
     description: str
     content: str
     name: str = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class Executable:
@@ -28,7 +44,7 @@ class Executable:
     body: str # TODO : Allow passing in a pathlib.Path object.
     header: str # TODO : Refactor the executables to include langauge.
     name: str = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class Logs:
@@ -39,7 +55,7 @@ class Results:
     content_str: str
     metadata: JsonSerializable = field()
     name: str = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
     ready: bool = field(default=False)
 
 @dataclass(slots=True)
@@ -48,7 +64,7 @@ class Masters:
     result_addr: int
     deps: list[int] = field()
     name: str = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class Slaves:
@@ -57,7 +73,7 @@ class Slaves:
     result_addr: int
     deps: list[int] = field()
     scope: str = field(default="general")
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class Cronjob:
@@ -70,14 +86,14 @@ class Cronjob:
     timelapse: int
     action_name: str = field()
     args: JsonSerializable = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class Rmt:
     dsl: str
     description: str
     name: str = field()
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 @dataclass(slots=True)
 class EventConsumers:
@@ -90,7 +106,7 @@ class EventConsumers:
     action_type: Literal["call_rmt", "execute_slave", "fill_result"]
     field1: Any
     field2: Any
-    addr: int = field(default_factory=new_addr)
+    addr: int = field(default_factory=virtual_new_addr)
 
 
 @dataclass(slots=True)

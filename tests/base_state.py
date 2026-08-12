@@ -16,7 +16,8 @@ from python.base_state.types import (
     Results,
     Rmt,
     Slaves,
-    new_addr,
+    real_new_addr,
+    virtual_new_addr,
 )
 import python.base_state.registry as registry_mod
 from python.base_state.registry import (
@@ -78,23 +79,37 @@ def isolate_registry():
     registry_mod.ADDR_REGISTER.update(old_addr_reg)
 
 
-class TestNewAddr:
+class TestRealNewAddr:
     def test_returns_int(self, db):
         with patch("python.base_state.types.conn_factory_raw", return_value=db):
-            addr = new_addr()
+            addr = real_new_addr()
         assert isinstance(addr, int)
 
-    def test_inserted_row_exists_in_addrs_table(self, db):
+    def test_inserts_real_row_into_addrs(self, db):
         with patch("python.base_state.types.conn_factory_raw", return_value=db):
-            addr = new_addr()
+            addr = real_new_addr()
         found = db.execute_fetchval("SELECT addr FROM addrs WHERE addr = %s", (addr,))
         assert found == addr
 
-    def test_successive_calls_return_distinct_addrs(self, db):
+    def test_successive_calls_return_distinct_real_addrs(self, db):
         with patch("python.base_state.types.conn_factory_raw", return_value=db):
-            a1 = new_addr()
-            a2 = new_addr()
+            a1 = real_new_addr()
+            a2 = real_new_addr()
         assert a1 != a2
+
+
+class TestVirtualNewAddr:
+    def test_returns_int(self):
+        addr = virtual_new_addr()
+        assert isinstance(addr, int)
+
+    def test_dataclass_default_uses_virtual_address(self):
+        item = Knowledge("description", "content", "virtual_name")
+        assert isinstance(item.addr, int)
+
+    def test_explicit_address_is_preserved(self):
+        item = Knowledge("description", "content", "explicit_name", 123456)
+        assert item.addr == 123456
 
 
 class TestItemDataclasses:

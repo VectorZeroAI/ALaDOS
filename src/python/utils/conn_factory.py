@@ -56,7 +56,7 @@ class Conn(psycopg.Connection):
             else:
                 return None
 
-def conn_factory(db_name: str = os.environ.get("ALADOS_DB_NAME","alados")) -> Conn:
+def conn_factory(db_name: str|None = None) -> Conn:
     """
     The factory function for connecting to the database.
     Credentials are hardcoded, because the application sets the DB up internally,
@@ -80,7 +80,10 @@ def register_all_the_composite_types(conn: Conn) -> Conn:
     conn.RmtNodeClass = RmtNodeClass # pyright: ignore
     return conn
 
-def conn_factory_raw(db_name: str = "alados") -> Conn:
+def conn_factory_raw(db_name: str|None = None) -> Conn:
+
+    db_name = db_name or os.environ.get("ALADOS_DB_NAME", "alados")
+
     conn = Conn.connect(
         host='/data/data/com.termux/files/usr/tmp',
         dbname=db_name,

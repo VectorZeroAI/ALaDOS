@@ -10,7 +10,6 @@ from typing import Any, Callable, Literal, Sequence, TypeAlias, Union, get_args
 from nats.aio.client import Client
 from pydantic import JsonValue
 
-from ..executor.execute_tool import ToolsManager
 from ..types import ReferenceTo, SyscallsQueue, ToolCall
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue

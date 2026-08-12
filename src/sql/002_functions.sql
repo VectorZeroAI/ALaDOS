@@ -155,7 +155,7 @@ BEGIN
             window_anchor_exe = NULL,
             window_size_l = 12,
             window_size_r = 12
-
+        WHERE addr = master_addr_p;
     END IF;
     RETURN result_addr;
 END;

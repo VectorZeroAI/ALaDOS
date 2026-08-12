@@ -12,7 +12,6 @@ from functools import partial
 from tempfile import (
     NamedTemporaryFile,
     _TemporaryFileWrapper,
-    gettempdir,
 )
 from threading import RLock
 from typing import Any

@@ -14,18 +14,21 @@ Syscalls have to return string because transportation layer depends on the retur
 The lib side will have to translate to proper return type.
 """
 
-from dataclasses import asdict
 import json
+from dataclasses import asdict
 from functools import partial
-from tempfile import NamedTemporaryFile, TemporaryFile
 from typing import Any, Literal, Sequence, TypeAlias, get_args
 
 import httpx
 import psycopg
 from numpy import ndarray
 from psycopg.types.json import Jsonb
-from ..utils.logger import log_json
 
+from ..events.functions import (
+    create_result_via_event,
+    register_reaction_execute_slave,
+    register_reaction_rmt,
+)
 from ..rmt.main import (
     activate_as_master,
     change_scope,
@@ -38,21 +41,17 @@ from ..rmt.main import (
     serialize,
 )
 from ..utils.conn_factory import NoValue
+from ..utils.logger import log_json
 from ..utils.name_resolver import resolve_self, resolve_to_addr, resolve_to_addrs
 from ..utils.occ_functions import occ_check, update_timestamp
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
-from ..events.functions import (
-    create_result_via_event,
-    register_reaction_execute_slave,
-    register_reaction_rmt
-)
 from .comms import httpsystem
 from .comms.searxng import SearxngSearcher
 from .cronjobs.parser import insert_cronjob
 from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
-from .execute_tool import register_tool, execute_tool, tools_manager
+from .execute_tool import register_tool, tools_manager
 from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo

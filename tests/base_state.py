@@ -36,7 +36,7 @@ from python.base_state.registry import (
 )
 import python.base_state.main as base_state_main
 
-from .conftest import db  # noqa: F401
+from .conftest import db
 
 
 def insert_result(db):

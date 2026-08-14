@@ -12,6 +12,8 @@ from typing import Callable, Coroutine, TypeAlias
 from psycopg.types.json import Jsonb
 from functools import partial
 
+from pydantic import Json
+
 from ..base_state.custom_consumer import consumer_outer
 
 from ..utils.conn_factory import conn_factory, Conn
@@ -175,7 +177,7 @@ def register_result(item: Results, conn: Conn) -> None:
         insert_addr(item.addr, conn)
         conn.execute("""
         INSERT INTO results(addr, content_str, metadata, ready) VALUES (%s, %s, %s, %s);
-                     """, (item.addr, item.content_str, item.metadata, item.ready))
+                     """, (item.addr, item.content_str, Jsonb(item.metadata), item.ready))
         if item.name:
             conn.execute("""
             INSERT INTO names(addr, name) VALUES(%s, %s)

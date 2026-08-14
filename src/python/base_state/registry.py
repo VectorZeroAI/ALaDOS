@@ -122,7 +122,7 @@ def register_cronjob(item: Cronjob, conn: Conn) -> None:
         if item.type == "once":
             conn.execute("""
             INSERT INTO cronjob_once(addr, name, args, start_after)
-            VALUES (%s, %s, (EXTRACT(EPOCH FROM NOW()) + %s)::INT);
+            VALUES (%s, %s, %s, (EXTRACT(EPOCH FROM NOW()) + %s)::INT);
                          """, (item.addr, item.action_name, Jsonb(item.args), item.timelapse)) 
         else:
             conn.execute("""

@@ -178,21 +178,11 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
     Executes a tool by id.
     """
 
-    conn = _meta.conn
-
-
-    if isinstance(id, str):
-        name = id
-    else:
-        name = conn.execute_fetchval("""
-        SELECT name FROM names WHERE addr = %s;
-                                     """, (id,))
-
     if kwargs is None:
         kwargs = {}
     kwargs["timeout"] = timeout
 
-    return ToolsManager()[name](kwargs, _meta)
+    return ToolsManager()[id](kwargs, _meta)
 
 
 # def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:

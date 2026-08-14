@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, field
-from typing import Literal, TypeAlias, Union
+from typing import Literal, Protocol, Self, TypeAlias, Union
 
 from nats.aio.msg import Msg
 from pydantic import JsonValue
@@ -32,3 +32,37 @@ class ToolCall:
 
 SyscallsQueue: TypeAlias = Uqueue[tuple[ToolCall, Msg]]
 SyscallsQueues: TypeAlias = dict[int, SyscallsQueue]
+
+
+class SingletonMeta(type):
+    _instances: dict[type, object] = {}
+
+    def __call__(cls, *args, **kwargs) -> Self:
+        if SingletonMeta._instances.get(cls) is None:
+            SingletonMeta._instances[cls] = super().__call__(*args, **kwargs)
+        return SingletonMeta._instances[cls]
+
+class Singleton(metaclass=SingletonMeta):
+    pass
+
+class CacheManager[T](Protocol, Singleton):
+    """
+    Parent class for all the Cache managers, as well as protocoll for all the Cache Managers.
+    
+    Additional notes to the Protocol: 
+        The Cache format is LRU, with limit being the limit.
+        Invalidate function must be called to invalidate.
+        It must be thread-safe.
+        
+        If item is not found in cache, it must resolve it and still give it.
+        __getitem__ can not raise, and can only return the item,
+        depending on it being cached or not, it takes a long or a short time.
+    """
+    def __init__(self, limit: int) -> None:
+        ...
+
+    def invalidate(self, item: T) -> None:
+        ...
+
+    def __getitem__(self, item: T) -> T:
+        ...

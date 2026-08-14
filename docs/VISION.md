@@ -24,6 +24,13 @@ This also means that there are no subagents allowed and no context boudaries all
 just like in the computer.
 (OS does enforce memory boudaries but its for security, else there are none. Also for MESI and its optimisations kinda do memory boudaries, but there are fundamentally none, all that are are simply workarounds.)
 
+To explain this further, CPUs just read instructions and write results back.
+They do a lot more in modern practice, but most of it is optimisations, core idea as described in Turing Mashine is just reading and writing data.
+
+So the cores are basically that. They read instructions, then they execute the computation, and then they write back the results, and repeat. 
+
+___
+
 ### Viewing window context [x]
 
 Dont use RAG, use viewing windows.
@@ -54,6 +61,30 @@ All next items, on insert placed into:
 > [!NOTE]
 > All actual numbers are adjustable to future changes. Current numbers as of 2026-08-10 use + 100 on positions and 0.4 as threshhold. May change in the future, but core algoritm remains the same.
 
+____
+
+#### Anouther algoritm idea Navigatable Direction Vector:
+
+NDV is anouther idea on how to get linear positions required for viewing window. 
+
+The radical differense between these 2 is that Rainbow sort ultimately *attempts* to make an arbitrarily large dimentionality into 1 dimentional list, which at its core, is mathematically impossible to do accurately. 
+So rainbow sort literaly boils down to being my practical UMAP attempt for this exact use case. 
+
+Now, NDV doesnt even try to make a stable 1d index, it gets the 1d navigatable line by treating the 1d as Magnitude of an anchor vector.
+Anchor vector is thus the target embedding. How exactly its gotten can be seen in the "semantic mathematics" section of the VISION.
+
+We can define the line as all points in the given direction, e.g. all the products of all of $\mathbb{R}$ and a unit vector.
+Anchor vector can be converted to unit vector like this: 
+$ \hat{u} = \dfrac{\text{anchor\_vector}}{\lVert \text{anchor\_vector} \rVert}$.
+So the line is:
+ TODO : FINISH MATHS.
+
+We can define the viewing window logically as the cylinder around the given segment of the line, encompasing all items withhin that cylinder, and assosiating them to a Scalar position on the line.
+
+Then we literaly just define the viewing window mathematically as:
+
+____
+
 ### Reusable Master Templates RMT [x]
 
 Make master templates with keys that can be replaced at activation time.
@@ -71,6 +102,45 @@ START -> (instruction='text', scope='general', id='start') -> (instruction='text
 This kind of system would allow the agent to learn complex workflows as well as test and refine them, which is far better then the SKILL.md system, which is the alternative.
 Or GemBots or whatever OpenAIs idea is. 
 
+#### Recursive master templates [ ]
+
+Recursion of master templates is allowed, but they have to be marked as recursive, which should simply be a boolean flag collumn in the definition.
+
+Recrusive master templates slaves will be internally migrated to the internally derived scope "rec_{scope_name}".
+That scope will include the "return" tool, as well as the instructions on how to use it.
+The explanation of that will also be part of base knowledge.
+
+The "return" tool will return the results of this recursive iteration as the results of the first iteration of this instantiation of the recursive RMT.
+The tracing of that will be done via a metadata fields such as "created_by" of type ADDR on slaves and masters, or specifically for recursive RMTs, they will utilize the metadata field "first_iteration" in the master metadata as well as "rmt" field in the metadata.
+
+This basically includes constructing a metadata store for the DAG that documents the runtime creation of the DAG.
+#### The metadata traces structure [ ]
+
+Now how should the metadata traces be structured?
+First of all, there are many "meta types" in the system, so speaking of them, a unified metadata structure would not work.
+
+So for storing DAG metadata, I would use this structure:
+**metadata_dag**
+addr REF master, slave, PK
+metadata JSONB DEFAULT '{}'::JSONB
+timestamp TIMESTAMP DEFAULT NOW();
+
+**REASONING**:
+If I were to try to make it actually DB good way, I end up with an ENUM and an explosion of tables.
+If I were to try to then optimise that explosion of tables cause most of them are the same thing, I end up with literaly a wide NULLABLE table in the end, and still an explosion of logic needed to reconstruct the data as its split across way to many places.
+
+So insdead I siply do the JSONB metadata collumn to store all the attributes, which basically saves me the headache of trying to encode all of giant amounts of invariants into the DB structure. 
+
+**To actually validate that input is correct through, I will write a bunch of CONSTRAINT CHECK on the metadata to ensure no shit happens.**
+
+And what about other items such as knowledge, tools, and events/cronjobs ?
+Well for them it will propably be the same, so I might as well make a "metadata" collumn just a full metadata table for everything.
+But that creates the problem of having to make EVERY decision through ->> and not being able to just JOIN on the table has has things you need. 
+So I would say the best way of handling it is to add more metadata tables, like metadata_tools, metadata_knowledge, metadata_views, etc. But they will all be the same structure.
+Or I can make them the same table, and then PARTITION by the type? ........ from speed it will be the same, but I still like the design of splitting by the big types, so I think its better to do it this way... well I will decide later on.
+
+____
+
 ### Event based proactivity [~]
 
 Make an event recieving and reaction system, to allow the agent to proactively react to events.
@@ -84,10 +154,13 @@ NATS acts as a router.
 This allows the writing of additional listeners in any language, and their potential registration.
 TODO: Think of a protocol to allow event listeners to be written by the AI and registered dynamically by AI. This should be included in the tool rewrite.
 
+___
 
 ### Create base state [x]
 
 Create a framework for the devs to define the base state, the ground truth of the Enviroment, and not just the enviroment itself. That will be later used to move everything currently hardcoded into the DB, although it will still be hardcoded, but it will be better hard coded, cause its now uniform with anything AI itself writes, and no AI written tools will feel like Ad-Hoc, but rather all tools will look the same and have the same interfact.
+
+___
 
 ### Fully move tools into the DB [ ]
 
@@ -134,18 +207,22 @@ Tools that are part of protocolls are not to be invoked directly.
 
 Tools should be allowed to be written in any language, via a "compiled" flag as well as compilation parameters. Will look into that in more details in the future. 
 
-#### Builtins access from subprocess [ ]
+#### Builtins access from subprocess [x]
 
 Add anouther directory, so that ALaDOS.src.python was not the only python path.
 Anouther python path would be ALaDOS.lib.system_call_name.
 
-The sys calls would go through to the main ALaDOS process and will be executed via interrupts.
+The sys calls would go through to the main ALaDOS process and will be executed via interrupts or via the tool execution function.
+
+TODO: Implement the sys calls as interrupts for those that dont need slave or master id or stuff like that.
 
 Transportation method: Event system.
     Extend base state to import the tooling of registering consumers,
         create the consumers with the custom callbacks,
         and then store the consumers.
     Extend the event system to take the stored custom consumers and simply run them.
+
+___
 
 ### Fully move scopes into the DB [ ]
 
@@ -157,6 +234,8 @@ Invalidated on change of a tool in scope or of scope itself, checked DB side.
 Actual implementation the same way.
 
 Scopes should include operations such as "calculate intersection %" and "merge".
+
+___
 
 ### Make views into Items [ ]
 
@@ -232,6 +311,8 @@ And with that ether populate an "cummulative context window" with querry results
     or directly see the querry results,
     or even land a viewing window into the loaded data and explore it.
 
+___
+
 ### Optimiser Meta learning [ ]
 
 This is the culmination of the development process, the final piece on the road to an General Information Transofmer mashine, to the complete ALaDOS.
@@ -244,8 +325,11 @@ That means creating abstractions over repetative work.
 Because the entire backlog of the execution history is right there in the masters and slaves tables, all we need to do is detect repetative patterns and abstact that work away into an RMT.
 
 ##### Algoritm 
+> [!IMPORTANT]
+> This algoritm has to be improved in order to catch the pitfall of optimising already optimised stuff, e.g. it should be able to understand the metadata traces and exclude already implemented stuff.
 
-NOTE: Any group size smaller then k (configurable) are removed.
+> [!NOTE]
+>  Any group size smaller then k (configurable) are removed.
 All instructions withhin members of the same slice (relative to start node graph position) must be highly similar. (90% or even higher similarity, e.g. "The same thing.")
 All scopes must be exact same or have a very large intersection of eachover. (withhin slice)
 
@@ -273,18 +357,33 @@ Every n seconds (n can be large):
 Thats approximately it.
 Of course there may be better solutions, and I will look into them, but not now.
 
+> [!NOTE]
+> This algoritm should also not try to unroll recusrive rmts.
+
 
 ##### Pitfalls: 
-1. RMTs activations need to be tracked, and with the planned inline activation method, it will become harder.Else the optimiser will be trapped in a loop of adding the same abstraction over and over and over and over.
+1. **RMTs activations need to be tracked**, and with the planned inline activation method, it will become harder. Else the optimiser will be trapped in a **loop of adding the same abstraction over and over again**. *This is partially addressed by the metadata system as part of recursive reusable master templates*.
 2. The optimiser should not rely on the LLM to do all the work, it has to do the majorty of deterministic work, and let the LLM do the polish and integration work. 
-3. Optimiser has to be fast, naive python loop wont work. Preferably in can even be written in a different language, like OCaml.
+3. Optimiser has to be fast, naive python loop wont work. Preferably due to operating on database structures, it should be written as plpgsql for the large deterministic pattern matching.
 
 
 #### Strategy 2, scope creation [ ]
 
 Check what tools were used together often, or searched for together, and combine them into scopes.
+Check what scopes largely overlap and are used for the same tasks (by instruction emb similarity and actual overlap of elements.) and propose merging, then use the LLM to double check if the differense makes sense, and then merge if not.
+Check tools that arent in any scopes, group them by description similarities using an algoritm adjesent to rainbow sort, and then propose thhat as new scope to the LLM evaluator. LLM can then describe the scope and name the scope as well as fine tune the scope or reject the scope.
+
+
+#### Strategy 3, knowledge caching [ ]
+
+Check for repeated web searches, and form the results of such web searches into knowledge items, timestamp them with the time, include the sources, and thats basically it.
+___
 
 ### Presentation [ ]
 
 Implement a good UI, and many UIs at that. Current webui is broken shit, and it will be replaced. 
 The UI should be really really good for the system. 
+
+Also show the traces of execution, itegrating the the metadata traces as implemented by *recursive rmts* section and then showing it in a clean UI, listing the entire DAG as clickable nodes with arrows and the metadata being shown.
+
+Also show case the changes the Optimiser made to the system, as well as show metrics off.

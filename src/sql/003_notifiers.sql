@@ -248,6 +248,7 @@ CREATE OR REPLACE FUNCTION notify_tool_changed()
 RETURNS TRIGGER AS $$
 BEGIN
     PERFORM pg_notify('tool_changed', (SELECT name FROM names WHERE addr = NEW.addr LIMIT 1));
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 

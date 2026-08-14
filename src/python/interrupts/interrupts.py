@@ -7,6 +7,7 @@ from traceback import format_exception
 
 from ..utils.logger import log_json
 from .main import interrupt
+from ..executor.execute_tool import ToolsManager
 
 
 @interrupt("WAIT")
@@ -32,3 +33,9 @@ def execute_cronjob(cronjob: partial[None]):
             'traceback': str(format_exception(e))
         })
         print(f"CRONJOB {cronjob.func.__name__} failed for reason {e} with traceback {format_exception(e)}")
+
+
+@interrupt("invalidate_tool_cache")
+def tool_cache_invalidation(tool: str):
+    tool_manager = ToolsManager()
+    tool_manager.invalidate(tool)

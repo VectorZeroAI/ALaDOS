@@ -51,7 +51,7 @@ from .cronjobs.parser import insert_cronjob
 from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
-from .execute_tool import register_tool, tools_manager
+from .execute_tool import register_tool, ToolsManager
 from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
 Addr: TypeAlias = ReferenceTo
@@ -192,7 +192,7 @@ def execute_tool_builtin_func(_meta: _ExecToolMetaData, id: Addr|str, timeout: i
         kwargs = {}
     kwargs["timeout"] = timeout
 
-    return tools_manager[name](kwargs, _meta)
+    return ToolsManager()[name](kwargs, _meta)
 
 
 # def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaData, name: str|None = None) -> ActionConfirmation:

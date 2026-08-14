@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from python.executor.execute_tool import tools_manager
+from python.executor.execute_tool import ToolsManager
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
 from python.utils.conn_factory import conn_factory
@@ -40,6 +40,8 @@ def meta(db):
         "SELECT new_slave(%s, 'dummy', %s, NULL, NULL, NULL, NULL, 'general')",
         (master_addr, slave_name),
     )
+
+    tools_manager = ToolsManager()
 
     old_cache = tools_manager.cache.copy()
     old_conn = tools_manager.conn

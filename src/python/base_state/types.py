@@ -3,7 +3,7 @@
 The types for this subsystem.
 """
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, TypeAlias, Union
+from typing import Any, Callable, Coroutine, Literal, TypeAlias, Union
 
 from nats.aio.client import Client
 from nats.aio.msg import Msg
@@ -118,5 +118,13 @@ class CustomConsumer:
     event_path: str
     consumer_inner_callback: Callable[[Msg, Client], None]
 
+@dataclass(slots=True)
+class CustomListener:
+    """
+    Custom listener type.
+    Used to write full custom listeners and activate them into the async loop of the event consumers, 
+    Bypassing NATS and directly handling stuff.
+    """
+    async_coro: Coroutine[None, None, None]
 
-Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers, CustomConsumer]
+Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers, CustomConsumer, CustomListener]

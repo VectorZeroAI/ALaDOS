@@ -11,7 +11,7 @@ from python.utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
-from ..executor.execute_tool import HEADERS_REGISTRY, ToolsManager, execute_syscall, execute_tool
+from ..executor.execute_tool import HEADERS_REGISTRY, execute_tool
 from ..interrupts.main import interruptable
 from ..queue import global_interrupt_queue
 from ..sceduler.main import slave_addr_to_instr
@@ -28,7 +28,7 @@ from .cronjobs import main as cronjob_handler
 from .helpers import fix_llm_response, prepare_context_shortening_prompt
 from .queue import (
     embedder_queue,
-    executor_interrupt_queue,
+    interrupt_queue,
     executor_queue,
     syscalls_queue_dict_per_slave,
 )
@@ -52,7 +52,7 @@ config_file = config_dir / "executor.toml"
 config = tomllib.loads(config_file.read_text())
 
 
-@interruptable(executor_interrupt_queue, global_interrupt_queue)
+@interruptable(interrupt_queue, global_interrupt_queue)
 def core(checkpoint: FunctionType, queue: Uqueue[int], apis: Sequence[Api]) -> None:
     """
 The executor core, handles the execution of tasks.
@@ -73,7 +73,7 @@ Architecture of states:
     7. CONTEXT_SHORTENING
     8. FINISH (Write the result)
 
-Transitions:
+Transitions (simplified):
     1 -> 2 -> 3 -> 4 -> 8
     3 -> 7 -> 4 -> 3
     4 -> 5 -> 4
@@ -85,8 +85,9 @@ Transitions:
     7 -> 6
     8 -> 6
 
-Further documentation of the states inlined as docstrings in the match statement. 
+Supports nested recovery paths.
 
+Further documentation of the states inlined as docstrings in the match statement. 
     """
 
     def call_llm(str_instr: str, instr: Instr) -> tuple[str, State|None]:

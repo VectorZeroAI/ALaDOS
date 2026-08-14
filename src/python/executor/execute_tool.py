@@ -5,7 +5,6 @@ import inspect
 import json
 import re
 import subprocess
-import threading
 import time
 from collections import OrderedDict
 from functools import partial
@@ -84,32 +83,41 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
         return func
     return decorator
 
+
+
 def execute_syscall(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     """ Executes a syscall from syscalls table """
     return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
 
+
+
 def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
     """ Execute function from DB """
-    return tools_manager[call.tool](call.args, _meta)
+    return ToolsManager()[call.tool](call.args, _meta)
+
+
 
 class ToolsManager:
-    def __init__(self, limit: int):
+    """
+    Singleton class of ToolManager,
+    handling the retrieval, caching and serving of tools.
+    
+    Is a singleton because I think its cleaner then creating it once and importing value every time.
+    """
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+
+        return cls._instance
+
+    def __init__(self, limit: int = 100):
         self.cache = OrderedDict[str, CachedTool]()
         self.lock = RLock()
         self.limit = limit
         self.conn = conn_factory()
 
-        threading.Thread(target=self.invalidator_func, daemon=True).start()
-
-
-    def invalidator_func(self):
-        n_conn = conn_factory()
-        n_conn.execute("LISTEN tool_changed;")
-        for i in n_conn.notifies():
-            name = i.payload
-            if name in self.cache:
-                with self.lock:
-                    self.cache.pop(name)
 
     def __getitem__(self, name: str, /) -> CachedTool:
         if name in self.cache:
@@ -127,6 +135,12 @@ class ToolsManager:
             self.cache[name] = func
             self.cache.move_to_end(name, last=False)
             return func
+
+    def invalidate(self, name: str, /):
+        """ Removes the tool from cache if found, does nothing otherwise. """
+        if name in self.cache:
+            with self.lock:
+                self.cache.pop(name)
 
     def prepare_function(self, name: str) -> CachedTool:
         """
@@ -250,7 +264,6 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
 
     return f"Executed tool, and got output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
 
-tools_manager = ToolsManager(100)
 
 # register all the tools
 # THIS IS REQUIRED ! DONT REMOVE THIS!!!

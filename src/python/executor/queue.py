@@ -6,7 +6,7 @@ from ..interrupts.main import InterruptInvokation
 from ..types import ReferenceTo, SyscallsQueue, SyscallsQueues
 from ..utils.uqueue import Uqueue
 
-executor_interrupt_queue = Uqueue[InterruptInvokation]()
+interrupt_queue = Uqueue[InterruptInvokation]()
 
 executor_queue = Uqueue[ReferenceTo]()
 

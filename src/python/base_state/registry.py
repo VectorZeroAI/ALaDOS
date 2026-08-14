@@ -17,7 +17,7 @@ from ..base_state.custom_consumer import consumer_outer
 from ..utils.conn_factory import conn_factory, Conn
 from ..rmt.main import create_from_serial
 
-from .types import Cronjob, CustomConsumer, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
+from .types import Cronjob, CustomConsumer, CustomListener, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
 
 REGISTERERS_REGISTRY = {}
 SYSTEM_ADDRS_LIST: list[int] = []
@@ -37,6 +37,10 @@ def register(item: Item) -> Item:
                 item.event_path
             )
         )
+        return item
+
+    if isinstance(item, CustomListener):
+        CUSTOM_CONSUMERS.append(item.async_coro)
         return item
 
 

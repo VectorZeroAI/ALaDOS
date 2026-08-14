@@ -90,3 +90,15 @@ def conn_factory_raw(db_name: str|None = None) -> Conn:
     )
     conn.autocommit = True
     return conn
+
+
+async def async_conn_factory_raw(db_name: str|None = None) -> psycopg.AsyncConnection:
+    db_name = db_name or os.environ.get("ALADOS_DB_NAME", "alados")
+
+    conn = await psycopg.AsyncConnection.connect(
+        host='/data/data/com.termux/files/usr/tmp',
+        db_name = db_name
+    )
+    conn.autocommit = True # TODO : Make async Conn
+
+    return conn

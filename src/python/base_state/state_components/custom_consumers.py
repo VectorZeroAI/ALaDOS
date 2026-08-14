@@ -13,7 +13,6 @@ import json
 from nats.aio.client import Client
 from nats.aio.msg import Msg
 
-from ...events.types import Event
 from ...executor.queue import syscalls_queue_dict_per_slave
 from ...types import ToolCall
 from ..registry import register
@@ -22,7 +21,7 @@ from ..types import CustomConsumer
 
 def callback(msg: Msg, nats: Client):
     syscall_name = msg.subject.split('.', 3)[-1]
-    slave_addr = int(msg.subject.split('.', 3)[-2]) # FIXME : Rename stuff so that Names of syscalls dont contain dots. 
+    slave_addr = int(msg.subject.split('.', 3)[-2])
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
             ToolCall(

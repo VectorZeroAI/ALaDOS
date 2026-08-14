@@ -73,7 +73,11 @@ CREATE TABLE IF NOT EXISTS names(
         REFERENCES addrs(addr)
             ON UPDATE CASCADE
             ON DELETE CASCADE,
-    name TEXT PRIMARY KEY
+    name TEXT PRIMARY KEY,
+
+    CONSTRAINT no_address_like_text_allowed CHECK (
+        name !~ "^[0-9]+$"
+    )
 );
 
 CREATE TABLE IF NOT EXISTS knowledge (

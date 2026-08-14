@@ -13,8 +13,23 @@ def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:
     """
     Tries to resolve an items name if its name.
     Always returns address, raises RuntimeError if no address found.
+
+    EDGE CASE:
+        if its string coersed address, basically "183475203".
+        
+        This funcion DOES TRY TO COERSE, and the numeric only names are NOT ALLOWED.
+        It is enforced at DB level that numbers only are not a valid name and are thus treated as address.
     """
     if isinstance(item, str):
+        try:
+            return int(item)
+        except ValueError:
+            # Didnt work :(
+            pass
+            ## TODO : Move the names cache into here, cause here is where the entire shebang with names happens anyways.
+            ## Although postgres does cache internally as well, its always better to cache in python process for better speed. 
+            ## Although what am I talking about, its literaly python!
+
         try:
             return conn.execute_fetchval("SELECT resolve_name(%s)", (item,))
         except Exception as e:

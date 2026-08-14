@@ -15,10 +15,12 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
+from python.utils.name_resolver import resolve_to_addr
+
 from ..types import ToolCall
 from ..utils.conn_factory import conn_factory
 from ..utils.logger import log_json
-from .types import CachedTool, SlaveScope_, SlaveScopesList, _ExecToolMetaData
+from .types import CachedTool, ReferenceTo, SlaveScope_, SlaveScopesList, _ExecToolMetaData
 
 TOOL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
@@ -113,36 +115,89 @@ class ToolsManager:
         return cls._instance
 
     def __init__(self, limit: int = 100):
-        self.cache = OrderedDict[str, CachedTool]()
+        self.cache = OrderedDict[ReferenceTo, CachedTool]()
+        self.names_cache = OrderedDict[str, ReferenceTo]()
         self.lock = RLock()
+        self.names_lock = RLock()
         self.limit = limit
         self.conn = conn_factory()
 
 
-    def __getitem__(self, name: str, /) -> CachedTool:
-        if name in self.cache:
-            with self.lock:
-                self.cache.move_to_end(name, last=False)
-                return self.cache[name]
+    def get_addr(self, id: str|ReferenceTo, /) -> ReferenceTo:
+        """
+        This function handles the names caching and resolution to the address. 
 
-        func: CachedTool = self.prepare_function(name)
+        It uses 3 ways to convert:
+            way 1, cached:
+                return self.names_cache[id]
+            way 2, coersable:
+                addr = int(id)
+                cache!
+                return addr
+            way 3, resolvable:
+                addr = resolve_to_addr(id)
+                cache!
+                return addr
+        """
+        
+
+
+    def __getitem__(self, id: str|ReferenceTo, /) -> CachedTool:
+        """
+        The actually main function of the entire thing.
+
+        This function resolves the name, and uses a LRU names cache.
+        It also resolves the function itself and uses LRU functions cache. 
+        TODO: Split that logic into smaller methods.
+
+        It also handles the coersion of something like "95134" into an addr. TODO : Actually do that.
+        """
+        if isinstance(id, str):
+            name = id
+
+            if name in self.names_cache:
+                addr = self.names_cache[name]
+            else:
+                addr = resolve_to_addr(id, self.conn)
+                with self.names_lock:
+                    self.names_cache[name] = addr
+                    self.names_cache.move_to_end(name, last=False)
+
+                if len(self.names_cache) > self.limit:
+                    with self.names_lock:
+                        self.names_cache.popitem()
+        else:
+            addr = id
+
+        if addr in self.cache:
+            with self.lock:
+                self.cache.move_to_end(addr, last=False)
+                return self.cache[addr]
+
+        func: CachedTool = self.prepare_function(addr)
 
         if len(self.cache) > self.limit - 1:
             with self.lock:
                 self.cache.popitem()
 
         with self.lock:
-            self.cache[name] = func
-            self.cache.move_to_end(name, last=False)
+            self.cache[addr] = func
+            self.cache.move_to_end(addr, last=False)
             return func
 
-    def invalidate(self, name: str, /):
-        """ Removes the tool from cache if found, does nothing otherwise. """
-        if name in self.cache:
+    def invalidate_name(self, name: str, /):
+        """ Removes the name from the cached names. For names changes. """
+        if name in self.names_cache:
             with self.lock:
-                self.cache.pop(name)
+                self.names_cache.pop(name)
 
-    def prepare_function(self, name: str) -> CachedTool:
+    def invalidate(self, addr: ReferenceTo, /):
+        """ Removes tool from cache. For tool changes. """
+        if addr in self.cache:
+            with self.lock:
+                self.cache.pop(addr)
+
+    def prepare_function(self, id: ReferenceTo) -> CachedTool:
         """
         This function loads a function from DB,
         and then builds the function in such a way that only arguments are left to fill in,
@@ -151,8 +206,8 @@ class ToolsManager:
         conn = self.conn
 
         body = conn.execute_fetchval("""
-        SELECT body FROM executables WHERE addr = resolve_name(%s);
-                     """, (name,))
+        SELECT body FROM executables WHERE addr = %s;
+                     """, (id,))
 
         tmp_file = NamedTemporaryFile("+rw", suffix=".py")
         tmp_file.write(body)

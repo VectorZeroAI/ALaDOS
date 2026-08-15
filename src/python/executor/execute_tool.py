@@ -131,22 +131,7 @@ class ToolsManager:
 
         It also handles the coersion of something like "95134" into an addr. TODO : Actually do that.
         """
-        if isinstance(id, str):
-            name = id
-
-            if name in self.names_cache:
-                addr = self.names_cache[name]
-            else:
-                addr = resolve_to_addr(id)
-                with self.names_lock:
-                    self.names_cache[name] = addr
-                    self.names_cache.move_to_end(name, last=False)
-
-                if len(self.names_cache) > self.limit:
-                    with self.names_lock:
-                        self.names_cache.popitem()
-        else:
-            addr = id
+        addr = resolve_to_addr(id)
 
         if addr in self.cache:
             with self.lock:
@@ -163,12 +148,6 @@ class ToolsManager:
             self.cache[addr] = func
             self.cache.move_to_end(addr, last=False)
             return func
-
-    def invalidate_name(self, name: str, /):
-        """ Removes the name from the cached names. For names changes. """
-        if name in self.names_cache:
-            with self.lock:
-                self.names_cache.pop(name)
 
     def invalidate(self, addr: ReferenceTo, /):
         """ Removes tool from cache. For tool changes. """

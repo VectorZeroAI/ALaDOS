@@ -63,7 +63,7 @@ All next items, on insert placed into:
 
 ____
 
-#### Anouther algoritm idea Navigatable Direction Vector:
+#### Anouther algoritm idea Navigatable Direction Vector [ ]:
 
 NDV is anouther idea on how to get linear positions required for viewing window. 
 
@@ -114,6 +114,7 @@ The "return" tool will return the results of this recursive iteration as the res
 The tracing of that will be done via a metadata fields such as "created_by" of type ADDR on slaves and masters, or specifically for recursive RMTs, they will utilize the metadata field "first_iteration" in the master metadata as well as "rmt" field in the metadata.
 
 This basically includes constructing a metadata store for the DAG that documents the runtime creation of the DAG.
+
 #### The metadata traces structure [ ]
 
 Now how should the metadata traces be structured?
@@ -205,7 +206,20 @@ AI should be capable of creating a tool that follows a specific protocol, and to
 
 Tools that are part of protocolls are not to be invoked directly.
 
-Tools should be allowed to be written in any language, via a "compiled" flag as well as compilation parameters. Will look into that in more details in the future. 
+##### Omni language tools [ ]
+Design is pretty simple, we first define a language in the DB table "languages"
+**languages**
+addr
+compiled BOOLEAN NOT NULL
+extension TEXT NOT NULL
+install_command BashText NOT NULL (Its OS dependant? Well ... write a tool that gives OS in return, and make AI figure it out. But what about built in languages? Python? Well in python it will be empty string cause python is there as dependancy of ALaDOS kernel.)
+compilation_command BashText (Must take filename from stdin and output to the same file just with .bin extension.)
+run_command BashText (Must take filename from stdin)
+CHECK compilation_command if compiled else run_command.
+package_list TEXT DEFAULT "" (package list that must be installed. Make a syscall for appending to it.)
+enforce_package_existance_Command BashText NOT NULL (Must take in the package_list from stdin and work based on that.)
+
+And from that specification its pretty clear how it would work. Support for different OS-es is pretty straitforward, we just assume Bash, if its powershell or cmd then ..... well AI sees the error, it corrects the error, and thats it. If it doesnt work cause launched from cmd? Well then I say to launch in WSL, windows is not officially supported.
 
 #### Builtins access from subprocess [x]
 
@@ -237,6 +251,198 @@ Scopes should include operations such as "calculate intersection %" and "merge".
 
 ___
 
+### Making everything a DSL [ ]
+
+The idea is that the model -> Enviroment interface is really imported, as proven many times by all harness research. To improve that in ALaDOS and for that aspect to match ALaDOS overall quallity, I plan to make most interactions go through Domain Specific languages, specifically a family of languages to be used in manipulating the enviroment better then just raw tool calls list.
+
+The languages together will form a language family for manipulating ALaDOS enviroment, and they will be co designed alongside eachother to not conflics and not collide in meanings of symbols, in order to not confuse the LLM.
+
+This kind of operations requires a comprehensive compiler and decompiler suite, which should use libraries for that, if possible, but target language is my own "Bytecode" in case of ALaDOS tools and in case of RMT, its actually a list os SQL commands or rows into the DB, so basically, I will have to hand write most back end myself, and the front end, e.g. lexer and parser, well it can be done by a library, but I will propably write it myself as well, since I kinda need to co design everything for everything to stay high quality. 
+
+This also allows the optimiser to perform very good optimisations since it can analyse the usage patterns and auto create abstractions, since the system is designed in such a way that an audit of it is really easy. 
+This also allows to give AI compiler errors over broken assumptions, like for example, function return types.
+We can enforce function contracts with args and returns to be explicid, and then do TypeChecking and other general Semantic Analysis of the programm. It also allows the fundamental features like OOO execution to exist freely in the system on every layer of itm abd the optimizer to grasp and optimise every layer of the system.
+
+#### Tools Language Specification [ ]
+Base syntax:
+```ALaDOS tools
+var_name1 = "literal string"
+var_name2 = {"literal": "json", "obj": ["e", "k", "t"]}
+var_name3 = ["literal", "list", "of", "string"]
+var_name4 = [{"literal": "list", "of": "json"}, {"obj": ["e", "k", "t", "s"]}]
+
+tool_name{"arg_name": "literal_string_val", "arg_name_2": var_name1, "explanation": "invokes the tool once with this json object as arguments."}
+tool_name[var_name_4] // invokes the tool once per element of array.
+// Tools must take in json objects, that means invocation on array of string is not allowed!
+tool_name{"arg_array": var_name4} // invokes tool with argument of type array.
+tool_name[["literal", "array", "execution"]]
+// top level tool execution without asignment just returns to the caller.
+
+var = tool_name[
+    anouther_tool_name[
+        tool_name{
+            "description": "arbitrary nesting allowed. All variables and nesting are optimised and rewritten anyways."
+        }
+    ]
+]
+
+(tool_with_side_effect{"param": "json"} tool_depending_on_side_effect{"params": "dont", "include": "the side effect."})
+// () is a chain of actions, it basically means that these actions hard depend on eachother in a non obvious way.
+// That construct forces them to be executed sequenatially, which avoids weird errors that arise due to Out Of Order execution of tools that implicidly depend on eachothers side effects.
+
+tool_name {"args": "normal"} // This is valid.
+val1="str" // this is valid
+val2={"json": "object"} // This is valid.
+val3="str" // Re Declaration of variables is not allowed. This raises SyntaxError. All variables must only be declared once. 
+
+// BTW comments like this are not actually supported, for model reasoning, use <think></think> blocks, you can use as many of them as you want and insert them anywhere you want, they are removed before processing of your output anyways. 
+```
+
+##### Chain usage example
+Suppose we have the tool "edit_knowledge", and we want to use it to edit a knowledge item.
+Suppose knowledge item is:
+**knowledge item**
+*description* = "Awesome description"
+*content* = "I am a sad little AI driver with no real skill."
+
+Now we want to edit the "I am a" part into "Vibecoders are", and "driver" into "drivers".
+Now, with actual tools you would simply write these 2 edits and execute them in a single call, but its not generalizably true with all operations.
+So we suppose our "edit_knowledge" tool is inferiour to the good "K.edit" tool that supports many edits. (Wait it currently doesnt ... WUT DE FUCK? Added a TODO there.)
+
+Okay, so avoiding that little confusion there, we write the change that we want like this:
+```ALaDOS tools
+edit_knowledge{"addr": "12345", "content_change": "<SEARCH></SEARCH>I am a<REPLACE>Vibecoders are</REPLACE>"}
+edit_knowledge{"addr": "12345", "content_change": "<SEARCH></SEARCH>driver<REPLACE>drivers</REPLACE>"}
+```
+But now these are OOO executed ... and we get no error cause they dont depend on eachother ... I am terrible at making examples.
+
+Anyways, wrapping them in a chain would execute them sequentially from top to bottom and from left to right, and that means that their implicid side effect dependancies are not explicid. Basically you have to make a chain if the tools depend on each others side effects, so nothing breaks.
+
+Chained example:
+```ALaDOS tools
+(
+edit_knowledge{"addr": "12345", "content_change": "<SEARCH></SEARCH>I am a<REPLACE>Vibecoders are</REPLACE>"}
+edit_knowledge{"addr": "12345", "content_change": "<SEARCH></SEARCH>driver<REPLACE>drivers</REPLACE>"}
+)
+```
+Now indenting is not relevant in this language, so you can actually do whatever you want with embeddings. Whitespace is relevant in telling where words end and start, but new lines arent. (Except when they are used as whitespace, then yeah, but you get the point, basically how C does it!)
+
+
+##### Notes:
+
+The design of anouther DAG layer below slaves offers us anouther paralization capability: The split between Semantic Cores, e.g. the cores that handle slaves, and the Virtual Mashine cores, that handle the actual tool calls. The Virtual Mashine cores can execute the AST top level nodes in paralel, since we know exactly what tools depend on each others outputs and side effects and which ones dont at parsing time.
+
+
+
+#### RMT Language Specification [ ]
+
+Base syntax:
+```RMT DSL
+node first_action {
+    instruction = ""
+    scope = ""
+    window = ["", ""]
+}
+
+node mid_action_1 {
+    instruction = ""
+    scope = ""
+    window = [""]
+}
+
+node mid_action_2 {
+    instruction = ""
+    scope = ""
+    window = [""]
+}
+
+node mid_action_3 {
+    instruction = ""
+    scope = ""
+    window = [""]
+}
+
+node final_1 {
+    instruction = ""
+    scope = ""
+    window = [""]
+}
+
+node final_2 {
+    instruction = ""
+    scope = ""
+    window = [""]
+}
+
+first_action -> mid_action_1 -> final_1
+first_action -> mid_action_2 -> final_1
+first_action -> mid_action_3 -> final_1
+mid_action_1 -> final_2
+mid_action_2 -> final_2
+mid_action_3 -> final_2
+```
+name can not be node, that is invalid and will error.
+
+The graph is constructed from references, which means that every usage of a name of a node is that node, and not a copy of it, and every declared node will be executed exactly once.
+
+Window definition and rmt usage:
+```RMT DSL
+window create name {
+    instruction = "Instruction to creating window"
+    scope = ""
+}
+
+window referense name {
+    addr = "12345"
+    name = "ImportantWindow"
+}
+
+rmt rmt_id invoke as rmt_node_name with arguments {"json": "arguments", "for": {"the": "rmt"}}
+
+node example {
+    instruction = ""
+}
+
+rmt_node_name -> example
+```
+In window create, a temporary window is created and then deleted once the RMT finished executing.
+This is acomplished using the temporary object registration, which is described in its respective section of this document.
+
+In window alias, you declare an alias for an existing viewing window that is already registered in the DB, and that you want to use without changes.
+
+The name or addr in window alias is the enviroment address or name.
+
+One is required.
+
+rmt invokations can be referensed as nodes in the graph composition, and behave like nodes in the graph.
+
+##### Scoped Items
+
+Also known as temporary items, are a construct planned for usage with RMTs, as well as in other parts, optionally. 
+The specification is kinda like this:
+**tmp_items**
+addr REF addrs ON DELETE CASCADE ON UPDATE CASCADE
+scope_addr REF results ON DELETE CASCADE ON UPDATE CASCADE
+
+**TRIGGER AFTER INSERT/UPDATE ON tmp_items**
+NOTIFY tmp_items_changed changed_item
+
+And there is a **python listener**. (Or not even python, if we go the "hyperscale" route. But propably not needed, but really, it could be a subprocess. Or a python dedicated thread. But a custom listener is fine for now.)
+
+Event listener does this: 
+LISTEN tmp_items_changed
+Keep track of them
+LISTEN unblocked_result (add the trigger if it doesnt exist yet)
+
+If unblocked_result in tmp_item.scope_addr:
+    DELETE FROM addrs WHERE addr = tmp_item.addr
+
+Use a dict to efficiently keep track of these items.
+
+Metadata ... well We could keep record of these in metadata if wished for, it would be relatively easy.
+
+___
+
 ### Make views into Items [ ]
 
 Includes the making of more types of views, which will be described in the next section.
@@ -251,21 +457,7 @@ with possible cloning/branching paths. (More complex then MESI controlls, but DA
 
 Also propably scoping and branching of the same viewing window, which means creating a copy of it to work on for yourself insdead of working on public version.
 
-This also includes the rewrite of the rmt parser and serialiser into a new form for the new DSL speficiation.
-New langauge syntax:
-RMT usage:
-{id='name of addr', args='{"json": "args", "allow": [{"full": "json"}, "speficiation", "."]}'}
-
-Window definition:
-window_name := (slave that makes it)
-OR
-window_name := {rmt that makes it}
-
-Window attachment to slaves:
-
-(instruction='Test', ..., window=['window_name', 'optionally many'])
-
-Window attachment to masters and slaves in the builtins will be simply a new argument in there. 
+Window attachment to masters and slaves in the builtins will be simply a new argument in there.
 
 Item Loads will be deprecated in favour of attaching a "comulative window"
 

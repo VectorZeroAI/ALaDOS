@@ -89,8 +89,6 @@ class NamesCacheManager(Singleton):
 
         return (coearsed, item_list)
 
-            
-
 
 
     def invalidate(self, item: str|tuple[str, ...]) -> None:
@@ -137,7 +135,9 @@ class NamesCacheManager(Singleton):
         return results
 
 
+
 names_cache_manager = NamesCacheManager(1000)
+
 
 
 def resolve_to_addr(item: ReferenceTo|str) -> ReferenceTo:
@@ -166,6 +166,7 @@ def resolve_to_addr(item: ReferenceTo|str) -> ReferenceTo:
 
     return item
     
+
 
 def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str]) -> list[ReferenceTo]:
     """
@@ -199,6 +200,7 @@ def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str]) -> list[Referen
     return addrs
     
 
+
 def resolve_self(slave_addr: ReferenceTo, names_and_addrs: Sequence[str|ReferenceTo], conn: Conn) -> list[str|ReferenceTo]:
     """
     Resolved the "self" string in the input list to the slaves result address, slave address required.
@@ -214,3 +216,6 @@ def resolve_self(slave_addr: ReferenceTo, names_and_addrs: Sequence[str|Referenc
             names_and_addrs[i] = result_addr
     
     return names_and_addrs
+
+
+

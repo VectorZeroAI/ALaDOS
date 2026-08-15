@@ -137,7 +137,7 @@ class ToolsManager:
             if name in self.names_cache:
                 addr = self.names_cache[name]
             else:
-                addr = resolve_to_addr(id, self.conn)
+                addr = resolve_to_addr(id)
                 with self.names_lock:
                     self.names_cache[name] = addr
                     self.names_cache.move_to_end(name, last=False)

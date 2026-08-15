@@ -341,7 +341,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 curr = state
 
                 items = curr.paradox_e.items
-                addrs_items = resolve_to_addrs(items, conn)
+                addrs_items = resolve_to_addrs(items)
 
                 addrs_types = conn.execute("""
                 SELECT addr, type FROM addrs_tables WHERE addr = ANY(%s);

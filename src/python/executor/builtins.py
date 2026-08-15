@@ -111,7 +111,7 @@ def k_edit(_meta: _ExecToolMetaData,
     """
     conn = _meta.conn
 
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
 
     def get_new_content() -> str:
         k_data = conn.execute("""
@@ -160,7 +160,7 @@ def k_edit(_meta: _ExecToolMetaData,
 def k_read(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """ Resolve knowledge item by ID. """
     conn = _meta.conn
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
 
     result = conn.execute_fetchval("""
     SELECT content FROM knowledge WHERE addr = %s
@@ -255,7 +255,7 @@ def edit_tool(_meta: _ExecToolMetaData,
 
     conn = _meta.conn
 
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
 
     def get_new_content() -> str:
         executable_data = conn.execute("""
@@ -314,7 +314,7 @@ def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """ Adds an item to the context by addr or by Name. Addr or Name must be provided. Items of any type may be added via this function. """
     conn = _meta.conn
     
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
     
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
@@ -361,8 +361,7 @@ def add_slave(instruction: str,
     required_results_addrs = []
 
     required_results_addrs = resolve_to_addrs(
-        resolve_self(_meta.slave_id, required_results_ids, conn),
-        conn
+        resolve_self(_meta.slave_id, required_results_ids, conn)
     )
     
     if slave_type == "planner":
@@ -503,7 +502,7 @@ def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     """
     conn = _meta.conn
 
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
 
     try:
         addr_type = conn.execute_fetchval("""
@@ -690,7 +689,7 @@ def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     """
     conn = _meta.conn
 
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
 
     conn.execute("""
     DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
@@ -862,7 +861,7 @@ def create_master(instruction: str,
 
     required_ids = resolve_self(_meta.slave_id, required_ids, conn)
 
-    required_addrs = resolve_to_addrs(required_ids, conn)
+    required_addrs = resolve_to_addrs(required_ids)
 
     addr = conn.execute_fetchval("""
     SELECT new_master(
@@ -923,7 +922,7 @@ def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> str:
         {"dsl": "dsl_string", "description": "description_str"}
     """
     conn = _meta.conn
-    addr = resolve_to_addr(id, conn)
+    addr = resolve_to_addr(id)
     serial = serialize(addr, conn)
     description = conn.execute_fetchval("""
     SELECT description FROM vector_ops WHERE addr = %s;
@@ -1001,7 +1000,7 @@ def tool_rmt_create_from_master(_meta: _ExecToolMetaData,
     returns rmt addr
     """
     conn = _meta.conn
-    m_addr = resolve_to_addr(master_id, conn)
+    m_addr = resolve_to_addr(master_id)
     addr = create_from_master(m_addr, conn, name)
 
     conn.execute("""
@@ -1024,7 +1023,7 @@ def rmt_edit_description(_meta: _ExecToolMetaData, rmt_id: Addr|Name, new_descri
     """
     conn = _meta.conn
     
-    addr = resolve_to_addr(rmt_id, conn)
+    addr = resolve_to_addr(rmt_id)
     
     occ_check(_meta.occ_last_change, addr, conn, partial(serialize, addr, conn))
 
@@ -1063,8 +1062,8 @@ def rmt_delete_node(_meta: _ExecToolMetaData, rmt_slave_id: Addr|Name, template_
     """
     conn = _meta.conn
     
-    addr = resolve_to_addr(rmt_slave_id, conn)
-    template_addr = resolve_to_addr(template_id, conn)
+    addr = resolve_to_addr(rmt_slave_id)
+    template_addr = resolve_to_addr(template_id)
     
     occ_check(_meta.occ_last_change, template_addr, conn, partial(serialize, template_addr, conn))
 
@@ -1106,7 +1105,7 @@ def rmt_insert_node(_meta: _ExecToolMetaData,
 
     conn = _meta.conn
     
-    rmt_addr = resolve_to_addr(rmt_id, conn)
+    rmt_addr = resolve_to_addr(rmt_id)
 
     occ_check(_meta.occ_last_change, rmt_addr, conn, partial(serialize, rmt_addr, conn))
 
@@ -1143,7 +1142,7 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
     returns the activated masters addr
     """
     conn = _meta.conn
-    addr = resolve_to_addr(rmt_id, conn)
+    addr = resolve_to_addr(rmt_id)
 
     depends_on = resolve_self(_meta.slave_id, depends_on, conn)
 
@@ -1165,7 +1164,7 @@ def rmt_edit_instruction(_meta: _ExecToolMetaData, node_id: Addr|Name, sr_block:
     """
     conn = _meta.conn
     
-    addr = resolve_to_addr(node_id, conn)
+    addr = resolve_to_addr(node_id)
 
     template_addr = conn.execute_fetchval("""
     SELECT template_addr FROM rmt_slaves WHERE addr = %s;
@@ -1193,7 +1192,7 @@ def rmt_change_scope(_meta: _ExecToolMetaData, node_id: Addr|Name, new_scope: Sl
     """
     conn = _meta.conn
 
-    addr = resolve_to_addr(node_id, conn)
+    addr = resolve_to_addr(node_id)
 
 
     template_addr = conn.execute_fetchval("""
@@ -1230,7 +1229,7 @@ def tool_register_event_reaction_rmt(_meta: _ExecToolMetaData,
     """
     conn = _meta.conn
 
-    addr = resolve_to_addr(rmt_id, conn)
+    addr = resolve_to_addr(rmt_id)
 
     addr = register_reaction_rmt(event_path, addr, args, conn)
 

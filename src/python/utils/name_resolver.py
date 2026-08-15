@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 
-from traceback import format_exception
-from typing import Iterable, Sequence, OrderedDict, overload
 from threading import RLock
-
-from ..utils.conn_factory import conn_factory
+from traceback import format_exception
+from typing import Iterable, OrderedDict, Sequence, overload
 
 from ..executor.types import Conn
-from ..types import ReferenceTo, CacheManager, Singleton
-
+from ..types import ReferenceTo, Singleton
+from ..utils.conn_factory import conn_factory
 from .logger import log_json
-
 
 
 class NamesCacheManager(Singleton):
@@ -143,7 +140,7 @@ class NamesCacheManager(Singleton):
 names_cache_manager = NamesCacheManager(1000)
 
 
-def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:
+def resolve_to_addr(item: ReferenceTo|str) -> ReferenceTo:
     """
     Tries to resolve an items name if its name.
     Always returns address, raises RuntimeError if no address found.
@@ -156,16 +153,7 @@ def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:
     """
     if isinstance(item, str):
         try:
-            return int(item)
-        except ValueError:
-            # Didnt work :(
-            pass
-            ## TODO : Move the names cache into here, cause here is where the entire shebang with names happens anyways.
-            ## Although postgres does cache internally as well, its always better to cache in python process for better speed. 
-            ## Although what am I talking about, its literaly python!
-
-        try:
-            return conn.execute_fetchval("SELECT resolve_name(%s)", (item,))
+            return names_cache_manager[item]
         except Exception as e:
             log_json({
                 'type': 'util',
@@ -175,29 +163,27 @@ def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:
                 'traceback': str(format_exception(e))
             })
             raise RuntimeError(f"resolution failed due to {e}")
-    else:
-        return item
+
+    return item
     
 
-def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str], conn: Conn) -> list[ReferenceTo]:
+def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str]) -> list[ReferenceTo]:
     """
     Resolved the the strings of a list into the numeric addressess.
     Raises RuntimeError if a name couldnt be resolved.
     """
 
-    names_and_addrs = list(names_and_addrs)
-    str_deps: list[str] = []
-    int_deps: list[ReferenceTo] = []
-
+    to_resolve: list[str] = []
+    were_addrs: list[int] = []
     for i in names_and_addrs:
         if isinstance(i, str):
-            str_deps.append(i)
+            to_resolve.append(i)
         else:
-            int_deps.append(i)
+            were_addrs.append(i)
 
+    to_resolve_tuple: tuple[str, ...] = tuple(to_resolve)
     try:
-        addrs = conn.executemany("SELECT resolve_name(%s)", [(i,) for i in str_deps], returning=True)
-        addrs = [a[0] for a in addrs]
+        addrs = names_cache_manager[to_resolve_tuple]
     except Exception as e:
         log_json({
             'type': 'util',
@@ -207,10 +193,11 @@ def resolve_to_addrs(names_and_addrs: Iterable[ReferenceTo|str], conn: Conn) -> 
             'traceback': str(format_exception(e))
         })
         raise RuntimeError(f"Resolution failed with error {e}, because resolve_name somehow let an None through, or something was wrong upstream")
+    
+    addrs.extend(were_addrs)
 
-    int_deps.extend(addrs)
-
-    return int_deps 
+    return addrs
+    
 
 def resolve_self(slave_addr: ReferenceTo, names_and_addrs: Sequence[str|ReferenceTo], conn: Conn) -> list[str|ReferenceTo]:
     """

@@ -116,31 +116,10 @@ class ToolsManager:
 
     def __init__(self, limit: int = 100):
         self.cache = OrderedDict[ReferenceTo, CachedTool]()
-        self.names_cache = OrderedDict[str, ReferenceTo]()
         self.lock = RLock()
         self.names_lock = RLock()
         self.limit = limit
         self.conn = conn_factory()
-
-
-    def get_addr(self, id: str|ReferenceTo, /) -> ReferenceTo:
-        """
-        This function handles the names caching and resolution to the address. 
-
-        It uses 3 ways to convert:
-            way 1, cached:
-                return self.names_cache[id]
-            way 2, coersable:
-                addr = int(id)
-                cache!
-                return addr
-            way 3, resolvable:
-                addr = resolve_to_addr(id)
-                cache!
-                return addr
-        """
-        
-
 
     def __getitem__(self, id: str|ReferenceTo, /) -> CachedTool:
         """

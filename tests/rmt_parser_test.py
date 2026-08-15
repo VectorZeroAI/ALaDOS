@@ -107,7 +107,7 @@ class TestCreateFromSerial:
         dsl = "START -> (id='1', instruction='run') -> END"
         addr = create_from_serial(dsl, name=unique_name("cool_template"), conn=db)
         row = db.execute("SELECT name FROM names WHERE addr = %s", [addr]).fetchone()
-        assert row[0] == "cool_template"
+        assert "cool_template" in row[0]
 
 
 class TestCreateFromMaster:

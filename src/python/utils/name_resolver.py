@@ -1,12 +1,146 @@
 #!/usr/bin/env python3
 
 from traceback import format_exception
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, OrderedDict, overload
+from threading import RLock
 
-from python.executor.types import Conn
-from python.types import ReferenceTo
+from ..utils.conn_factory import conn_factory
+
+from ..executor.types import Conn
+from ..types import ReferenceTo, CacheManager, Singleton
 
 from .logger import log_json
+
+
+
+class NamesCacheManager(Singleton):
+    """
+    Caches the names address, so it doesnt need to be DB resolved again. 
+    
+    The order of LRU inform of OrderedDict is inverted,
+    because default appention is to the last item, so the fist is the last appended.
+    """
+    def __init__(self, limit: int) -> None:
+        self.cache = OrderedDict[str, ReferenceTo]()
+        self.lock = RLock()
+        self.conn = conn_factory()
+        self.limit = limit
+    
+
+
+    @overload
+    def __getitem__(self, key: str, /) -> int:
+        ...
+
+    @overload
+    def __getitem__(self, key: tuple[str, ...], /) -> list[int]: 
+        ...
+
+    def __getitem__(self, key: str|tuple[str, ...], /) -> list[int]|int:
+        coersed, rest = self.coearse(key)
+
+        cache_hits, cache_misses = self.hit_cache(rest)
+
+        new_addrs = self.batch_resolve_names(cache_misses)
+
+        for a, n in zip(new_addrs, cache_misses, strict=True):
+            with self.lock:
+                self.cache[n] = a
+
+            if len(self.cache) > self.limit:
+                with self.lock:
+                    for _ in range(len(self.cache) - self.limit):
+                        self.cache.popitem(last=False)
+        
+        coersed.extend(cache_hits)
+        coersed.extend(new_addrs)
+        
+        if len(cache_hits) == 1:
+            return cache_hits[0] # This handles the -> int case.
+
+        return cache_hits # This handles the -> list[int] case.
+        
+
+    def coearse(self, item: str|tuple[str, ...]) -> tuple[list[int], list[str]]:
+        """
+        Tries to coerse the string into an int,
+        which is defined edge case and is supposed to be handled that way. 
+
+        "120947" -> 120947
+        """
+
+        if isinstance(item, str):
+            try:
+                return ([int(item)], [])
+            except ValueError:
+                return ([], [item])
+        
+        coearsed: list[int] = []
+        coearsed_worked: list[str] = []
+
+        for n in item:
+            try:
+                coearsed.append(int(n))
+                coearsed_worked.append(n)
+            except ValueError:
+                pass
+
+        item_list = list(item)
+        for i in range(len(item_list), 0, -1):
+            if i in coearsed_worked:
+                item_list.pop(i)
+
+        return (coearsed, item_list)
+
+            
+
+
+
+    def invalidate(self, item: str|tuple[str, ...]) -> None:
+        """ Invalidates the name. """
+        if isinstance(item, str):
+            if item in self.cache:
+                with self.lock:
+                    self.cache.pop(item)
+                    return
+
+        for n in item:
+            with self.lock:
+                if item in self.cache:
+                    self.cache.pop(item)
+
+
+
+    def batch_resolve_names(self, names: Iterable[str]) -> Iterable[int]:
+        """
+        Batch resolves all the cache misses efficiently.
+        Bypasses resolve_name, insdead goes directly to source. 
+        """
+        addrs_fetch: list[tuple[int]] = self.conn.execute("""
+        SELECT n.addr
+        FROM unnest(%s) WITH ORDINALITY AS q(name, pos)
+            JOIN names n ON q.name = n.name
+        ORDER BY q.pos;
+                          """, (names,)).fetchall()
+
+        addrs: list[int] = [a[0] for a in addrs_fetch]
+        return addrs
+
+
+
+    def hit_cache(self, key: list[str]) -> tuple[list[int], list[str]]:
+        """ Retrieves stuff for the key. Returns tuple (cache_hits, cache_misses). """
+        results = ([], [])
+        for k in key:
+            with self.lock:
+                if k in self.cache:
+                    results[0].append(self.cache[k])
+                else:
+                    results[1].append(k)
+        return results
+
+
+names_cache_manager = NamesCacheManager(1000)
 
 
 def resolve_to_addr(item: ReferenceTo|str, conn: Conn) -> ReferenceTo:

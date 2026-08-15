@@ -37,7 +37,7 @@ SyscallsQueues: TypeAlias = dict[int, SyscallsQueue]
 class SingletonMeta(type):
     _instances: dict[type, object] = {}
 
-    def __call__(cls, *args, **kwargs) -> Self:
+    def __call__(cls, *args, **kwargs):
         if SingletonMeta._instances.get(cls) is None:
             SingletonMeta._instances[cls] = super().__call__(*args, **kwargs)
         return SingletonMeta._instances[cls]
@@ -45,7 +45,7 @@ class SingletonMeta(type):
 class Singleton(metaclass=SingletonMeta):
     pass
 
-class CacheManager[T](Protocol, Singleton):
+class CacheManager[T_i, T_o](Protocol):
     """
     Parent class for all the Cache managers, as well as protocoll for all the Cache Managers.
     
@@ -57,12 +57,16 @@ class CacheManager[T](Protocol, Singleton):
         If item is not found in cache, it must resolve it and still give it.
         __getitem__ can not raise, and can only return the item,
         depending on it being cached or not, it takes a long or a short time.
+
+
+    !!! Never make this into an inheritable class because you still have to manually enter the invalidation TRIGGER and Listener and Interrupt !!!
     """
+
     def __init__(self, limit: int) -> None:
         ...
 
-    def invalidate(self, item: T) -> None:
+    def invalidate(self, item: T_i) -> None:
         ...
 
-    def __getitem__(self, item: T) -> T:
+    def __getitem__(self, item: T_i) -> T_o:
         ...

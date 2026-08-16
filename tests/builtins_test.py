@@ -5,7 +5,6 @@ Uses a transaction‑rolled‑back test database and mocks external services.
 """
 
 import json
-from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -27,8 +26,7 @@ from python.executor.builtins import (
     tool_register_event_reaction_execute_slave,
     web_searcher_function_fulltext, search_for_urls, web_request, web_post,
 )
-from python.executor.types import _ExecToolMetaData, ParadoxDetected
-from python.utils.name_resolver import resolve_to_addr
+from python.executor.types import ParadoxDetected
 
 from .conftest import db, meta, unique_name  # noqa: F401 – fixtures imported
 
@@ -47,11 +45,11 @@ class TestKnowledgeTools:
         k_create(content="old text", description="desc", name=name, _meta=meta)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s",
-            (resolve_to_addr(name),),
+            (meta.conn.resolve_to_addr(name),),
         )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         content = meta.conn.execute_fetchval("SELECT content FROM knowledge WHERE addr=%s", (addr,))
         assert content == "new text"
 
@@ -60,11 +58,11 @@ class TestKnowledgeTools:
         k_create(content="c", description="old d", name=name, _meta=meta)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s",
-            (resolve_to_addr(name,),)
+            (meta.conn.resolve_to_addr(name,),)
         )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, description_change=sr, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         desc = meta.conn.execute_fetchval("SELECT description FROM vector_ops WHERE addr=%s", (addr,))
         assert desc == "new d"
 
@@ -73,11 +71,11 @@ class TestKnowledgeTools:
         k_create(content="old c", description="old d", name=name, _meta=meta)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s",
-            (resolve_to_addr(name),),
+            (meta.conn.resolve_to_addr(name),),
         )
         sr = "<SEARCH>old</SEARCH><REPLACE>new</REPLACE>"
         k_edit(id=name, content_change=sr, description_change=sr, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         row = meta.conn.execute(
             "SELECT k.content, v.description FROM knowledge k JOIN vector_ops v ON k.addr = v.addr WHERE k.addr = %s",
             (addr,)
@@ -96,7 +94,7 @@ class TestContextTools:
         k_create(content="c", description="d", name=name, _meta=meta)
         res = context_add(id=name, _meta=meta)
         assert res == ""
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM master_load WHERE master_addr=%s AND item_addr=%s",
             (meta.master_id, addr)
@@ -107,7 +105,7 @@ class TestContextTools:
         name = unique_name("unload")
         k_create(content="u", description="d", name=name, _meta=meta)
         context_add(id=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         res = unload_item(id=name, _meta=meta)
         assert res == ""
         cnt = meta.conn.execute_fetchval(
@@ -119,7 +117,7 @@ class TestContextTools:
     def test_window_land_knowledge(self, meta):
         name = unique_name("anchor_k")
         k_create(content="x", description="d", name=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         meta.conn.execute(
             "UPDATE vector_ops SET emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s",
             (addr,)
@@ -133,7 +131,7 @@ class TestContextTools:
     def test_window_land_executable(self, meta):
         name = unique_name("anchor_e")
         create_tool(description="d", header="h", body="b", name=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         meta.conn.execute(
             "UPDATE vector_ops SET emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s",
             (addr,)
@@ -147,7 +145,7 @@ class TestContextTools:
     def test_window_size_change(self, meta):
         name = unique_name("sz")
         k_create(content="s", description="d", name=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         meta.conn.execute(
             "UPDATE vector_ops SET emb = array_fill(0.0, ARRAY[768])::vector(768) WHERE addr = %s",
             (addr,)
@@ -166,7 +164,7 @@ class TestContextTools:
         for i in range(3):
             name = unique_name(f"mv_{i}")
             k_create(content=f"item{i}", description=f"desc{i}", name=name, _meta=meta)
-            addr = resolve_to_addr(name)
+            addr = meta.conn.resolve_to_addr(name)
             conn.execute(
                 "UPDATE vector_ops SET emb = array_fill(%s::float, ARRAY[768])::vector(768), position = %s WHERE addr = %s",
                 (i * 0.1, 100 + i * 100, addr)
@@ -218,7 +216,7 @@ class TestGoalTools:
         )
         res = add_slave(
             instruction="do plan",
-            slave_type="planner",
+            slave_type="planner", # pyright: ignore # NOTE : Because its a fallback for LLM fuckery.
             _meta=meta,
         )
         assert res == ""
@@ -275,7 +273,7 @@ class TestToolTools:
     def test_edit_tool(self, meta):
         name = unique_name("tool_edit")
         create_tool(description="desc", header="old h", body="old b", name=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s", (addr,)
         )
@@ -289,7 +287,7 @@ class TestToolTools:
     def test_edit_tool_description_only(self, meta):
         name = unique_name("tool_desc")
         create_tool(description="old desc", header="h", body="b", name=name, _meta=meta)
-        addr = resolve_to_addr(name)
+        addr = meta.conn.resolve_to_addr(name)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s", (addr,)
         )
@@ -402,7 +400,7 @@ class TestRmtTools:
         dsl = "START -> (instruction='a') -> (instruction='b') -> END"
         name = unique_name("rmt_ser")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         ser = rmt_serialise(id=rmt_addr, _meta=meta)
         assert "a" in ser and "b" in ser
 
@@ -410,7 +408,7 @@ class TestRmtTools:
         dsl = "START -> (instruction='x') -> END"
         name = unique_name("rmt_ser2")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         ser = rmt_serialise(id=rmt_addr, _meta=meta)
         assert "x" in ser
 
@@ -459,7 +457,7 @@ class TestRmtTools:
         dsl = "START -> (instruction='a') -> END"
         name = unique_name("rmt_desc")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="old desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
         )
@@ -471,7 +469,7 @@ class TestRmtTools:
         dsl = "START -> (id='n1', instruction='init') -> END"
         name = unique_name("rmt_edit")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         node_addr = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='init'", (rmt_addr,)
         )
@@ -482,7 +480,7 @@ class TestRmtTools:
         )
         new_name = unique_name("new_node")
         rmt_insert_node(rmt_id=rmt_addr, instruction="new", name=new_name, depends_on=[node_name], _meta=meta)
-        new_addr = resolve_to_addr(new_name)
+        new_addr = meta.conn.resolve_to_addr(new_name)
         meta.occ_last_change = meta.conn.execute_fetchval(
             "SELECT updated_at FROM vector_ops WHERE addr = %s", (rmt_addr,)
         )
@@ -496,7 +494,7 @@ class TestRmtTools:
         dsl = "START -> (id='n1', instruction='first') -> END"
         name = unique_name("rmt_reqby")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         node1_addr = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='first'", (rmt_addr,)
         )
@@ -511,14 +509,14 @@ class TestRmtTools:
         deps = meta.conn.execute_fetchval(
             "SELECT deps FROM rmt_slaves WHERE addr=%s", (node1_addr,)
         )
-        new_addr = resolve_to_addr(new_name)
+        new_addr = meta.conn.resolve_to_addr(new_name)
         assert new_addr in deps
 
     def test_rmt_activate_as_master(self, meta):
         dsl = "START -> (instruction='do work') -> END"
         name = unique_name("rmt_act")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         activated_master_addr = int(rmt_activate_as_master(rmt_id=rmt_addr, inputs={}, _meta=meta))
         slave_count = meta.conn.execute_fetchval(
             "SELECT count(*) FROM slaves WHERE instruction='do work' AND master_addr = %s",
@@ -530,7 +528,7 @@ class TestRmtTools:
         dsl = "START -> (instruction='Use ${{color}}') -> END"
         name = unique_name("rmt_inputs")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         rmt_activate_as_master(rmt_id=rmt_addr, inputs={"color": "blue"}, _meta=meta)
         instr = meta.conn.execute_fetchval(
             "SELECT instruction FROM slaves WHERE instruction LIKE '%%blue%%'"
@@ -541,7 +539,7 @@ class TestRmtTools:
         dsl = "START -> (id='editme', instruction='old text') -> END"
         name = unique_name("rmt_instr")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         node_addr = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='old text'", (rmt_addr,)
         )
@@ -558,7 +556,7 @@ class TestRmtTools:
         dsl = "START -> (id='sc', instruction='t', scope='general') -> END"
         name = unique_name("rmt_scope")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         node_addr = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='t'", (rmt_addr,)
         )
@@ -575,7 +573,7 @@ class TestRmtTools:
         dsl = "START -> (id='1', instruction='A') -> (id='2', instruction='B') -> (id='3', instruction='C') -> END"
         name = unique_name("rmt_cat")
         rmt_create_from_serial(dsl=dsl, name=name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(name)
+        rmt_addr = meta.conn.resolve_to_addr(name)
         nodeB = meta.conn.execute_fetchval(
             "SELECT addr FROM rmt_slaves WHERE template_addr=%s AND instruction='B'", (rmt_addr,)
         )
@@ -603,13 +601,13 @@ class TestEventTools:
             name=name,
             _meta=meta
         )
-        assert str(resolve_to_addr(name)) in str_ret
+        assert str(meta.conn.resolve_to_addr(name)) in str_ret
 
     def test_register_reaction_rmt(self, meta):
         dsl = "START -> (instruction='react') -> END"
         rmt_name = unique_name("react_rmt")
         rmt_create_from_serial(dsl=dsl, name=rmt_name, _meta=meta, description="desc")
-        rmt_addr = resolve_to_addr(rmt_name)
+        rmt_addr = meta.conn.resolve_to_addr(rmt_name)
         consumer_addr = tool_register_event_reaction_rmt(
             event_path="ev.react",
             rmt_id=rmt_addr,

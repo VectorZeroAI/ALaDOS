@@ -12,7 +12,6 @@ from ..utils.logger import log_json
 from ..executor.types import SlaveScope, SlaveScope_
 from ..types import ReferenceTo
 from ..utils.conn_factory import Conn
-from ..utils.name_resolver import resolve_to_addr, resolve_to_addrs
 from ..utils.sr_edit import SearchAndReplaceBlock, _sr_block_parser
 from .dsl import parse, serialise
 
@@ -152,8 +151,8 @@ def create_from_range(
         ) -> ReferenceTo:
     """ Creates a workflow from a range of slaves. They must be connected to eachother directly via the DAG, else ValueError is raised. """
 
-    start_node_id = resolve_to_addr(start_node_id)
-    end_node_id = resolve_to_addr(end_node_id)
+    start_node_id = conn.resolve_to_addr(start_node_id)
+    end_node_id = conn.resolve_to_addr(end_node_id)
 
     forwards_nodes = conn.execute_fetchval("SELECT recursive_walk_forwards_slaves_dag(%s);", (start_node_id,))
     backwards_nodes = conn.execute_fetchval("SELECT recursive_walk_backwards_slaves_dag(%s);", (end_node_id,))
@@ -322,8 +321,8 @@ def insert_node(rmt_id: ReferenceTo,
                 ) -> ReferenceTo:
     """ Inserts a node into the rmt DAG. """
 
-    depends_on = resolve_to_addrs(depends_on)
-    required_by = resolve_to_addrs(required_by)
+    depends_on = conn.resolve_to_addrs(depends_on)
+    required_by = conn.resolve_to_addrs(required_by)
     
     with conn.transaction():
         addr = conn.execute_fetchval("""
@@ -365,7 +364,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
 
     depends_on = list(depends_on)
     
-    depends_on = resolve_to_addrs(depends_on)
+    depends_on = conn.resolve_to_addrs(depends_on)
 
     with conn.transaction():
         master_addr = conn.execute_fetchval("""
@@ -384,7 +383,7 @@ def activate_as_master(rmt_addr: ReferenceTo,
         SELECT result_addr FROM masters WHERE addr = %s;
                                       """, (master_addr,))
 
-    required_by = resolve_to_addrs(required_by)
+    required_by = conn.resolve_to_addrs(required_by)
 
     if len(required_by) > 0:
         conn.executemany("""

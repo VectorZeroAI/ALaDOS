@@ -15,8 +15,6 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from python.utils.name_resolver import resolve_to_addr
-
 from ..types import ToolCall
 from ..utils.conn_factory import conn_factory
 from ..utils.logger import log_json
@@ -131,7 +129,7 @@ class ToolsManager:
 
         It also handles the coersion of something like "95134" into an addr. TODO : Actually do that.
         """
-        addr = resolve_to_addr(id)
+        addr = self.conn.resolve_to_addr(id)
 
         if addr in self.cache:
             with self.lock:

@@ -20,7 +20,6 @@ from ..utils.config_handlers import load_apis_from_text
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.llm_to_json import llm_to_json
 from ..utils.logger import log_json
-from ..utils.name_resolver import resolve_to_addrs
 from ..utils.uqueue import Uqueue
 from . import embedder
 from .api_calls_handler import api_calls_block
@@ -341,7 +340,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 curr = state
 
                 items = curr.paradox_e.items
-                addrs_items = resolve_to_addrs(items)
+                addrs_items = conn.resolve_to_addrs(items)
 
                 addrs_types = conn.execute("""
                 SELECT addr, type FROM addrs_tables WHERE addr = ANY(%s);

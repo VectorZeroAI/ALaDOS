@@ -18,7 +18,6 @@ from psycopg.sql import SQL
 from psycopg.types import composite
 
 from ..types import ReferenceTo
-from .logger import log_json
 
 
 class NoValue(RuntimeError):
@@ -247,5 +246,4 @@ async def async_conn_factory_raw(db_name: str|None = None) -> psycopg.AsyncConne
     return conn
 
 
-type Cache[T_i, T_o] = OrderedDict[T_i, T_o] # NOTE : New python syntax, Love it.
-
+from .logger import log_json # noqa F402

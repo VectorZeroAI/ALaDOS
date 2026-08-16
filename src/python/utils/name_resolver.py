@@ -113,7 +113,7 @@ class NamesCacheManager(Singleton):
         """
         addrs_fetch: list[tuple[int]] = self.conn.execute("""
         SELECT n.addr
-        FROM unnest(%s) WITH ORDINALITY AS q(name, pos)
+        FROM unnest(%s::TEXT[]) WITH ORDINALITY AS q(name, pos)
             JOIN names n ON q.name = n.name
         ORDER BY q.pos;
                           """, (names,)).fetchall()

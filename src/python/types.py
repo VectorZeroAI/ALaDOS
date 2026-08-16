@@ -25,12 +25,12 @@ ReferenceTo: TypeAlias = int
 
 
 @dataclass(slots=True)
-class ToolCall:
+class SysCall:
     """ A single tool call, directly executable """
     tool: str
     args: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
 
-SyscallsQueue: TypeAlias = Uqueue[tuple[ToolCall, Msg]]
+SyscallsQueue: TypeAlias = Uqueue[tuple[SysCall, Msg]]
 SyscallsQueues: TypeAlias = dict[int, SyscallsQueue]
 
 

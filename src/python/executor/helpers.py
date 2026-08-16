@@ -3,7 +3,7 @@
 import re
 from dataclasses import asdict
 
-from ..types import ToolCall
+from ..types import SysCall
 from ..utils.conn_factory import Conn
 from ..utils.logger import log_json
 from .exceptions import ContextLimitExceededError
@@ -85,14 +85,14 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     match slave.scope:
         case '_webui':
             tool_calls: ToolCallsBlock = [
-                ToolCall("user.send_message",
+                SysCall("user.send_message",
                          {"text": llm_without_think}
                      )
             ]
 
         case _:
             tool_calls: ToolCallsBlock = [
-                ToolCall("result.write",
+                SysCall("result.write",
                          {"text": llm_without_think}
                      )
             ]

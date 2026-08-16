@@ -195,6 +195,7 @@ def create_tool(description: str, header: str, body: str, _meta: _ExecToolMetaDa
     Body is the executed code itself. (Python only)
     Input parameters are accepted as key word arguments json object passed at key KWARGS into the env at execution time.
     Include estimated runtime, because execution longer then 10 seconds will time out without finishing unless timeout is specified to be longer.
+    Returns address of tool.
     """
     conn = _meta.conn
     addr = conn.execute_fetchval("""
@@ -360,7 +361,7 @@ def add_slave(instruction: str,
     required_results_addrs = []
 
     required_results_addrs = conn.resolve_to_addrs(
-        conn.resolve_self(_meta.slave_id, required_results_ids, conn)
+        conn.resolve_self(_meta.slave_id, required_results_ids)
     )
     
     if slave_type == "planner":

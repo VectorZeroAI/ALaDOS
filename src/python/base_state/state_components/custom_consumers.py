@@ -14,7 +14,7 @@ from nats.aio.client import Client
 from nats.aio.msg import Msg
 
 from ...executor.queue import syscalls_queue_dict_per_slave
-from ...types import ToolCall
+from ...types import SysCall
 from ..registry import register
 from ..types import CustomConsumer
 
@@ -24,7 +24,7 @@ def callback(msg: Msg, nats: Client):
     slave_addr = int(msg.subject.split('.', 3)[-2])
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
-            ToolCall(
+            SysCall(
                 tool=syscall_name,
                 args=json.loads(msg.data.decode())
             ),

@@ -22,7 +22,7 @@ from ALaDOS.lib._.main import batch_call, syscall as SyscallSpec
 from python.executor.execute_tool import execute_syscall
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
-from python.types import ToolCall
+from python.types import SysCall
 from python.utils.conn_factory import conn_factory
 
 from .conftest import unique_name
@@ -151,7 +151,7 @@ class _Dispatcher:
             result = await loop.run_in_executor(
                 None,
                 execute_syscall,
-                ToolCall(tool=tool_name, args=args),
+                SysCall(tool=tool_name, args=args),
                 meta,
             )
         except Exception as e:

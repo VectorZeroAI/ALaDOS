@@ -15,8 +15,8 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from ..types import ToolCall
-from ..utils.conn_factory import conn_factory
+from ..types import SysCall
+from ..utils.conn_factory import conn_factory, Conn
 from ..utils.logger import log_json
 from .types import CachedTool, ReferenceTo, SlaveScope_, SlaveScopesList, _ExecToolMetaData
 
@@ -85,13 +85,13 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
 
 
 
-def execute_syscall(call: ToolCall, _meta: _ExecToolMetaData) -> str:
+def execute_syscall(call: SysCall, _meta: _ExecToolMetaData) -> str:
     """ Executes a syscall from syscalls table """
     return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
 
 
 
-def execute_tool(call: ToolCall, _meta: _ExecToolMetaData) -> str:
+def execute_tool(call: SysCall, _meta: _ExecToolMetaData) -> str:
     """ Execute function from DB """
     return ToolsManager()[call.tool](call.args, _meta)
 
@@ -173,6 +173,52 @@ class ToolsManager:
 
 
 
+def tools_changed(syscall: SysCall, result: str, conn: Conn) -> tuple[str|None, ReferenceTo|None]:
+    """
+    Checks what tools were created or edited via this tool call and returns the address and name of them.
+    """
+    changed_addr = None
+    changed_name = None
+
+    if syscall.tool == "tool_create":
+        changed_name = syscall.args.get("name")
+
+        if not isinstance(changed_name, str):
+            changed_name = str(changed_name)
+
+        changed_addr = int(result)
+
+    if syscall.tool == "tool_edit":
+        id = str(syscall.args.get("id"))
+        try:
+            changed_addr = int(id) # pyright: ignore # NOTE : Cause we just TRY.
+        except ValueError:
+            changed_addr = conn.resolve_to_addr(id)
+        changed_name = id
+
+    return (changed_name, changed_addr)
+
+
+def check_invalid_syscall(syscall: SysCall,
+                          changed_tools_names: list[str],
+                          changed_tools_addrs: list[int],
+                          conn: Conn) -> None:
+    """
+    Does all the invalid syscall checking and raises NotImplementedError if tool is accessed that was just changed.
+    """
+    
+    if syscall.tool != "tool_execute":
+        return
+    id = str(syscall.args["id"])
+    addr = conn.resolve_to_addr(id)
+    if isinstance(id, str):
+        name = id
+    else:
+        name = None
+        ## NOTE : This doesnt actually get names, so theoretically, shit can still go sideways with tools cache.
+        ## This should be documented and explained in the ALaDOS tools Language specification.
+    if (name in changed_tools_names) or (addr in changed_tools_addrs):
+        raise NotImplementedError("Usage of tools edited in the same slave is not allowed ! It must be outsourced to a different Slave !")
 
 
 def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _ExecToolMetaData) -> str:
@@ -213,6 +259,7 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     start = time.time()
 
     syscall_queue = _meta.syscalls_queue
+    changed_tool_names, changed_tools_addrs = _meta.changed_tools_names, _meta.changed_tools_addrs
 
     loop = asyncio.new_event_loop()
 
@@ -233,10 +280,17 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
             pass
 
         for i in syscall_queue.get_all():
+            check_invalid_syscall(i[0], changed_tool_names, changed_tools_addrs, _meta.conn)
             ret = execute_syscall(i[0], _meta)
             loop.run_until_complete(
                 i[1].respond(ret.encode())
             )
+            name, addr = tools_changed(i[0], ret, _meta.conn)
+
+            if name:
+                changed_tool_names.append(name)
+            if addr:
+                changed_tools_addrs.append(addr)
 
     loop.close()
 

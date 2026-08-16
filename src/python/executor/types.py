@@ -10,7 +10,7 @@ from typing import Any, Callable, Literal, Sequence, TypeAlias, Union, get_args
 from nats.aio.client import Client
 from pydantic import JsonValue
 
-from ..types import ReferenceTo, SyscallsQueue, ToolCall
+from ..types import ReferenceTo, SyscallsQueue, SysCall
 from ..utils.conn_factory import Conn
 from ..utils.uqueue import Uqueue
 from .exceptions import ContextLimitExceededError, ParadoxDetected
@@ -44,7 +44,7 @@ class Instr:
     slave_addr: int
     scope: SlaveScope_
 
-ToolCallsBlock: TypeAlias = list[ToolCall]
+ToolCallsBlock: TypeAlias = list[SysCall]
 
 
 @dataclass(slots=True)
@@ -57,6 +57,8 @@ class _ExecToolMetaData:
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue
     nats: Client
+    changed_tools_names: list[str] = field(default_factory=list[str])
+    changed_tools_addrs: list[ReferenceTo] = field(default_factory=list[ReferenceTo])
     _embedder_queue: Uqueue[ReferenceTo] = field(default_factory=Uqueue[ReferenceTo])
 
 

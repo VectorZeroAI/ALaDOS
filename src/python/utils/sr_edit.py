@@ -11,7 +11,7 @@ def _sr_block_parser(sr_block: SearchAndReplaceBlock) -> tuple[str, str]:
     search and replace blocks outputten by the model parser that retuns a list of strings and their replacements. 
     """
     match = re.search(
-        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>",
+        r"<SEARCH>\s*(.*?)\s*</SEARCH>\s*\s*<REPLACE>\s*(.*?)\s*</REPLACE>", # TODO : Make this support mutiple blocks
         sr_block,
         re.DOTALL
     )

@@ -165,7 +165,7 @@ class ToolsManager:
         SELECT body FROM executables WHERE addr = %s;
                      """, (id,))
 
-        tmp_file = NamedTemporaryFile("+rw", suffix=".py")
+        tmp_file = NamedTemporaryFile("w+", suffix=".py")
         tmp_file.write(body)
         tmp_file.flush()
 

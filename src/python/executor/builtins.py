@@ -566,7 +566,7 @@ def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: i
         })
         raise RuntimeError("Database querry did not return expected values. Expected (int, int) got None.")
 
-    return '{"left": "' + json.dumps(str(new[0])) + '" , "right": "' + json.dumps(str(new[1])) + '" }' # NOTE : I hate when I cant do fstrings. 
+    return json.dumps({"left": json.dumps(str(new[0])), "right": json.dumps(str(new[1]))})
     #return "Changed context window size."
 
 
@@ -755,7 +755,13 @@ def search_for_urls(query: str, amount_results: int, _meta: _ExecToolMetaData) -
     results: list[str] = ['[', ']']
     
     for i in results_raw[:amount_results]:
-        results.insert(-2, "".join(['{"url": "', json.dumps(i["url"]), '", "title": "', json.dumps(i["title"]), '", "snippet": "', json.dumps(i["snippet"]), '"}']))
+        results.insert(-2,
+            json.dumps({
+                "url": json.dumps(i["url"]),
+                "title": json.dumps(i["title"]),
+                "snippet": json.dumps(i["snippet"])
+            })
+        )
 
     return "".join(results)
 
@@ -927,7 +933,7 @@ def rmt_serialise(_meta: _ExecToolMetaData, id: Addr|str) -> str:
     description = conn.execute_fetchval("""
     SELECT description FROM vector_ops WHERE addr = %s;
                                         """, (addr,))
-    return '{"dsl": "' + json.dumps(serial) + '", "description": "' + json.dumps(description) +'" }'
+    return json.dumps({"dsl": json.dumps(serial), "description": json.dumps(description)})
 
     #return f"Readable form of RMT {id if isinstance(id, str) else 'No name'}@{addr} with description '{description}': [{serial}]"
 
@@ -1114,7 +1120,7 @@ def rmt_insert_node(_meta: _ExecToolMetaData,
     update_timestamp(rmt_addr, conn)
 
 
-    return '{"rmt_addr": ' + json.dumps(rmt_addr) +', "node_addr": ' + json.dumps(addr) + '}'
+    return json.dumps({"rmt_addr": json.dumps(rmt_addr), "node_addr": json.dumps(addr)})
     #return f"Inserted rmt node {name if name else 'No name'}@{addr} into rmt template {rmt_id}."
 
 

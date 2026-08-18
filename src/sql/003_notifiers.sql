@@ -119,8 +119,8 @@ FOR EACH ROW EXECUTE FUNCTION master_decomposition_slave_submission();
 CREATE OR REPLACE FUNCTION init_master_context()
 RETURNS TRIGGER AS $$
     BEGIN
-        INSERT INTO master_context(addr, master_result, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
-        VALUES(NEW.addr, '', NULL, NULL, NULL, NULL);
+        INSERT INTO master_context(addr, window_anchor_exe, window_anchor_knowledge, window_size_r, window_size_l)
+        VALUES(NEW.addr, NULL, NULL, NULL, NULL);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -201,8 +201,10 @@ RETURNS TRIGGER AS $$
                 )
                 AND s.master_addr = v_master_addr
                 AND r.content_str NOT LIKE '%Added a master result.%';
-            -- NOTE : This querry checks the contents of the result for having wrote to master_result,
-            -- and if no, concatenates to v_content. 
+            --- NOTE : This querry checks the contents of the result for having wrote to master_result,
+            --- and if no, concatenates to v_content. 
+            --- FIXME : This no longer works like this since the tool calling system refactor.
+            --- We need to find anouther way to trace the actual function calls.
 
             PERFORM new_result(
                 p_content := v_content,

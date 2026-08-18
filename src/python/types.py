@@ -28,6 +28,8 @@ ReferenceTo: TypeAlias = int
 class SysCall:
     """ A single tool call, directly executable """
     tool: str
+    ## NOTE : This can actually also be address now, but it is one wrapped in string so its fine.
+    ## Auto coersion is part of all resolution logic now.
     args: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
 
 SyscallsQueue: TypeAlias = Uqueue[tuple[SysCall, Msg]]

@@ -457,7 +457,11 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> str:
     """
     conn = _meta.conn
     conn.execute("""
-    UPDATE master_context SET master_result = master_result || %s WHERE addr = %s
+    UPDATE results
+        SET content_str = COALESCE(content_str, '') || %s
+    WHERE addr = (
+        SELECT result_addr FROM masters WHERE masters.addr = %s
+    );
                  """, (text, _meta.master_id))
 
     return ""

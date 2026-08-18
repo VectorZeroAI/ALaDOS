@@ -20,7 +20,7 @@ from ..utils.conn_factory import conn_factory, Conn
 from ..utils.logger import log_json
 from .types import CachedTool, ReferenceTo, SlaveScope_, SlaveScopesList, _ExecToolMetaData
 
-TOOL_REGISTRY: dict[str, Callable] = {}
+SYSCALL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
 
 TOOL_USAGE_INSTRUCTION = """
@@ -72,7 +72,7 @@ R = TypeVar('R')
 
 def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
-        TOOL_REGISTRY[name or func.__name__] = func
+        SYSCALL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)
         for i in scope:
             HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
@@ -87,7 +87,7 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
 
 def execute_syscall(call: SysCall, _meta: _ExecToolMetaData) -> str:
     """ Executes a syscall from syscalls table """
-    return TOOL_REGISTRY[call.tool](**call.args, _meta = _meta)
+    return SYSCALL_REGISTRY[call.tool](**call.args, _meta = _meta)
 
 
 
@@ -125,9 +125,8 @@ class ToolsManager:
 
         This function resolves the name, and uses a LRU names cache.
         It also resolves the function itself and uses LRU functions cache. 
-        TODO: Split that logic into smaller methods.
 
-        It also handles the coersion of something like "95134" into an addr. TODO : Actually do that.
+        It also handles the coersion of something like "95134" into an addr.
         """
         addr = self.conn.resolve_to_addr(id)
 

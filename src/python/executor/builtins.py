@@ -859,7 +859,7 @@ def create_master(instruction: str,
 
     conn = _meta.conn
 
-    required_ids = conn.resolve_self(_meta.slave_id, required_ids, conn)
+    required_ids = conn.resolve_self(_meta.slave_id, required_ids)
 
     required_addrs = conn.resolve_to_addrs(required_ids)
 
@@ -1144,7 +1144,7 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
     conn = _meta.conn
     addr = conn.resolve_to_addr(rmt_id)
 
-    depends_on = conn.resolve_self(_meta.slave_id, depends_on, conn)
+    depends_on = conn.resolve_self(_meta.slave_id, depends_on)
 
     addr = activate_as_master(addr, conn, depends_on, required_by, inputs)
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import asyncio
-from dataclasses import asdict
 import inspect
 import json
 import re
@@ -16,13 +15,17 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from psycopg.types.json import Jsonb
-from python.executor.helpers import bulk_append_syscalls_to_trace
-
+from ..optimiser.traces.core import bulk_syscalls_trace
 from ..types import SysCall
-from ..utils.conn_factory import conn_factory, Conn
+from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
-from .types import CachedTool, ReferenceTo, SlaveScope_, SlaveScopesList, _ExecToolMetaData
+from .types import (
+    CachedTool,
+    ReferenceTo,
+    SlaveScope_,
+    SlaveScopesList,
+    _ExecToolMetaData,
+)
 
 SYSCALL_REGISTRY: dict[str, Callable] = {}
 HEADERS_REGISTRY: dict[str, str] = {}
@@ -302,7 +305,7 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
             if addr:
                 changed_tools_addrs.append(addr)
 
-    bulk_append_syscalls_to_trace(_meta.slave_addr, _meta.conn, syscalls)
+    bulk_syscalls_trace(_meta.slave_addr, _meta.conn, syscalls)
 
     loop.close()
 

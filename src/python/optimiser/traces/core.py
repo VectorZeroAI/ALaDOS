@@ -10,17 +10,16 @@ Also optimiser could include analysing reocurring error patterns and
 prompting improvement of function descriptions and or headers.
 """
 
-from psycopg.types.json import Jsonb
-from ...utils.conn_factory import conn_factory
-
 from ...executor.types import (
     ToolCallsBlock,
     _ExecToolMetaData,
     syscalls_json_db_bulk_format,
 )
 from ...types import SysCall
+from ...utils.conn_factory import conn_factory
 
 conn = conn_factory() # TODO: add retries. 
+
 
 def new_execution(tool_calls: ToolCallsBlock, meta: _ExecToolMetaData) -> None:
     """
@@ -29,18 +28,11 @@ def new_execution(tool_calls: ToolCallsBlock, meta: _ExecToolMetaData) -> None:
     Execution
     """
     conn.execute("""
-    INSERT INTO metadata_dag(addr_s, metadata) VALUES (%s, %s)
-                 """,
-                (
-                    meta.slave_addr,
-                    Jsonb({
-                        "tool_calls": tool_calls
-                    })
-                )
-    )
+    SELECT new_execution_trace(%s);
+                 """, (meta.slave_addr,))
 
 
-def bulk_append_syscalls_to_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> None:
+def bulk_syscalls_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> None:
     """
     Bulk appends syscalls to the DB trace of execution, for _execute_tool.
     """
@@ -52,15 +44,20 @@ def bulk_append_syscalls_to_trace(meta: _ExecToolMetaData, syscalls: list[SysCal
     SELECT concat_syscalls_to_metadata_dag(%s, %s)
                  """, (meta.slave_addr, array_for_db))
 
+
 def tool_errored(error: str, meta: _ExecToolMetaData) -> None:
     """
     Register tool error from ExecuteState, for core.
     """
-    raise NotImplementedError("TOOL ERRORED TRACING HOOK FOR CORE NOT YET IMPLEMENTED")
+    conn.execute("""
+    SELECT tool_errored_trace(%s, %s);
+                 """, (error, meta.slave_addr))
+
 
 def execution_aborted(error: str, meta: _ExecToolMetaData) -> None:
     """
     The hook for tracing the abortion of execution of the core due to error.
     """
-    raise NotImplementedError("EXECUTION ABORTED TRACING HOOK FOR CORE NOT YET IMPLEMENTED"):
-        
+    conn.execute("""
+    SELECT execution_aborted_trace(%s, %s)
+                 """, (error, meta.slave_addr))

@@ -2,16 +2,13 @@
 
 import re
 from dataclasses import asdict
-from warnings import deprecated
 
-from psycopg.types.json import Jsonb
-
-from ..types import ReferenceTo, SysCall
+from ..types import SysCall
 from ..utils.conn_factory import Conn
 from ..utils.logger import log_json
 from .exceptions import ContextLimitExceededError
 from .execute_tool import HEADERS_REGISTRY
-from .types import Instr, ToolCallsBlock, syscalls_json_db_bulk_format
+from .types import Instr, ToolCallsBlock
 
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,

@@ -257,3 +257,16 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER notify_tool_changed_trg
 AFTER UPDATE ON executables
 FOR EACH ROW EXECUTE FUNCTION notify_tool_changed();
+
+
+CREATE OR REPLACE FUNCTION auto_insert_metadata_dag_per_slave()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO metadata_dag(addr) VALUES(NEW.addr);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_auto_insert_metadata_dag_per_slave
+AFTER INSERT ON slaves
+FOR EACH ROW EXECUTE FUNCTION auto_insert_metadata_dag_per_slave();

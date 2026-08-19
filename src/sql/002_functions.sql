@@ -475,10 +475,65 @@ BEGIN
     UPDATE metadata_dag
         SET metadata = jsonb_set(
             metadata,
-            '{syscalls}',
-            COALESCE(metadata->'syscalls', '[]'::JSONB) || p_syscalls
+            '{executions,-1,syscalls}',
+            COALESCE(metadata#>ARRAY['executions',-1,'syscalls'], '[]'::JSONB) || p_syscalls
         )
     WHERE addr = p_slave_addr;
     RETURN;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION new_execution_trace(
+    p_slave_addr BIGINT
+) RETURNS VOID AS $$
+BEGIN
+    UPDATE metadata_dag
+        SET metadata = jsonb_set(
+            metadata,
+            '{executions}',
+            COALESCE(metadata->'executions', '[]'::JSONB) || '[{}]'::JSONB
+        )
+    WHERE addr = p_slave_addr;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION tool_errored_trace(
+    p_error TEXT,
+    p_slave_addr BIGINT
+
+) RETURNS VOID AS $$
+BEGIN
+    UPDATE metadata_dag
+        SET metadata = jsonb_set(
+            metadata,
+            '{executions, -1, tool_calls, -1, error}',
+            p_error
+        )
+    WHERE addr = p_slave_addr;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION execution_aborted_trace(
+    p_error TEXT,
+    p_slave_addr BIGINT
+) RETURNS VOID AS $$
+BEGIN
+    UPDATE metadata_dag
+        SET metadata = jsonb_set(
+            metadata, 
+            '{executions, -1, error}',
+            p_error
+        )
+    WHERE addr = p_slave_addr;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+
+

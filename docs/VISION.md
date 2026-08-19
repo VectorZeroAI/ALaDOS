@@ -546,7 +546,7 @@ That means creating abstractions over repetative work.
 
 Optimiser has to track the changes, the most for the Strategy 4, and make sure to revert them if even more errors occur, to avoid degrading due to LLM fuckups.
 
-### Strategy 1, RMT auto detector. [ ]
+### Strategy 1, RMT auto detector: [ ]
 
 Because the entire backlog of the execution history is right there in the masters and slaves tables, all we need to do is detect repetative patterns and abstact that work away into an RMT.
 

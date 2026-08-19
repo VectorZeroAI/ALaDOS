@@ -112,30 +112,3 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
 
 
 
-def init_slave_tracing(slave_addr: ReferenceTo, tool_calls: ToolCallsBlock, conn: Conn) -> None:
-    """
-    Inits the metadata_dag tracing by inserting the starting data to be then later appended to.
-    """
-    conn.execute("""
-    INSERT INTO metadata_dag(addr_s, metadata) VALUES (%s, %s)
-                 """,
-                (
-                    slave_addr,
-                    Jsonb({
-                        "tool_calls": tool_calls
-                    })
-                )
-    )
-
-
-def bulk_append_syscalls_to_trace(slave_addr: ReferenceTo, conn: Conn, syscalls: list[SysCall]) -> None:
-    """
-    Bulk appends syscalls to the DB trace of execution, for performance reasons.
-    """
-    array_for_db: syscalls_json_db_bulk_format = [
-        {"syscall": s.tool, "args": s.args} for s in syscalls
-    ]
-
-    conn.execute("""
-    SELECT concat_syscalls_to_metadata_dag(%s, %s)
-                 """, (slave_addr, array_for_db))

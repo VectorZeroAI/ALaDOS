@@ -115,7 +115,7 @@ The tracing of that will be done via a metadata fields such as "created_by" of t
 
 This basically includes constructing a metadata store for the DAG that documents the runtime creation of the DAG.
 
-#### The metadata traces structure [ ]
+#### The metadata traces structure [x]
 
 Now how should the metadata traces be structured?
 First of all, there are many "meta types" in the system, so speaking of them, a unified metadata structure would not work.
@@ -139,6 +139,38 @@ Well for them it will propably be the same, so I might as well make a "metadata"
 But that creates the problem of having to make EVERY decision through ->> and not being able to just JOIN on the table has has things you need. 
 So I would say the best way of handling it is to add more metadata tables, like metadata_tools, metadata_knowledge, metadata_views, etc. But they will all be the same structure.
 Or I can make them the same table, and then PARTITION by the type? ........ from speed it will be the same, but I still like the design of splitting by the big types, so I think its better to do it this way... well I will decide later on.
+
+I will also design many SQL functions and python functions for the interactions with the metadata JSONB to avoid raw access interveaning with the logic. TODO: Maybe apply this pattern to more parts of the codebase
+
+I will also design many SQL functions and python functions for the interactions with the metadata JSONB to avoid raw access interveaning with the logic. TODO: Maybe apply this pattern to more parts of the codebase. 
+
+##### Json structure of the traces on slaves [ ]
+```json
+{
+    "executions": [
+        {
+            "tool_calls": [
+                {
+                    "name": "...",
+                    "args": {...},
+                    "error": "..." // Optional. This error was recovered inside of the execution.
+                }
+            ],
+            "syscalls": [
+                {
+                    "name": "...",
+                    "args": {...},
+                    "error": "..." // mostly access errors since syscalls cant really just fail.
+                },
+            ],
+            "error": "..." // Optional.
+        },
+    ]
+}
+```
+
+**Implementation details**:
+The tracing is implemented via the optimiser/tracing subsystem and has a file per traced area with hook functions that signal certain actions happenening.
 
 ____
 
@@ -505,18 +537,20 @@ And with that ether populate an "cummulative context window" with querry results
 
 ___
 
-### Optimiser Meta learning [ ]
+## Optimiser Meta learning [ ]
 
 This is the culmination of the development process, the final piece on the road to an General Information Transofmer mashine, to the complete ALaDOS.
 
 The optimiser consists of many "strategies" which it uses to optimise ALaDOS enviroment to lessen the friction of working with it.
 That means creating abstractions over repetative work.
 
-#### Strategy 1, RMT auto detector. [ ]
+Optimiser has to track the changes, the most for the Strategy 4, and make sure to revert them if even more errors occur, to avoid degrading due to LLM fuckups.
+
+### Strategy 1, RMT auto detector. [ ]
 
 Because the entire backlog of the execution history is right there in the masters and slaves tables, all we need to do is detect repetative patterns and abstact that work away into an RMT.
 
-##### Algoritm 
+#### Algoritm 
 > [!IMPORTANT]
 > This algoritm has to be improved in order to catch the pitfall of optimising already optimised stuff, e.g. it should be able to understand the metadata traces and exclude already implemented stuff.
 
@@ -553,25 +587,30 @@ Of course there may be better solutions, and I will look into them, but not now.
 > This algoritm should also not try to unroll recusrive rmts.
 
 
-##### Pitfalls: 
+#### Pitfalls: 
 1. **RMTs activations need to be tracked**, and with the planned inline activation method, it will become harder. Else the optimiser will be trapped in a **loop of adding the same abstraction over and over again**. *This is partially addressed by the metadata system as part of recursive reusable master templates*.
 2. The optimiser should not rely on the LLM to do all the work, it has to do the majorty of deterministic work, and let the LLM do the polish and integration work. 
 3. Optimiser has to be fast, naive python loop wont work. Preferably due to operating on database structures, it should be written as plpgsql for the large deterministic pattern matching.
 
 
-#### Strategy 2, scope creation [ ]
+### Strategy 2, scope creation: [ ]
 
 Check what tools were used together often, or searched for together, and combine them into scopes.
 Check what scopes largely overlap and are used for the same tasks (by instruction emb similarity and actual overlap of elements.) and propose merging, then use the LLM to double check if the differense makes sense, and then merge if not.
 Check tools that arent in any scopes, group them by description similarities using an algoritm adjesent to rainbow sort, and then propose thhat as new scope to the LLM evaluator. LLM can then describe the scope and name the scope as well as fine tune the scope or reject the scope.
 
 
-#### Strategy 3, knowledge caching [ ]
+### Strategy 3, knowledge caching: [ ]
 
 Check for repeated web searches, and form the results of such web searches into knowledge items, timestamp them with the time, include the sources, and thats basically it.
+
+### Strategy 4, reocurring error based function improvement: [ ]
+
+Check for reocurring errors in the execution traces, and activate the improvement RMT.
+Improvement RMT consists of the LLM deciding if the error is the bug in the function, or if its a description issue. If its description issue, it just fixes the description to match actual function behaviour, else it fixes the function.
 ___
 
-### Presentation [ ]
+## Presentation [ ]
 
 Implement a good UI, and many UIs at that. Current webui is broken shit, and it will be replaced. 
 The UI should be really really good for the system. 

@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Callable, Literal, Sequence, TypeAlias, Union, get_args
+from typing import Any, Callable, Literal, Sequence, TypeAlias, Union, get_args, TypedDict
 
 from nats.aio.client import Client
 from pydantic import JsonValue
@@ -131,3 +131,10 @@ class FinishState:
     tag: Literal[Cs.FINISH] = Cs.FINISH
 
 State = Union[GetSlaveState, ContextGetState, ApiCallsState, ExecuteState, ContextShortState, ParadoxState, ErrorState, FinishState]
+
+
+class SysCallsJsonDbFormat(TypedDict):
+    syscall: str
+    args: JsonValue
+
+type syscalls_json_db_bulk_format = list[SysCallsJsonDbFormat]

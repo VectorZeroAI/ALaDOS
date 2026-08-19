@@ -7,6 +7,7 @@ from datetime import datetime
 from types import FunctionType
 from typing import Sequence
 
+from python.optimiser.traces.core import new_execution
 from python.utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
@@ -233,9 +234,9 @@ Further documentation of the states inlined as docstrings in the match statement
                 
                 original_tool_calls_amount = len(curr.tool_calls)
 
-                with conn.transaction():
 
-                    init_slave_tracing(metadata_c.slave_addr, curr.tool_calls, conn)
+                with conn.transaction():
+                    new_execution(curr.tool_calls, metadata_c)
 
                     for i, call in enumerate(curr.tool_calls):
                         checkpoint()

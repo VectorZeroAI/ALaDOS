@@ -24,7 +24,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
-from .helpers import fix_llm_response, prepare_context_shortening_prompt
+from .helpers import fix_llm_response, init_slave_tracing, prepare_context_shortening_prompt
 from .queue import (
     embedder_queue,
     interrupt_queue,
@@ -234,11 +234,17 @@ Further documentation of the states inlined as docstrings in the match statement
                 original_tool_calls_amount = len(curr.tool_calls)
 
                 with conn.transaction():
+
+                    init_slave_tracing(metadata_c.slave_addr, curr.tool_calls, conn)
+
                     for i, call in enumerate(curr.tool_calls):
                         checkpoint()
                         try:
                             with conn.transaction():
                                 results.append(execute_tool(call, metadata_c))
+                            ## TODO : Think about maybe restructuring this into a more batch styled execution.
+                            ## Although error handling may become problematic. Think about it.
+                            
 
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e

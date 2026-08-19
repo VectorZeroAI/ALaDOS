@@ -50,9 +50,9 @@ ToolCallsBlock: TypeAlias = list[SysCall]
 @dataclass(slots=True)
 class _ExecToolMetaData:
     """ Typed dict for the metadata transfer to the executed tools. """
-    master_id: int
+    master_addr: int
     conn: Conn 
-    slave_id: int
+    slave_addr: int
     context_limit: int
     occ_last_change: datetime
     syscalls_queue: SyscallsQueue

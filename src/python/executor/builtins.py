@@ -318,7 +318,7 @@ def context_add(id: Addr|str, _meta: _ExecToolMetaData) -> str:
     
     conn.execute("""
     INSERT INTO master_load(master_addr, item_addr) VALUES (%s, %s)
-                 """, (_meta.master_id, addr))
+                 """, (_meta.master_addr, addr))
 
     return ""
     #return f"Added context {id if isinstance(id, str) else "No name"}@{addr}."
@@ -361,7 +361,7 @@ def add_slave(instruction: str,
     required_results_addrs = []
 
     required_results_addrs = conn.resolve_to_addrs(
-        conn.resolve_self(_meta.slave_id, required_results_ids)
+        conn.resolve_self(_meta.slave_addr, required_results_ids)
     )
     
     if slave_type == "planner":
@@ -378,7 +378,7 @@ def add_slave(instruction: str,
         p_slave_scope := %s
     );
         """, 
-    (_meta.master_id, instruction, slave_name, required_results_addrs, result_name, slave_type))
+    (_meta.master_addr, instruction, slave_name, required_results_addrs, result_name, slave_type))
     return str(addr)
     #return "Added a new slave"
 
@@ -396,13 +396,13 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
     special_context = []
     fetch = conn.execute("""
     SELECT instruction FROM masters WHERE addr = %s;
-                         """, (_meta.master_id,)).fetchone()
+                         """, (_meta.master_addr,)).fetchone()
     assert fetch is not None
     special_context.extend(fetch)
 
     fetch = conn.execute("""
     SELECT s.instruction, r.content_str FROM masters m JOIN slaves s ON s.master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
-                         """, (_meta.master_id,)).fetchall()
+                         """, (_meta.master_addr,)).fetchall()
     special_context.extend(fetch)
 
     special_context_str = f"Task instruction: {special_context.pop(0)}"
@@ -416,12 +416,12 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
         tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
-    master_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta.master_id,)).fetchone()
+    master_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta.master_addr,)).fetchone()
     master_result_so_far_str = f"Masters result so far: {master_result_so_far_str[0] if master_result_so_far_str is not None else "No master result so far."}"
 
     fetch = conn.execute("""
     SELECT s.result_addr FROM masters m JOIN slaves s ON master_addr = m.addr JOIN results r ON r.addr = s.result_addr WHERE m.addr = %s;
-                         """, (_meta.master_id,)).fetchall()
+                         """, (_meta.master_addr,)).fetchall()
 
     # TODO : Enchanse this process by adding a context manager slave as well as better views of previous tasks. 
 
@@ -440,7 +440,7 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
 
     prompt = prompt + special_context_str + master_result_so_far_str
 
-    conn.execute("SELECT new_slave(%s, %s, NULL, %s, NULL, NULL, NULL, 'task');", (_meta.master_id, prompt, [r[0] for r in fetch]))
+    conn.execute("SELECT new_slave(%s, %s, NULL, %s, NULL, NULL, NULL, 'task');", (_meta.master_addr, prompt, [r[0] for r in fetch]))
 
     return ""
     #return "added a replanner slave"
@@ -462,7 +462,7 @@ def master_result_add(text: str, _meta: _ExecToolMetaData) -> str:
     WHERE addr = (
         SELECT result_addr FROM masters WHERE masters.addr = %s
     );
-                 """, (text, _meta.master_id))
+                 """, (text, _meta.master_addr))
 
     return ""
     #return "Added a master result."
@@ -490,7 +490,7 @@ def context_window_lands(querry: str, _meta: _ExecToolMetaData) -> str:
 
     anchor = conn.execute_fetchval("""
     SELECT s_land(%s, %s::vector(768))
-                 """, (_meta.master_id, emb))
+                 """, (_meta.master_addr, emb))
 
     return str(anchor)
     #return 'Semantically moved the viewing window anchor.'
@@ -522,7 +522,7 @@ def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
             window_size_r = 12,
             window_size_l = 12
         WHERE addr = %s;
-                     """, (addr, _meta.master_id))
+                     """, (addr, _meta.master_addr))
 
     elif addr_type == "executables":
         conn.execute("""
@@ -532,7 +532,7 @@ def context_window_land_by_addr(id: Addr|str, _meta: _ExecToolMetaData) -> str:
             window_size_r = 12,
             window_size_l = 12
         WHERE addr = %s;
-                     """, (addr, _meta.master_id))
+                     """, (addr, _meta.master_addr))
     else:
         raise psycopg.DataError(f"Invalid addr type gotten. Gotten {addr_type}, expected executables or knowledge.")
 
@@ -560,7 +560,7 @@ def context_window_size_change(_meta: _ExecToolMetaData, left: int = 0, right: i
         SET window_size_l = window_size_l + %s, window_size_r = window_size_r + %s
     WHERE addr = %s
     RETURNING window_size_l, window_size_r;
-                 """, (left, right, _meta.master_id)).fetchone()
+                 """, (left, right, _meta.master_addr)).fetchone()
     if not new:
         log_json({
             "type": "syscall",
@@ -589,7 +589,7 @@ def move_window_anchor(amount: int, _meta: _ExecToolMetaData) -> str:
 
     addr = conn.execute_fetchval("""
     SELECT move_anchor(%s, %s);
-                           """, (amount, _meta.master_id))
+                           """, (amount, _meta.master_addr))
     
     return str(addr)
     #return "moved context window anchor"
@@ -631,7 +631,7 @@ def report_paradoxal_information(items: Sequence[str|Addr], paradox: str, _meta:
     FROM slaves s
         JOIN results r ON s.result_addr = r.addr
     WHERE s.addr = %s;
-    """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_id))
+    """, (Jsonb({ 'items': items, 'paradox': paradox }), _meta.slave_addr))
 
     # NOTE : The paradox label is removed when new_result is called by the sql function itself.
 
@@ -697,7 +697,7 @@ def unload_item(_meta: _ExecToolMetaData, id: Addr|str) -> str:
 
     conn.execute("""
     DELETE FROM master_load WHERE master_addr = %s AND item_addr = %s;
-                 """, (_meta.master_id, addr))
+                 """, (_meta.master_addr, addr))
 
     return ""
     #return f"Unloaded item {addr}."
@@ -869,7 +869,7 @@ def create_master(instruction: str,
 
     conn = _meta.conn
 
-    required_ids = conn.resolve_self(_meta.slave_id, required_ids)
+    required_ids = conn.resolve_self(_meta.slave_addr, required_ids)
 
     required_addrs = conn.resolve_to_addrs(required_ids)
 
@@ -1154,7 +1154,7 @@ def rmt_activate_as_master(_meta: _ExecToolMetaData,
     conn = _meta.conn
     addr = conn.resolve_to_addr(rmt_id)
 
-    depends_on = conn.resolve_self(_meta.slave_id, depends_on)
+    depends_on = conn.resolve_self(_meta.slave_addr, depends_on)
 
     addr = activate_as_master(addr, conn, depends_on, required_by, inputs)
 

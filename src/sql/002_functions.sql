@@ -466,3 +466,19 @@ BEGIN
     RETURN v_addr;
 END
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION concat_syscalls_to_metadata_dag(
+    p_slave_addr BIGINT,
+    p_syscalls JSONB
+) RETURNS VOID AS $$
+BEGIN
+    UPDATE metadata_dag
+        SET metadata = jsonb_set(
+            metadata,
+            '{syscalls}',
+            COALESCE(metadata->'syscalls', '[]'::JSONB) || p_syscalls
+        )
+    WHERE addr = p_slave_addr;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;

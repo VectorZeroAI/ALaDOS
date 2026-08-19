@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+from dataclasses import asdict
 import inspect
 import json
 import re
@@ -14,6 +15,9 @@ from tempfile import (
 )
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
+
+from psycopg.types.json import Jsonb
+from python.executor.helpers import bulk_append_syscalls_to_trace
 
 from ..types import SysCall
 from ..utils.conn_factory import conn_factory, Conn
@@ -231,8 +235,8 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     else:
         timeout = 5
 
-    kwargs['slave_id'] = _meta.slave_id
-    kwargs['master_id'] = _meta.master_id
+    kwargs['slave_id'] = _meta.slave_addr
+    kwargs['master_id'] = _meta.master_addr
 
     kwargs_str: str = json.dumps(kwargs)
 
@@ -265,6 +269,8 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
     stdout: str = ""
     stderr: str = ""
 
+    syscalls: list[SysCall] = []
+
     while process.poll() is None:
         if time.time() - start > timeout:
             process.kill()
@@ -280,16 +286,23 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
 
         for i in syscall_queue.get_all():
             check_invalid_syscall(i[0], changed_tool_names, changed_tools_addrs, _meta.conn)
+
+            syscalls.append(i[0])
+
             ret = execute_syscall(i[0], _meta)
+
             loop.run_until_complete(
                 i[1].respond(ret.encode())
             )
+
             name, addr = tools_changed(i[0], ret, _meta.conn)
 
             if name:
                 changed_tool_names.append(name)
             if addr:
                 changed_tools_addrs.append(addr)
+
+    bulk_append_syscalls_to_trace(_meta.slave_addr, _meta.conn, syscalls)
 
     loop.close()
 

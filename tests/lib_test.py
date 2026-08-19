@@ -139,9 +139,9 @@ class _Dispatcher:
             ) or 0
             args = json.loads(msg.data.decode())
             meta = _ExecToolMetaData(
-                master_id=master_addr,
+                master_addr=master_addr,
                 conn=self._db,
-                slave_id=slave_addr,
+                slave_addr=slave_addr,
                 context_limit=40000,
                 occ_last_change=datetime.now(),
                 syscalls_queue=syscalls_queue_dict_per_slave[slave_addr],

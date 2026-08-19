@@ -50,9 +50,9 @@ def meta(db):
 
     try:
         yield _ExecToolMetaData(
-            master_id=master_addr,
+            master_addr=master_addr,
             conn=db,
-            slave_id=slave_addr,
+            slave_addr=slave_addr,
             context_limit=10000,
             # PostgreSQL returns the timestamp for vector_ops as naive in the
             # current schema.  Tests which explicitly exercise OCC overwrite

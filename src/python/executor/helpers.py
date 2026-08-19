@@ -2,13 +2,16 @@
 
 import re
 from dataclasses import asdict
+from warnings import deprecated
 
-from ..types import SysCall
+from psycopg.types.json import Jsonb
+
+from ..types import ReferenceTo, SysCall
 from ..utils.conn_factory import Conn
 from ..utils.logger import log_json
 from .exceptions import ContextLimitExceededError
 from .execute_tool import HEADERS_REGISTRY
-from .types import Instr, ToolCallsBlock
+from .types import Instr, ToolCallsBlock, syscalls_json_db_bulk_format
 
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
@@ -108,3 +111,31 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     return tool_calls
 
 
+
+def init_slave_tracing(slave_addr: ReferenceTo, tool_calls: ToolCallsBlock, conn: Conn) -> None:
+    """
+    Inits the metadata_dag tracing by inserting the starting data to be then later appended to.
+    """
+    conn.execute("""
+    INSERT INTO metadata_dag(addr_s, metadata) VALUES (%s, %s)
+                 """,
+                (
+                    slave_addr,
+                    Jsonb({
+                        "tool_calls": tool_calls
+                    })
+                )
+    )
+
+
+def bulk_append_syscalls_to_trace(slave_addr: ReferenceTo, conn: Conn, syscalls: list[SysCall]) -> None:
+    """
+    Bulk appends syscalls to the DB trace of execution, for performance reasons.
+    """
+    array_for_db: syscalls_json_db_bulk_format = [
+        {"syscall": s.tool, "args": s.args} for s in syscalls
+    ]
+
+    conn.execute("""
+    SELECT concat_syscalls_to_metadata_dag(%s, %s)
+                 """, (slave_addr, array_for_db))

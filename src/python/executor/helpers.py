@@ -2,13 +2,16 @@
 
 import re
 from dataclasses import asdict
+from typing import Literal
+from pydantic import TypeAdapter, ValidationError
 
-from ..types import SysCall
+from ..types import ReferenceTo, ToolCall
 from ..utils.conn_factory import Conn
 from ..utils.logger import log_json
 from .exceptions import ContextLimitExceededError
 from .execute_tool import HEADERS_REGISTRY
 from .types import Instr, ToolCallsBlock
+from ..optimiser.traces.types import MetadataDagJson
 
 
 def prepare_context_shortening_prompt(error: ContextLimitExceededError,
@@ -85,14 +88,14 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     match slave.scope:
         case '_webui':
             tool_calls: ToolCallsBlock = [
-                SysCall("user.send_message",
+                ToolCall("user.send_message",
                          {"text": llm_without_think}
                      )
             ]
 
         case _:
             tool_calls: ToolCallsBlock = [
-                SysCall("result.write",
+                ToolCall("result.write",
                          {"text": llm_without_think}
                      )
             ]
@@ -108,4 +111,53 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     return tool_calls
 
 
+def construct_final_write(results: list[str], conn: Conn, slave_addr: ReferenceTo) -> str:
+    """
+    Reads the traces and describes the results based on the traces.
+    Used to get results descriptive, while the tools themself may stay programmatic.
+    """
+    metadata_json = conn.execute_fetchval("""
+    SELECT metadata FROM metadata_dag WHERE addr = %s;
+                 """, (slave_addr,))
+    
+    metadata_json_type = TypeAdapter(MetadataDagJson)
 
+    try:
+        metadata_json = metadata_json_type.validate_python(metadata_json)
+    except ValidationError as e:
+        log_json({
+            "type": "executor",
+            "subtype": "helper construct final write",
+            "status": "fatal",
+            "msg": str(e)
+        })
+        raise e
+
+    tool_calls = metadata_json["executions"][-1]["tool_calls"]
+    
+    descriptiors: list[str] = []
+
+    for i in tool_calls:
+        addr, name = conn.resolve_id_to_name_and_addr(i["id"])
+
+        args_str: str = "("
+        for j in i["args"].keys():
+            args_str = args_str + f"{j}: {i["args"][j]}, "
+
+        args_str = args_str.removesuffix(", ")
+        args_str = args_str + ")"
+
+
+        descriptiors.append(
+            f"{name}@{addr}{args_str}:"
+        )
+
+    ends: list[str] = ["____" for _ in range(len(descriptiors))]
+    
+    result_elements = zip(descriptiors, results, ends, strict=True)
+    
+    result_str = "\n\n".join(
+        [
+            "\n".join([*r]) for r in result_elements
+        ]
+    )

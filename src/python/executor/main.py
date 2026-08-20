@@ -316,6 +316,8 @@ Further documentation of the states inlined as docstrings in the match statement
             case FinishState():
                 curr = state
 
+                
+
                 result_str = "\n".join(curr.results)
 
                 checkpoint()

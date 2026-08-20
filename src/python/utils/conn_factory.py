@@ -7,7 +7,6 @@ from typing import (
     Iterable,
     Literal,
     LiteralString,
-    OrderedDict,
     Sequence,
     overload,
 )
@@ -197,6 +196,23 @@ class Conn(psycopg.Connection):
                 names_and_addrs[i] = result_addr
         
         return names_and_addrs
+
+    def resolve_id_to_name_and_addr(self, id: ReferenceTo|str) -> tuple[str, ReferenceTo]:
+        """
+        Resolves the id to the name and to the address.
+
+        Defaults name to "NoName" if no Name found.
+        """
+        if isinstance(id, int):
+            addr = id
+            name = self.execute_fetchval("""
+            SELECT COALESCE((SELECT name FROM names WHERE addr = %s LIMIT 1), 'NoName');
+                                         """, (addr,))
+        else:
+            name = id
+            addr = self.resolve_to_addr(name)
+        return (name, addr)
+
 
 def conn_factory(db_name: str|None = None) -> Conn:
     """

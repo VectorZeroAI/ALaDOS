@@ -15,7 +15,7 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from ..optimiser.traces.execute_tool import bulk_syscalls_trace
+from ..optimiser.traces import execute_tool as trace_hooks
 from ..types import SysCall
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
@@ -306,7 +306,7 @@ def _execute_tool(file: _TemporaryFileWrapper, addr: ReferenceTo, kwargs: dict[s
             if t_addr:
                 changed_tools_addrs.append(t_addr)
 
-    bulk_syscalls_trace(_meta, syscalls)
+    trace_hooks.bulk_syscalls_trace(_meta, syscalls)
 
     loop.close()
 

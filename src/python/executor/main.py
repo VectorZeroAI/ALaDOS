@@ -7,7 +7,7 @@ from datetime import datetime
 from types import FunctionType
 from typing import Sequence
 
-from ..optimiser.traces.core import new_execution, execution_aborted, tool_errored, tool_executing
+from ..optimiser.traces import core as trace_hooks
 from ..utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
@@ -107,7 +107,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     'message': str(e),
                     'state': str(state.tag)
                 })
-                execution_aborted(str(e), metadata_c)
+                trace_hooks.execution_aborted(str(e), metadata_c)
                 return ('', ContextShortState(instr.slave_addr, e, instr, False))
 
             except Exception as e:
@@ -119,7 +119,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     'state': str(state.tag),
                     'traceback': str(traceback.format_exception(e))
                 })
-                execution_aborted(str(e), metadata_c)
+                trace_hooks.execution_aborted(str(e), metadata_c)
                 return ('', ErrorState(instr.slave_addr))
 
     conn: Conn = conn_factory()
@@ -239,13 +239,13 @@ Further documentation of the states inlined as docstrings in the match statement
 
 
                 with conn.transaction():
-                    new_execution(metadata_c)
+                    trace_hooks.new_execution(metadata_c)
 
                     for i, call in enumerate(curr.tool_calls):
                         checkpoint()
                         try:
                             with conn.transaction():
-                                tool_executing(metadata_c, call)
+                                trace_hooks.tool_executing(metadata_c, call)
                                 results.append(execute_tool(call, metadata_c))
                             ## TODO : Think about maybe restructuring this into a more batch styled execution.
                             ## Although error handling may become problematic. Think about it.
@@ -254,11 +254,11 @@ Further documentation of the states inlined as docstrings in the match statement
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
                             set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now(), curr.finish))
-                            execution_aborted(str(paradox_e), metadata_c)
+                            trace_hooks.execution_aborted(str(paradox_e), metadata_c)
                             break
 
                         except Exception as e:
-                            tool_errored(str(e), metadata_c)
+                            trace_hooks.tool_errored(str(e), metadata_c)
                             log_json({
                                 'type': 'core',
                                 'subtype': 'tool',
@@ -278,7 +278,7 @@ Further documentation of the states inlined as docstrings in the match statement
                                     'state': str(state.tag)
                                 })
                                 set_error_state(ErrorState(curr.instr.slave_addr))
-                                execution_aborted("RECURSIVE TOOL CALL ERRORS DETECTED.", metadata_c)
+                                trace_hooks.execution_aborted("RECURSIVE TOOL CALL ERRORS DETECTED.", metadata_c)
                                 break
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}

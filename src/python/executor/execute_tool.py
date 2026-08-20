@@ -15,7 +15,7 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from ..optimiser.traces.core import bulk_syscalls_trace
+from ..optimiser.traces.execute_tool import bulk_syscalls_trace, tool_executing
 from ..types import SysCall
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
@@ -94,13 +94,13 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
 
 def execute_syscall(call: SysCall, _meta: _ExecToolMetaData) -> str:
     """ Executes a syscall from syscalls table """
-    return SYSCALL_REGISTRY[call.tool](**call.args, _meta = _meta)
+    return SYSCALL_REGISTRY[call.called_id](**call.args, _meta = _meta)
 
 
 
 def execute_tool(call: SysCall, _meta: _ExecToolMetaData) -> str:
     """ Execute function from DB """
-    return ToolsManager()[call.tool](call.args, _meta)
+    return ToolsManager()[call.called_id](call.args, _meta)
 
 
 
@@ -159,7 +159,7 @@ class ToolsManager:
             with self.lock:
                 self.cache.pop(addr)
 
-    def prepare_function(self, id: ReferenceTo) -> CachedTool:
+    def prepare_function(self, addr: ReferenceTo) -> CachedTool:
         """
         This function loads a function from DB,
         and then builds the function in such a way that only arguments are left to fill in,
@@ -169,13 +169,13 @@ class ToolsManager:
 
         body = conn.execute_fetchval("""
         SELECT body FROM executables WHERE addr = %s;
-                     """, (id,))
+                     """, (addr,))
 
         tmp_file = NamedTemporaryFile("w+", suffix=".py")
         tmp_file.write(body)
         tmp_file.flush()
 
-        return partial(_execute_tool, tmp_file)
+        return partial(_execute_tool, tmp_file, addr)
 
 
 
@@ -186,7 +186,7 @@ def tools_changed(syscall: SysCall, result: str, conn: Conn) -> tuple[str|None, 
     changed_addr = None
     changed_name = None
 
-    if syscall.tool == "tool_create":
+    if syscall.called_id == "tool_create":
         changed_name = syscall.args.get("name")
 
         if not isinstance(changed_name, str):
@@ -194,7 +194,7 @@ def tools_changed(syscall: SysCall, result: str, conn: Conn) -> tuple[str|None, 
 
         changed_addr = int(result)
 
-    if syscall.tool == "tool_edit":
+    if syscall.called_id == "tool_edit":
         id = str(syscall.args.get("id"))
         try:
             changed_addr = int(id) # pyright: ignore # NOTE : Cause we just TRY.
@@ -213,7 +213,7 @@ def check_invalid_syscall(syscall: SysCall,
     Does all the invalid syscall checking and raises NotImplementedError if tool is accessed that was just changed.
     """
     
-    if syscall.tool != "tool_execute":
+    if syscall.called_id != "tool_execute":
         return
     id = str(syscall.args["id"])
     addr = conn.resolve_to_addr(id)
@@ -227,12 +227,15 @@ def check_invalid_syscall(syscall: SysCall,
         raise NotImplementedError("Usage of tools edited in the same slave is not allowed ! It must be outsourced to a different Slave !")
 
 
-def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _ExecToolMetaData) -> str:
+def _execute_tool(file: _TemporaryFileWrapper, addr: ReferenceTo, kwargs: dict[str, Any], _meta: _ExecToolMetaData) -> str:
     """ 
     Executes the given tool body from the DB.
 
     The tool is generally structured the same way as the syscall, except it gets file and not id.
     """
+
+    tool_executing(_meta, addr, kwargs)
+
     if "timeout" in kwargs:
         timeout = kwargs.pop("timeout")
     else:
@@ -298,14 +301,14 @@ def _execute_tool(file: _TemporaryFileWrapper, kwargs: dict[str, Any], _meta: _E
                 i[1].respond(ret.encode())
             )
 
-            name, addr = tools_changed(i[0], ret, _meta.conn)
+            t_name, t_addr = tools_changed(i[0], ret, _meta.conn)
 
-            if name:
-                changed_tool_names.append(name)
-            if addr:
-                changed_tools_addrs.append(addr)
+            if t_name:
+                changed_tool_names.append(t_name)
+            if t_addr:
+                changed_tools_addrs.append(t_addr)
 
-    bulk_syscalls_trace(_meta.slave_addr, _meta.conn, syscalls)
+    bulk_syscalls_trace(_meta, syscalls)
 
     loop.close()
 

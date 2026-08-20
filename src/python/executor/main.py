@@ -7,8 +7,8 @@ from datetime import datetime
 from types import FunctionType
 from typing import Sequence
 
-from python.optimiser.traces.core import new_execution
-from python.utils.connect_nats import connect_nats
+from ..optimiser.traces.core import new_execution, execution_aborted, tool_errored
+from ..utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
 from ..executor.exceptions import ContextLimitExceededError, ParadoxDetected
@@ -107,7 +107,9 @@ Further documentation of the states inlined as docstrings in the match statement
                     'message': str(e),
                     'state': str(state.tag)
                 })
+                execution_aborted(str(e), metadata_c)
                 return ('', ContextShortState(instr.slave_addr, e, instr, False))
+
             except Exception as e:
                 print(f"FATAL ERROR {e}, TRACEBACK: {traceback.format_exception(e)}")
                 log_json({
@@ -117,6 +119,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     'state': str(state.tag),
                     'traceback': str(traceback.format_exception(e))
                 })
+                execution_aborted(str(e), metadata_c)
                 return ('', ErrorState(instr.slave_addr))
 
     conn: Conn = conn_factory()
@@ -236,7 +239,7 @@ Further documentation of the states inlined as docstrings in the match statement
 
 
                 with conn.transaction():
-                    new_execution(curr.tool_calls, metadata_c)
+                    new_execution(metadata_c)
 
                     for i, call in enumerate(curr.tool_calls):
                         checkpoint()
@@ -250,9 +253,11 @@ Further documentation of the states inlined as docstrings in the match statement
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
                             set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now(), curr.finish))
+                            execution_aborted(str(paradox_e), metadata_c)
                             break
 
                         except Exception as e:
+                            tool_errored(str(e), metadata_c)
                             log_json({
                                 'type': 'core',
                                 'subtype': 'tool',
@@ -272,6 +277,7 @@ Further documentation of the states inlined as docstrings in the match statement
                                     'state': str(state.tag)
                                 })
                                 set_error_state(ErrorState(curr.instr.slave_addr))
+                                execution_aborted("RECURSIVE TOOL CALL ERRORS DETECTED.", metadata_c)
                                 break
 
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}

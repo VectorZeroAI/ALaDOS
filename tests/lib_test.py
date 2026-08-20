@@ -151,7 +151,7 @@ class _Dispatcher:
             result = await loop.run_in_executor(
                 None,
                 execute_syscall,
-                SysCall(tool=tool_name, args=args),
+                SysCall(called_id=tool_name, args=args),
                 meta,
             )
         except Exception as e:

@@ -11,17 +11,14 @@ prompting improvement of function descriptions and or headers.
 """
 
 from ...executor.types import (
-    ToolCallsBlock,
     _ExecToolMetaData,
     syscalls_json_db_bulk_format,
 )
 from ...types import SysCall
-from ...utils.conn_factory import conn_factory
-
-conn = conn_factory() # TODO: add retries. 
+from .main import conn
 
 
-def new_execution(tool_calls: ToolCallsBlock, meta: _ExecToolMetaData) -> None:
+def new_execution(meta: _ExecToolMetaData) -> None:
     """
     Inits the metadata_dag tracing by inserting the starting data to be then later appended to.
     
@@ -32,17 +29,6 @@ def new_execution(tool_calls: ToolCallsBlock, meta: _ExecToolMetaData) -> None:
                  """, (meta.slave_addr,))
 
 
-def bulk_syscalls_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> None:
-    """
-    Bulk appends syscalls to the DB trace of execution, for _execute_tool.
-    """
-    array_for_db: syscalls_json_db_bulk_format = [
-        {"syscall": s.tool, "args": s.args} for s in syscalls
-    ]
-
-    conn.execute("""
-    SELECT concat_syscalls_to_metadata_dag(%s, %s)
-                 """, (meta.slave_addr, array_for_db))
 
 
 def tool_errored(error: str, meta: _ExecToolMetaData) -> None:

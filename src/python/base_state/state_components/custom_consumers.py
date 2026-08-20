@@ -25,7 +25,7 @@ def callback(msg: Msg, nats: Client):
     syscalls_queue_dict_per_slave[slave_addr].put(
         (
             SysCall(
-                tool=syscall_name,
+                called_id=syscall_name,
                 args=json.loads(msg.data.decode())
             ),
             msg

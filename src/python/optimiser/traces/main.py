@@ -2,8 +2,10 @@
 """
 The main tracing file, where all the tracing logic should happen. 
 
-This file doesnt really do anything, but surrounding files provide per component tracing functions 
+This file provides shared resources for surrounding files, which provide per component tracing functions 
 that the components import and hook and use.
 """
+from ...utils.conn_factory import conn_factory
 
+conn = conn_factory() # TODO: add retries. 
 

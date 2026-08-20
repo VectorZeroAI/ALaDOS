@@ -151,7 +151,7 @@ I will also design many SQL functions and python functions for the interactions 
         {
             "tool_calls": [
                 {
-                    "name": "...",
+                    "id": "...", // Because it can also be address in case when a tool has no name.
                     "args": {...},
                     "error": "..." // Optional. This error was recovered inside of the execution.
                 }
@@ -327,7 +327,7 @@ val1="str" // this is valid
 val2={"json": "object"} // This is valid.
 val3="str" // Re Declaration of variables is not allowed. This raises SyntaxError. All variables must only be declared once. 
 
-// BTW comments like this are not actually supported, for model reasoning, use <think></think> blocks, you can use as many of them as you want and insert them anywhere you want, they are removed before processing of your output anyways. 
+// Comments like this are also supported, although I dont see how they would be meaningfully used.
 ```
 
 ##### Chain usage example

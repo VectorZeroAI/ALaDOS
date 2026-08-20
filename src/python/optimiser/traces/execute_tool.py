@@ -2,22 +2,12 @@
 """
 The file where the tracing components for execute_tool are located.
 """
-from typing import Any
-
-from psycopg.types.json import Jsonb
 
 from ...executor.types import _ExecToolMetaData, syscalls_json_db_bulk_format
-from ...types import ReferenceTo, SysCall
+from ...types import SysCall
 from .main import conn
 
 
-def tool_executing(meta: _ExecToolMetaData, tool_id: ReferenceTo, args: dict[str, Any]) -> None:
-    """
-    Traces the tool call.
-    """
-    conn.execute("""
-    SELECT tool_executing_trace(%s, %s, %s);
-                 """, (meta.slave_addr, tool_id, Jsonb(args)))
     
 def bulk_syscalls_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> None:
     """

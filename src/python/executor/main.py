@@ -7,7 +7,7 @@ from datetime import datetime
 from types import FunctionType
 from typing import Sequence
 
-from ..optimiser.traces.core import new_execution, execution_aborted, tool_errored
+from ..optimiser.traces.core import new_execution, execution_aborted, tool_errored, tool_executing
 from ..utils.connect_nats import connect_nats
 
 from ..context.item_loaders_registry import load_item
@@ -245,6 +245,7 @@ Further documentation of the states inlined as docstrings in the match statement
                         checkpoint()
                         try:
                             with conn.transaction():
+                                tool_executing(metadata_c, call)
                                 results.append(execute_tool(call, metadata_c))
                             ## TODO : Think about maybe restructuring this into a more batch styled execution.
                             ## Although error handling may become problematic. Think about it.

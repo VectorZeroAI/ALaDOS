@@ -15,7 +15,7 @@ from tempfile import (
 from threading import RLock
 from typing import Any, Callable, ParamSpec, TypeVar, get_args
 
-from ..optimiser.traces.execute_tool import bulk_syscalls_trace, tool_executing
+from ..optimiser.traces.execute_tool import bulk_syscalls_trace
 from ..types import SysCall
 from ..utils.conn_factory import Conn, conn_factory
 from ..utils.logger import log_json
@@ -233,8 +233,6 @@ def _execute_tool(file: _TemporaryFileWrapper, addr: ReferenceTo, kwargs: dict[s
 
     The tool is generally structured the same way as the syscall, except it gets file and not id.
     """
-
-    tool_executing(_meta, addr, kwargs)
 
     if "timeout" in kwargs:
         timeout = kwargs.pop("timeout")

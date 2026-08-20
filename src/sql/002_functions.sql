@@ -539,23 +539,16 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION tool_executing_trace(
     p_slave_addr BIGINT,
-    p_tool_addr BIGINT,
+    p_tool_name TEXT,
     p_tool_args JSONB
 ) RETURNS VOID AS $$
-DECLARE
-    v_tool_name TEXT;
 BEGIN
-    v_tool_name := COALESCE(
-        (SELECT name FROM names WHERE addr = p_tool_addr),
-        p_tool_addr::TEXT
-    );
-
     UPDATE metadata_dag
         SET metadata = jsonb_set(
             metadata,
             '{executions, -1, tool_calls}',
             COALESCE(metadata#>ARRAY['executions', -1, 'tool_calls'], '[]'::JSONB) || jsonb_build(
-                'id', v_tool_name,
+                'id', p_tool_name,
                 'args', p_tool_args
             )
         )

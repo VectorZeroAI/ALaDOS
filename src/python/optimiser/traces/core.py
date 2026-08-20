@@ -10,12 +10,23 @@ Also optimiser could include analysing reocurring error patterns and
 prompting improvement of function descriptions and or headers.
 """
 
+
+from psycopg.types.json import Jsonb
+
 from ...executor.types import (
     _ExecToolMetaData,
-    syscalls_json_db_bulk_format,
 )
-from ...types import SysCall
+from ...types import ToolCall
 from .main import conn
+
+
+def tool_executing(meta: _ExecToolMetaData, tool_call: ToolCall) -> None:
+    """
+    Traces the tool call.
+    """
+    conn.execute("""
+    SELECT tool_executing_trace(%s, %s, %s);
+                 """, (meta.slave_addr, tool_call.called_id, Jsonb(tool_call.args)))
 
 
 def new_execution(meta: _ExecToolMetaData) -> None:
@@ -27,8 +38,6 @@ def new_execution(meta: _ExecToolMetaData) -> None:
     conn.execute("""
     SELECT new_execution_trace(%s);
                  """, (meta.slave_addr,))
-
-
 
 
 def tool_errored(error: str, meta: _ExecToolMetaData) -> None:

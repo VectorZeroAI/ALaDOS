@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+The main executor file.
+Contains the core function, as well the cores startup logic. 
+Is the single most complex file in the entire system,
+and thus target for refactors to manage that complexity.
+"""
 import asyncio
 import threading
 import tomllib
@@ -314,6 +320,12 @@ Further documentation of the states inlined as docstrings in the match statement
 
 
             case FinishState():
+                """
+                The core finish state manages the explanation of the function results itself,
+                it doesnt require the function results to themself explain themself,
+                so basically that entire logic line will have to be refactored,
+                whereever its seen.
+                """
                 curr = state
 
                 result_str = construct_final_write(curr.results, conn, curr.metadata_c.slave_addr)

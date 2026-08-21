@@ -28,12 +28,13 @@ register(
             raise ValueError("Id not given.")
         slave_id = args["slave_id"]  # automatically injected
         content = asyncio.run(read(id, slave_id))
-        return f"Knowledge Entry at id {id}, content: {content}."
+        print(json.dumps({"id": id, "content": content}))
         """,
         header="""
         args = {
             "id": "knowledge entry id (int or str)."
-        }
+        },
+        returns = {"id": "id", "content": "content of the knowledge entry."}
         """,
         name="K.read"
     )
@@ -59,14 +60,15 @@ register(
         if content_change is None and description_change is None:
             raise ValueError("At least one change must be provided.")
         asyncio.run(edit(id, slave_id, content_change, description_change))
-        return f"Edited knowledge item {id}."
+        print("")
         """,
         header="""
         args = {
             "id": "knowledge entry id (int or str).",
             "content_change": "SearchAndReplaceBlock (optional).",
             "description_change": "SearchAndReplaceBlock (optional)."
-        }
+        },
+        returns = ""
         """,
         name="K.edit"
     )
@@ -92,14 +94,17 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         addr = asyncio.run(create(slave_id, content, description, name))
-        return f"Created knowledge entry with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
             "content": "str, the knowledge content.",
             "description": "str, short description for semantic search.",
             "name": "str (optional)."
-        }
+        },
+        returns = {"addr": "addr to coerse."}
         Additional Notes:
             !Name of knowledge item can not be used in required_slave_id of goal.add_slave!
         """,
@@ -126,13 +131,22 @@ register(
         timeout = args.get("timeout", 10)
         kwargs = args.get("kwargs", {})
         output = asyncio.run(execute(slave_id, id, timeout, kwargs))
-        return f"Tool {id} executed successfully. Output:\\n{output}"
+        
+        print(json.dumps({
+            "id": id,
+            "output": output
+        }))
+
         """,
         header="""
         args = {
             "id": "tool id (int or str).",
             "timeout": "int (optional, default 10).",
             "kwargs": "dict (optional)."
+        },
+        returns = {
+            "id": "id",
+            "output": "output"
         }
         """,
         name="Tool.execute",
@@ -163,7 +177,10 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         addr = asyncio.run(create(slave_id, description, header, body, name))
-        return f"Created tool with address {addr}."
+        print(json.dumps({
+            "addr": addr,
+            "name": name
+        }))
         """,
         header="""
         args = {
@@ -171,6 +188,10 @@ register(
             "header": "str, header documentation.",
             "body": "str, Python code.",
             "name": "str (optional)."
+        },
+        returns = {
+            "addr": "addr to coerse",
+            "name": "name str"
         }
         """,
         name="Tool.create",
@@ -199,7 +220,7 @@ register(
         if header_change is None and body_change is None and new_description is None:
             raise ValueError("At least one change must be provided.")
         asyncio.run(edit(slave_id, id, header_change, body_change, new_description))
-        return f"Edited tool {id}."
+        print("")
         """,
         header="""
         args = {
@@ -207,7 +228,8 @@ register(
             "header_change": "SearchAndReplaceBlock (optional).",
             "body_change": "SearchAndReplaceBlock (optional).",
             "new_description": "str (optional)."
-        }
+        },
+        returns = ""
         NOTES: 
             !One of the changes must be present!
         """,
@@ -239,7 +261,10 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         addr = asyncio.run(create_from_range(slave_id, start_id, end_id, description, name))
-        return f"Created RMT from range with address {addr}."
+        print(json.dumps({
+            "addr": addr,
+            "name": name
+        }))
         """,
         header="""
         args = {
@@ -247,6 +272,10 @@ register(
             "end_id": "int or str, end slave address.",
             "description": "str, RMT description.",
             "name": "str (optional)."
+        },
+        returns = {
+            "addr": "addr to coerse",
+            "name": "name str"
         }
         """,
         name="Rmt.create_from_range",
@@ -270,11 +299,20 @@ register(
             raise ValueError("id not given.")
         slave_id = args["slave_id"]
         result = asyncio.run(serialize(slave_id, id))
-        return f"RMT {id} serialized:\\nDSL: {result['dsl']}\\nDescription: {result['description']}"
+        print(json.dumps({
+            "id": id,
+            "dsl": result["dsl"],
+            "description": result["description"]
+        }))
         """,
         header="""
         args = {
             "id": "RMT id (int or str)."
+        },
+        returns = {
+            "id": "id",
+            "dsl": "dsl string",
+            "description": "description string"
         }
         """,
         name="Rmt.serialize",
@@ -302,13 +340,18 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         addr = asyncio.run(create_from_dsl(slave_id, dsl, description, name))
-        return f"Created RMT from DSL with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
             "dsl": "str, DSL representation.",
             "description": "str, RMT description.",
             "name": "str (optional)."
+        },
+        returns = {
+            "addr": "addr to coerse"
         }
         """,
         name="Rmt.create_from_dsl",
@@ -336,13 +379,18 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         addr = asyncio.run(create_from_master(slave_id, master_id, description, name))
-        return f"Created RMT from master with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
             "master_id": "int or str, master address.",
             "description": "str, RMT description.",
             "name": "str (optional)."
+        }, 
+        returns = {
+            "addr": "addr to coerse"
         }
         """,
         name="Rmt.create_from_master",
@@ -369,13 +417,14 @@ register(
             raise ValueError("new_description not given.")
         slave_id = args["slave_id"]
         asyncio.run(edit_description(slave_id, rmt_id, new_description))
-        return f"Updated description of RMT {rmt_id}."
+        print("")
         """,
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
             "new_description": "str."
-        }
+        }, 
+        returns = ""
         """,
         name="Rmt.edit_description",
         
@@ -402,13 +451,20 @@ register(
         slave_id = args["slave_id"]
         concatenate = args.get("concatenate", True)
         asyncio.run(delete_node(slave_id, rmt_slave_id, template_id, concatenate))
-        return f"Deleted node {rmt_slave_id} from RMT {template_id}."
+        print(json.dumps({
+            "slave_id": rmt_slave_id,
+            "template_id": template_id
+        }))
         """,
         header="""
         args = {
             "rmt_slave_id": "int or str, node to delete.",
             "template_id": "int or str, RMT template address.",
             "concatenate": "bool (optional, default True)."
+        },
+        returns = {
+            "slave_id": "slave id",
+            "template_id": "template id"
         }
         """,
         name="Rmt.delete_node",
@@ -439,7 +495,10 @@ register(
         depends_on = args.get("depends_on", [])
         required_by = args.get("required_by", [])
         result = asyncio.run(insert_node(slave_id, rmt_id, instruction, name, scope, depends_on, required_by))
-        return f"Inserted node {result['node_addr']} into RMT {result['rmt_addr']}."
+        print(json.dumps({
+            "node_addr": result["node_addr"],
+            "rmt_addr": result["rmt_addr"]
+        }))
         """,
         header="""
         args = {
@@ -449,6 +508,10 @@ register(
             "scope": "str (optional, default 'general').",
             "depends_on": "list of int/str (optional).",
             "required_by": "list of int/str (optional)."
+        }, 
+        returns = {
+            "node_addr": "addr to coerse",
+            "rmt_addr": "addr to coerse"
         }
         """,
         name="Rmt.insert_node",
@@ -477,7 +540,10 @@ register(
         depends_on = args.get("depends_on", [])
         required_by = args.get("required_by", [])
         addr = asyncio.run(activate_as_master(slave_id, rmt_id, inputs, depends_on, required_by))
-        return f"Activated RMT {rmt_id} as master with address {addr}."
+        print(json.dumps({
+            "rmt_id": rmt_id,
+            "master_addr": addr
+        }))
         """,
         header="""
         args = {
@@ -485,6 +551,10 @@ register(
             "inputs": "dict, variable substitutions.",
             "depends_on": "list of int/str (optional).",
             "required_by": "list of int/str (optional)."
+        }, 
+        returns = {
+            "rmt_id": "rmt id",
+            "master_addr": "master_addr to coerse"
         }
         """,
         name="Rmt.activate_as_master",
@@ -511,13 +581,14 @@ register(
             raise ValueError("sr_block not given.")
         slave_id = args["slave_id"]
         asyncio.run(edit_node_instruction(slave_id, node_id, sr_block))
-        return f"Edited instruction of RMT node {node_id}."
+        print("")
         """,
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
             "sr_block": "SearchAndReplaceBlock."
-        }
+        },
+        returns = ""
         """,
         name="Rmt.edit_node_instruction",
         
@@ -543,13 +614,14 @@ register(
             raise ValueError("new_scope not given.")
         slave_id = args["slave_id"]
         asyncio.run(change_node_scope(slave_id, node_id, new_scope))
-        return f"Changed scope of RMT node {node_id} to {new_scope}."
+        print("")
         """,
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
             "new_scope": "str, e.g. 'general', 'task', etc."
-        }
+        },
+        returns = ""
         """,
         name="Rmt.change_node_scope",
         
@@ -576,13 +648,18 @@ register(
         args_dict = args.get("args", {})
         slave_id = args["slave_id"]
         consumer_addr = asyncio.run(register_reaction_rmt(slave_id, event_path, rmt_id, args_dict))
-        return f"Registered RMT {rmt_id} for event {event_path}, consumer address {consumer_addr}."
+        print(json.dumps({
+            "consumer_addr": consumer_addr
+        }))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "rmt_id": "int or str, RMT address.",
             "args": "dict (optional, arguments for RMT activation)."
+        },
+        returns = {
+            "consumer_addr": "consumer_addr to coerse"
         }
         """,
         name="Rmt.register_reaction_rmt",
@@ -610,13 +687,18 @@ register(
         slave_id = args["slave_id"]
         scope = args.get("scope", "general")
         consumer_addr = asyncio.run(register_reaction_slave(slave_id, event_path, instruction, scope))
-        return f"Registered slave reaction for event {event_path}, consumer address {consumer_addr}."
+        print(json.dumps({
+            "consumer_addr": consumer_addr
+        }))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "instruction": "str, instruction for the slave.",
             "scope": "str (optional, default 'general')."
+        },
+        returns = {
+            "consumer_addr": "consumer_addr to coerse"
         }
         """,
         name="Rmt.register_reaction_slave",
@@ -644,13 +726,20 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         result = asyncio.run(create_result_via_event(slave_id, event_path, result_str, name))
-        return f"Created event-driven result {result['result_addr']} with consumer {result['consumer_addr']}."
+        print(json.dumps({
+            "result_addr": result["result_addr"],
+            "consumer_addr": result["consumer_addr"]
+        }))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "result_str": "str, template with ${{data}} and ${{event}}.",
             "name": "str (optional)."
+        }, 
+        returns = {
+            "result_addr": "result addr to coerse",
+            "consumer_addr": "consumer addr to coerse"
         }
         """,
         name="Rmt.create_result_via_event",
@@ -674,12 +763,13 @@ register(
             raise ValueError("id not given.")
         slave_id = args["slave_id"]
         asyncio.run(add(slave_id, id))
-        return f"Added item {id} to context."
+        print("")
         """,
         header="""
         args = {
             "id": "int or str, address or name of item."
-        }
+        },
+        returns = ""
         """,
         name="Context.add",
         
@@ -702,11 +792,16 @@ register(
             raise ValueError("query not given.")
         slave_id = args["slave_id"]
         anchor = asyncio.run(window_semantic_land(slave_id, query))
-        return f"Semantic land on query '{query}' set anchor to {anchor}."
+        print(json.dumps({
+            "anchor_addr": anchor
+        }))
         """,
         header="""
         args = {
             "query": "str, search query."
+        },
+        returns = {
+            "anchor_addr": "addr to coerse"
         }
         """,
         name="Context.window_semantic_land",
@@ -730,12 +825,13 @@ register(
             raise ValueError("id not given.")
         slave_id = args["slave_id"]
         asyncio.run(window_land_by_addr(slave_id, id))
-        return f"Landed context window on item {id}."
+        print("")
         """,
         header="""
         args = {
             "id": "int or str, address or name."
-        }
+        },
+        returns = ""
         """,
         name="Context.window_land_by_addr",
         
@@ -756,13 +852,22 @@ register(
         slave_id = args["slave_id"]
         left = args.get("left", 0)
         right = args.get("right", 0)
+        if left == 0 and right == 0:
+            raise ValueError("Both left and right are 0, which means this is a no op and is assumed as an upstream error. Check intention.")
         result = asyncio.run(window_change_size(slave_id, left, right))
-        return f"Changed window size: left={result['left']}, right={result['right']}."
+        print(json.dumps({
+            "size_left": result["left"],
+            "size_right": result["right"]
+        }))
         """,
         header="""
         args = {
             "left": "int (optional, default 0).",
             "right": "int (optional, default 0)."
+        },
+        returns = {
+            "size_left": "new size to the left to coerse to int",
+            "size_right": "new size to the right to coerse to int"
         }
         """,
         name="Context.window_change_size",
@@ -786,11 +891,16 @@ register(
         if amount is None:
             raise ValueError("amount not given.")
         new_anchor = asyncio.run(window_move_anchor(slave_id, amount))
-        return f"Moved anchor by {amount}, new anchor: {new_anchor}."
+        print(json.dumps({
+            "new_anchor": new_anchor
+        }))
         """,
         header="""
         args = {
             "amount": "int, positive moves right, negative left."
+        },
+        returns = {
+            "new_anchor": "new anchor address to coerse"
         }
         """,
         name="Context.window_move_anchor",
@@ -814,12 +924,13 @@ register(
             raise ValueError("id not given.")
         slave_id = args["slave_id"]
         asyncio.run(unload_item(slave_id, id))
-        return f"Unloaded item {id} from context."
+        print("")
         """,
         header="""
         args = {
             "id": "int or str, address or name."
-        }
+        },
+        returns = ""
         """,
         name="Context.unload_item",
         
@@ -846,7 +957,9 @@ register(
         slave_name = args.get("slave_name")
         result_name = args.get("result_name")
         addr = asyncio.run(add_slave(slave_id, instruction, slave_type, required_results_ids, slave_name, result_name))
-        return f"Added slave step with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
@@ -855,6 +968,9 @@ register(
             "required_results_ids": "list of int/str (optional).",
             "slave_name": "str (optional).",
             "result_name": "str (optional)."
+        },
+        returns = {
+            "addr": "slave addr to coerse"
         }
         Usage Notes:
             required_results_ids may include 'self', which would refer to the current slave.
@@ -877,10 +993,11 @@ register(
         args = json.load(sys.stdin)
         slave_id = args["slave_id"]
         asyncio.run(add_planner_slave(slave_id))
-        return "Added planner slave."
+        print("")
         """,
         header="""
-        args = {}
+        args = {},
+        returns = ""
         """,
         name="Goal.add_planner_slave",
         
@@ -905,13 +1022,18 @@ register(
         required_ids = args.get("required_ids", [])
         result_name = args.get("result_name")
         addr = asyncio.run(add_master(slave_id, instruction, required_ids, result_name))
-        return f"Created master goal with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
             "instruction": "str, master instruction.",
             "required_ids": "list of int/str (optional).",
             "result_name": "str (optional)."
+        },
+        returns = {
+            "addr": "addr to coerse"
         }
         """,
         name="Goal.add_master",
@@ -942,7 +1064,9 @@ register(
         params = args.get("params", {})
         slave_id = args["slave_id"]
         addr = asyncio.run(add_cron_job(slave_id, cronjob_type, action, time_between_runs, params))
-        return f"Added cron job with address {addr}."
+        print(json.dumps({
+            "addr": addr
+        }))
         """,
         header="""
         args = {
@@ -950,6 +1074,9 @@ register(
             "action": "str, e.g. 'do_this_later'.",
             "time_between_runs": "int, seconds.",
             "params": "dict (optional)."
+        },
+        returns = {
+            "addr": "addr to coerse"
         }
         """,
         name="Goal.add_cron_job",
@@ -973,12 +1100,13 @@ register(
             raise ValueError("text not given.")
         slave_id = args["slave_id"]
         asyncio.run(add_master_result(slave_id, text))
-        return f"Appended to master result: {text}"
+        print("")
         """,
         header="""
         args = {
             "text": "str, text to append."
-        }
+        },
+        returns = ""
         """,
         name="Result.add_master_result",
         
@@ -1001,12 +1129,13 @@ register(
             raise ValueError("text not given.")
         slave_id = args["slave_id"]
         result = asyncio.run(write(slave_id, text))
-        return f"Slave result written: {result}"
+        print("")
         """,
         header="""
         args = {
             "text": "str, result text."
-        }
+        },
+        returns = ""
         """,
         name="Result.write",
         
@@ -1030,12 +1159,17 @@ register(
         slave_id = args["slave_id"]
         websites_amount = args.get("websites_amount", 3)
         content = asyncio.run(search_fulltext(slave_id, query, websites_amount))
-        return f"Full text search results for '{query}':\\n{content}"
+        print(json.dumps({
+            "full_result": content
+        }))
         """,
         header="""
         args = {
             "query": "str, search query.",
             "websites_amount": "int (optional, default 3)."
+        },
+        returns = {
+            "full_result": "a very large string, XML delimetered... propably."
         }
         """,
         name="Web.search_fulltext",
@@ -1062,13 +1196,21 @@ register(
             raise ValueError("amount_results not given.")
         slave_id = args["slave_id"]
         results = asyncio.run(search(slave_id, query, amount_results))
-        return f"Web search results for '{query}':\\n{json.dumps(results, indent=2)}"
+        print(json.dumps(results))
         """,
         header="""
         args = {
             "query": "str, search query.",
             "amount_results": "int, number of results."
-        }
+        },
+        returns = [
+            {
+                "url": "string",
+                "title": "string",
+                "snippet": "string"
+            },
+            ...
+        ]
         """,
         name="Web.search",
         
@@ -1094,7 +1236,9 @@ register(
         return_type = args.get("return_type", "extracted")
         headers = args.get("headers", {})
         content = asyncio.run(get(slave_id, url, timeout, return_type, headers))
-        return f"GET {url} returned:\\n{content}"
+        print(json.dumps({
+            "content": content
+        }))
         """,
         header="""
         args = {
@@ -1102,6 +1246,9 @@ register(
             "timeout": "int (optional, default 10).",
             "return_type": "'extracted' or 'raw' (optional, default 'extracted').",
             "headers": "dict (optional)."
+        },
+        returns = {
+            "content": "potentially large string"
         }
         """,
         name="Web.get",
@@ -1129,7 +1276,9 @@ register(
         headers = args.get("headers", {})
         payload = args.get("payload", "")
         content = asyncio.run(post(slave_id, url, timeout, return_type, headers, payload))
-        return f"POST {url} returned:\\n{content}"
+        print(json.dumps({
+            "content": content
+        }))
         """,
         header="""
         args = {
@@ -1138,6 +1287,9 @@ register(
             "return_type": "'extracted', 'raw', or 'status_code' (optional, default 'extracted').",
             "headers": "dict (optional).",
             "payload": "str (optional)."
+        },
+        returns = {
+            "content": "potentially giant string"
         }
         """,
         name="Web.post",
@@ -1165,13 +1317,18 @@ register(
         args_dict = args.get("args", {})
         slave_id = args["slave_id"]
         consumer_addr = asyncio.run(register_reaction_rmt(slave_id, event_path, rmt_id, args_dict))
-        return f"Registered RMT {rmt_id} for event {event_path}, consumer address {consumer_addr}."
+        print(json.dumps({
+            "consumer_addr": consumer_addr
+        }))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "rmt_id": "int or str, RMT address.",
             "args": "dict (optional)."
+        },
+        returns = {
+            "consumer_addr": "consumer_addr to coerse"
         }
         """,
         name="Event.register_reaction_rmt",
@@ -1199,13 +1356,18 @@ register(
         slave_id = args["slave_id"]
         scope = args.get("scope", "general")
         consumer_addr = asyncio.run(register_reaction_slave(slave_id, event_path, instruction, scope))
-        return f"Registered slave reaction for event {event_path}, consumer address {consumer_addr}."
+        print(json.dumps({
+            "consumer_addr": consumer_addr
+        }))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "instruction": "str, slave instruction.",
             "scope": "str (optional, default 'general')."
+        },
+        returns = {
+            "consumer_addr": "consumer_addr to coerse"
         }
         """,
         name="Event.register_reaction_slave",
@@ -1233,13 +1395,17 @@ register(
         slave_id = args["slave_id"]
         name = args.get("name")
         result = asyncio.run(create_result(slave_id, event_path, result_str, name))
-        return f"Created event-driven result {result['result_addr']} with consumer {result['consumer_addr']}."
+        print(json.dumps(result))
         """,
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
             "result_str": "str, template with ${{data}} and ${{event}}.",
             "name": "str (optional)."
+        },
+        returns = {
+            "result_addr": "addr to coerse",
+            "consumer_addr": "addr to coerse"
         }
         """,
         name="Event.create_result",
@@ -1266,14 +1432,15 @@ register(
             raise ValueError("paradox not given.")
         slave_id = args["slave_id"]
         asyncio.run(report_paradoxal_information(slave_id, items, paradox))
-        # This call will raise an exception and never return normally
-        return "Reported paradox (should not reach here)."
+        print("")
         """,
+        # NOTE: The error is correctly propagated because syscall is executed in tool
         header="""
         args = {
             "items": "list of int/str, addresses or names of paradoxical items.",
             "paradox": "str, description of the paradox."
-        }
+        },
+        returns = ""
         """,
         name="Report.report_paradoxal_information",
     )

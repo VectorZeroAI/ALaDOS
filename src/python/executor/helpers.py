@@ -161,3 +161,5 @@ def construct_final_write(results: list[str], conn: Conn, slave_addr: ReferenceT
             "\n".join([*r]) for r in result_elements
         ]
     )
+
+    return result_str

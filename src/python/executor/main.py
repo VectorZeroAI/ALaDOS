@@ -25,7 +25,7 @@ from ..utils.uqueue import Uqueue
 from . import embedder
 from .api_calls_handler import api_calls_block
 from .cronjobs import main as cronjob_handler
-from .helpers import fix_llm_response, prepare_context_shortening_prompt
+from .helpers import fix_llm_response, prepare_context_shortening_prompt, construct_final_write
 from .queue import (
     embedder_queue,
     executor_queue,
@@ -316,9 +316,7 @@ Further documentation of the states inlined as docstrings in the match statement
             case FinishState():
                 curr = state
 
-                
-
-                result_str = "\n".join(curr.results)
+                result_str = construct_final_write(curr.results, conn, curr.metadata_c.slave_addr)
 
                 checkpoint()
 

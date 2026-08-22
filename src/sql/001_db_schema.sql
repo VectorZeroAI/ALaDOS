@@ -142,6 +142,27 @@ CREATE TABLE IF NOT EXISTS masters (
             ON UPDATE CASCADE
 );
 
+
+CREATE TABLE IF NOT EXISTS reusable_master_templates(
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS rmt_slaves(
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
+        REFERENCES addrs(addr) 
+            ON UPDATE CASCADE 
+            ON DELETE CASCADE,
+    instruction TEXT NOT NULL,
+    scope slave_scope NOT NULL DEFAULT 'general',
+    template_addr BIGINT
+        REFERENCES reusable_master_templates
+            ON DELETE CASCADE
+            ON UPDATE CASCADE,
+    deps BIGINT[]
+);
+
 CREATE TABLE IF NOT EXISTS master_context (
     addr BIGINT PRIMARY KEY 
         REFERENCES masters(addr)
@@ -276,25 +297,6 @@ CREATE OR REPLACE VIEW cronjobs_to_run AS
 
 
 
-CREATE TABLE IF NOT EXISTS reusable_master_templates(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS rmt_slaves(
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
-    instruction TEXT NOT NULL,
-    scope slave_scope NOT NULL DEFAULT 'general',
-    template_addr BIGINT
-        REFERENCES reusable_master_templates
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
-    deps BIGINT[]
-);
 
 DO $$
     BEGIN

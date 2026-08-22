@@ -9,25 +9,15 @@ import pytest
 from python.executor.execute_tool import ToolsManager
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
-from python.utils.conn_factory import conn_factory
-from python.helpers import ensure_schema_applied
+from python.utils.conn_factory import Conn, conn_factory, conn_factory_raw
+from python.helpers import ensure_schema_applied as normal_schema
 
 
 TEST_DB_NAME = "alados_test"
 os.environ["ALADOS_DB_NAME"] = TEST_DB_NAME
 
-@pytest.fixture(scope="session")
-def setup():
-    """ Apply schema. And nuke the DB, so be really carefull. """
-    conn = conn_factory("postgres")
-    with suppress(Exception):
-        conn.execute(f"DROP DATABASE {TEST_DB_NAME}; CREATE DATABASE {TEST_DB_NAME};")
-
-    conn.close()
-
-    conn = conn_factory(TEST_DB_NAME)
-
-    ensure_schema_applied(conn)
+def prepare_schemas_for_tests(conn: Conn):
+    """ Apply test spefic schema changes. """
 
     conn.execute("""
     CREATE OR REPLACE FUNCTION notify_result_ready()
@@ -43,7 +33,23 @@ def setup():
     CREATE OR REPLACE TRIGGER trg_notify_result_ready
     AFTER UPDATE ON results
     FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
-                 """) # NOTE : Special setup for tests only here.
+                 """) # NOTE : core_tests requires that.
+
+
+
+@pytest.fixture(scope="session")
+def setup():
+    """ Apply schema. And nuke the DB, so be really carefull. """
+
+    conn = conn_factory_raw(TEST_DB_NAME)
+
+    with suppress(Exception):
+        conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+
+    normal_schema(conn)
+
+    prepare_schemas_for_tests(conn)
+
 
 
 @pytest.fixture

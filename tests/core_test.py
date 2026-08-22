@@ -12,23 +12,6 @@ Usage doc:
     You are not required to name classes with Test...
     DB is cleared between classes, e.g. test cases, not between individual Steps. 
 
-!!! RUN THIS SQL AGAINST THE DB !!!
-
-"
-CREATE OR REPLACE FUNCTION notify_result_ready()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.ready = TRUE THEN
-        PERFORM pg_notify('results_ready', NEW.addr::TEXT);
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER trg_notify_result_ready
-AFTER UPDATE ON results
-FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
-"
 """
 
 import threading

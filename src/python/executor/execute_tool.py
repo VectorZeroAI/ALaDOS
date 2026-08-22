@@ -112,19 +112,21 @@ class ToolsManager:
     Is a singleton because I think its cleaner then creating it once and importing value every time.
     """
     _instance = None
+    _inited = False
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls.cache = OrderedDict[ReferenceTo, CachedTool]()
+            cls.lock = RLock()
+            cls.names_lock = RLock()
+            cls.conn = conn_factory()
+            cls._inited = True
 
         return cls._instance
 
     def __init__(self, limit: int = 100):
-        self.cache = OrderedDict[ReferenceTo, CachedTool]()
-        self.lock = RLock()
-        self.names_lock = RLock()
         self.limit = limit
-        self.conn = conn_factory()
 
     def __getitem__(self, id: str|ReferenceTo, /) -> CachedTool:
         """

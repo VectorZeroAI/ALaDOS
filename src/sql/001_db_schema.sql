@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS names(
     name TEXT PRIMARY KEY,
 
     CONSTRAINT no_address_like_text_allowed CHECK (
-        name !~ "^[0-9]+$"
+        name !~ '^[0-9]+$'
     )
 );
 

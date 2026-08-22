@@ -12,7 +12,22 @@ Usage doc:
     You are not required to name classes with Test...
     DB is cleared between classes, e.g. test cases, not between individual Steps. 
 
-!!! RUN THE SQL AT THE BOTTOM AGAINST THE alados_test DB YOURSELF ELSE EVERYTHING TIMES OUT. !!!
+!!! RUN THIS SQL AGAINST THE DB !!!
+
+"
+CREATE OR REPLACE FUNCTION notify_result_ready()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.ready = TRUE THEN
+        PERFORM pg_notify('results_ready', NEW.addr);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_notify_result_ready
+AFTER UPDATE ON results
+FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+"
 """
 
 import threading

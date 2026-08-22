@@ -237,7 +237,7 @@ class TestGoalTools:
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
-        mc = meta.conn.execute_fetchval("SELECT master_result FROM master_context WHERE addr=%s", (meta.master_addr,))
+        mc = meta.conn.execute_fetchval("SELECT content_str FROM results WHERE addr=(SELECT result_addr FROM masters WHERE addr = %s);", (meta.master_addr,))
         assert "summary" in mc
 
     def test_result_write(self, meta):

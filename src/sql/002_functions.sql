@@ -292,7 +292,7 @@ BEGIN
     new_master_addr := COALESCE(p_addr, new_addr());
 
     INSERT INTO masters(instruction, addr) VALUES (p_instruction, new_master_addr)
-    RETURNING result_addr
+    RETURNING result_addr -- NOTE: This is gotten via init_master_result SQL TRIGGER
     INTO new_master_result_addr;
     
     IF req_names IS NOT NULL THEN

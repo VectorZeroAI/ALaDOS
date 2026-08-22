@@ -193,7 +193,7 @@ RETURNS TRIGGER AS $$
             SELECT v_content||COALESCE(string_agg(r.content_str, ''), '\n') INTO v_content
             FROM slaves s
                 JOIN results r ON s.result_addr = r.addr
-                LEFT JOIN metadata_dag md ON s.addr = md.s_addr -- NOTE : theoretically a INNER JOIN is fine.
+                LEFT JOIN metadata_dag md ON s.addr = md.addr_s -- NOTE : theoretically a INNER JOIN is fine.
             WHERE NOT EXISTS (
                     SELECT 1
                     FROM slave_req
@@ -262,7 +262,7 @@ FOR EACH ROW EXECUTE FUNCTION notify_tool_changed();
 CREATE OR REPLACE FUNCTION auto_insert_metadata_dag_per_slave()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO metadata_dag(addr) VALUES(NEW.addr);
+    INSERT INTO metadata_dag(addr_s) VALUES(NEW.addr);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

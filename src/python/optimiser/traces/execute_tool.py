@@ -2,13 +2,12 @@
 """
 The file where the tracing components for execute_tool are located.
 """
+from psycopg.types.json import Jsonb
 
 from ...executor.types import _ExecToolMetaData, syscalls_json_db_bulk_format
 from ...types import SysCall
 from .main import conn
 
-
-    
 def bulk_syscalls_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> None:
     """
     Bulk appends syscalls to the DB trace of execution, for _execute_tool.
@@ -19,4 +18,4 @@ def bulk_syscalls_trace(meta: _ExecToolMetaData, syscalls: list[SysCall]) -> Non
 
     conn.execute("""
     SELECT concat_syscalls_to_metadata_dag(%s, %s)
-                 """, (meta.slave_addr, array_for_db))
+                 """, (meta.slave_addr, Jsonb(array_for_db)))

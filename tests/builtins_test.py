@@ -97,7 +97,7 @@ class TestContextTools:
         addr = meta.conn.resolve_to_addr(name)
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM master_load WHERE master_addr=%s AND item_addr=%s",
-            (meta.master_id, addr)
+            (meta.master_addr, addr)
         )
         assert cnt == 1
 
@@ -110,7 +110,7 @@ class TestContextTools:
         assert res == ""
         cnt = meta.conn.execute_fetchval(
             "SELECT count(*) FROM master_load WHERE master_addr=%s AND item_addr=%s",
-            (meta.master_id, addr)
+            (meta.master_addr, addr)
         )
         assert cnt == 0
 
@@ -124,7 +124,7 @@ class TestContextTools:
         )
         context_window_land_by_addr(id=addr, _meta=meta)
         anchor = meta.conn.execute_fetchval(
-            "SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta.master_id,)
+            "SELECT window_anchor_knowledge FROM master_context WHERE addr=%s", (meta.master_addr,)
         )
         assert anchor == addr
 
@@ -138,7 +138,7 @@ class TestContextTools:
         )
         context_window_land_by_addr(id=addr, _meta=meta)
         anchor = meta.conn.execute_fetchval(
-            "SELECT window_anchor_exe FROM master_context WHERE addr=%s", (meta.master_id,)
+            "SELECT window_anchor_exe FROM master_context WHERE addr=%s", (meta.master_addr,)
         )
         assert anchor == addr
 
@@ -153,7 +153,7 @@ class TestContextTools:
         context_window_land_by_addr(id=addr, _meta=meta)
         context_window_size_change(left=5, right=-2, _meta=meta)
         row = meta.conn.execute(
-            "SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta.master_id,)
+            "SELECT window_size_l, window_size_r FROM master_context WHERE addr=%s", (meta.master_addr,)
         ).fetchone()
         assert row[0] == 17
         assert row[1] == 10
@@ -174,7 +174,7 @@ class TestContextTools:
         move_window_anchor(amount=-1, _meta=meta)
         new_anchor = conn.execute_fetchval(
             "SELECT COALESCE(window_anchor_knowledge, window_anchor_exe) FROM master_context WHERE addr=%s",
-            (meta.master_id,)
+            (meta.master_addr,)
         )
         assert new_anchor == items[0]
 
@@ -202,7 +202,7 @@ class TestGoalTools:
     def test_add_slave_self_requires(self, meta):
         conn = meta.conn
         result_addr = conn.execute_fetchval(
-            "SELECT result_addr FROM slaves WHERE addr = %s", (meta.slave_id,)
+            "SELECT result_addr FROM slaves WHERE addr = %s", (meta.slave_addr,)
         )
         res = add_slave(instruction="self dep", required_results_ids=['self'], _meta=meta)
         slave_addr = int(res)
@@ -212,7 +212,7 @@ class TestGoalTools:
     def test_add_slave_planner_type(self, meta):
         before = meta.conn.execute_fetchval(
             "SELECT count(*) FROM slaves WHERE master_addr = %s AND scope = 'task'",
-            (meta.master_id,),
+            (meta.master_addr,),
         )
         res = add_slave(
             instruction="do plan",
@@ -223,7 +223,7 @@ class TestGoalTools:
 
         after = meta.conn.execute_fetchval(
             "SELECT count(*) FROM slaves WHERE master_addr = %s AND scope = 'task'",
-            (meta.master_id,),
+            (meta.master_addr,),
         )
         assert after == before + 1
 
@@ -231,13 +231,13 @@ class TestGoalTools:
             "SELECT instruction FROM slaves "
             "WHERE master_addr = %s AND scope = 'task' "
             "ORDER BY addr DESC LIMIT 1",
-            (meta.master_id,),
+            (meta.master_addr,),
         )
         assert "You task is to decide how to further proceed" in planner_instruction
 
     def test_master_result_add(self, meta):
         master_result_add(text="summary", _meta=meta)
-        mc = meta.conn.execute_fetchval("SELECT master_result FROM master_context WHERE addr=%s", (meta.master_id,))
+        mc = meta.conn.execute_fetchval("SELECT master_result FROM master_context WHERE addr=%s", (meta.master_addr,))
         assert "summary" in mc
 
     def test_result_write(self, meta):
@@ -645,5 +645,6 @@ class TestEventTools:
 def test_report_paradox(meta):
     with pytest.raises(ParadoxDetected):
         report_paradoxal_information(items=[1], paradox="conflict", _meta=meta)
+
 
 

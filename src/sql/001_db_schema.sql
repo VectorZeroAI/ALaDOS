@@ -115,11 +115,13 @@ CREATE TABLE IF NOT EXISTS results (
             ON DELETE CASCADE,
     content_str TEXT,
     ready BOOLEAN NOT NULL DEFAULT FALSE,
-    status TEXT, -- Status, e.g. error, paradox, impossible instruction.
-    status_inf JSONB, -- additional unstructured information, with per status different keys and values.
-    metadata JSONB, -- for things such as type for webui sessions, and other crap
+    status TEXT, -- Status, e.g. error, paradox, impossible instruction. TODO : Make ENUM
+    status_inf JSONB,
+    metadata JSONB, -- TODO : Remove infavor of metadata_dag.
     CONSTRAINT content_present_when_ready CHECK (
         (ready IS FALSE AND content_str IS NULL)
+        OR 
+        (ready IS FALSE AND content_str IS NOT NULL) -- for incremental accumulation
         OR 
         (ready IS TRUE AND content_str IS NOT NULL)
     ),

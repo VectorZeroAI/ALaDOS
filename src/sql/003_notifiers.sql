@@ -101,10 +101,11 @@ RETURNS TRIGGER AS $$
             If the task is asking for factual information, or requires up to date information, it is not trivial, and you must create a plan for it, wich must include searching the web.
             ',
             p_name := 'planner_'||nextval('global_planner_serial')::TEXT,
-            --- TODO : Add a step to this,
+            --- TODO: Add a step to this,
             --- where there available rmts are evaluated on the propability of them being usefull 
             --- to the task, and then embedded into the prompt as possibilities of executing functions
             --- directly insdead of planning stuff.
+            --- Or simply use the new DB driven scopes.
             p_slave_scope := 'task'
         );
     RETURN NEW;
@@ -189,22 +190,21 @@ RETURNS TRIGGER AS $$
             WHERE s.master_addr = v_master_addr
                 AND r.ready = FALSE
         ) THEN
-
-            SELECT mc.master_result INTO v_content FROM master_context mc WHERE mc.addr = v_master_addr;
-
             SELECT v_content||COALESCE(string_agg(r.content_str, ''), '\n') INTO v_content
-            FROM slave_req sr
-                RIGHT JOIN slaves s ON sr.slave_addr = s.addr
+            FROM slaves s
                 JOIN results r ON s.result_addr = r.addr
+                LEFT JOIN metadata_dag md ON s.addr = md.s_addr -- NOTE : theoretically a INNER JOIN is fine.
             WHERE NOT EXISTS (
-                    SELECT 1 FROM slave_req WHERE req_addr = r.addr
+                    SELECT 1
+                    FROM slave_req
+                    WHERE req_addr = r.addr
                 )
-                AND s.master_addr = v_master_addr
-                AND r.content_str NOT LIKE '%Added a master result.%';
-            --- NOTE : This querry checks the contents of the result for having wrote to master_result,
-            --- and if no, concatenates to v_content. 
-            --- FIXME : This no longer works like this since the tool calling system refactor.
-            --- We need to find anouther way to trace the actual function calls.
+                AND NOT EXISTS(
+                    SELECT 1
+                    FROM unnest(md.metadata#>>ARRAY['executions', -1, 'syscalls'])
+                    WHERE name = 'result_add_master_result'
+                )
+                AND s.master_addr = v_master_addr;
 
             PERFORM new_result(
                 p_content := v_content,

@@ -19,8 +19,9 @@ CREATE OR REPLACE FUNCTION notify_result_ready()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.ready = TRUE THEN
-        PERFORM pg_notify('results_ready', NEW.addr);
+        PERFORM pg_notify('results_ready', NEW.addr::TEXT);
     END IF;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -1,3 +1,4 @@
+from contextlib import suppress
 import os
 import uuid
 from datetime import datetime, timezone
@@ -9,26 +10,52 @@ from python.executor.execute_tool import ToolsManager
 from python.executor.queue import syscalls_queue_dict_per_slave
 from python.executor.types import _ExecToolMetaData
 from python.utils.conn_factory import conn_factory
+from python.helpers import ensure_schema_applied
 
 
 TEST_DB_NAME = "alados_test"
 os.environ["ALADOS_DB_NAME"] = TEST_DB_NAME
 
+@pytest.fixture(scope="session")
+def setup():
+    """ Apply schema. And nuke the DB, so be really carefull. """
+    conn = conn_factory("postgres")
+    with suppress(Exception):
+        conn.execute(f"DROP DATABASE {TEST_DB_NAME}; CREATE DATABASE {TEST_DB_NAME};")
+
+    conn.close()
+
+    conn = conn_factory(TEST_DB_NAME)
+
+    ensure_schema_applied(conn)
+
+    conn.execute("""
+    CREATE OR REPLACE FUNCTION notify_result_ready()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        IF NEW.ready = TRUE THEN
+            PERFORM pg_notify('results_ready', NEW.addr::TEXT);
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE OR REPLACE TRIGGER trg_notify_result_ready
+    AFTER UPDATE ON results
+    FOR EACH ROW EXECUTE FUNCTION notify_result_ready();
+                 """) # NOTE : Special setup for tests only here.
+
 
 @pytest.fixture
-def db():
-    """Give each DB test a transaction that is ALWAYS rolled back."""
+def db(setup):
+    """ Just give the connection to a clean DB. """
     conn = conn_factory(TEST_DB_NAME)
-    conn.autocommit = False
     conn.rollback()
     conn.execute("BEGIN")
-    try:
+    with suppress(Exception):
         yield conn
-    finally:
-        try:
-            conn.rollback()
-        finally:
-            conn.close()
+        conn.rollback()
+        conn.close()
 
 
 @pytest.fixture

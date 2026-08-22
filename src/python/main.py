@@ -4,17 +4,17 @@ Main entrypoint, and the first file to start.
 """
 
 import sys
-from pathlib import Path
 
 import psycopg
 
+from .base_state.main import startup as bs_startup
+from .events.main import startup as ev_startup
 from .executor.main import startup as e_startup
+from .helpers import ensure_schema_applied as db_startup
 from .interfaces.alados_console import start_console
 from .sceduler.main import setup as s_setup
 from .utils.conn_factory import conn_factory_raw
 from .utils.logger import startup as l_startup
-from .events.main import startup as ev_startup
-from .base_state.main import startup as bs_startup
 
 
 def main() -> None:
@@ -28,15 +28,7 @@ def main() -> None:
         print(f"Are you sure you started postgres? \n\n I couldnt connect with this error {e}. \n\n Make sure you actually started postgres.")
         sys.exit(1)
 
-    main_file = Path(__file__)
-    sql_dir = main_file.parent.parent / "sql"
-
-    for i in sorted(sql_dir.glob("*.sql")):
-        try:
-            conn.execute(i.read_text()) # pyright: ignore
-            print(f"sql file {i.name} was successfully executed")
-        except Exception as e:
-            raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e
+    db_startup(conn)
 
     custom_consumers = bs_startup()
     e_startup()

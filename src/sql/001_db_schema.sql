@@ -348,15 +348,16 @@ CREATE TABLE IF NOT EXISTS metadata_dag(
         CASE 
             WHEN addr_s IS NOT NULL THEN addr_s
             WHEN addr_m IS NOT NULL THEN addr_m
-    ),
+        END
+    ) STORED,
     metadata JSONB DEFAULT '{}'::JSONB,
     timestamp TIMESTAMP DEFAULT NOW(), -- NOTE : This means when the entry was created, e.g. execution begin of slave.
     CONSTRAINT addr_s_or_m CHECK (
         (addr_s IS NOT NULL AND addr_m IS NULL)
         OR
         (addr_s IS NULL AND addr_m IS NOT NULL)
-    ),
-)
+    )
+);
 
 
 CREATE TABLE IF NOT EXISTS vector_ops(

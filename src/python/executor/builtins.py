@@ -416,7 +416,7 @@ def add_replanner_slave(_meta: _ExecToolMetaData) -> str:
         tmp.append("]")
     special_context_str = special_context_str + "".join(tmp)
 
-    master_result_so_far_str = conn.execute("SELECT master_result FROM master_context WHERE addr = %s", (_meta.master_addr,)).fetchone()
+    master_result_so_far_str = conn.execute("SELECT content_str FROM results WHERE addr = (SELECT result_addr FROM masters WHERE addr = %s);", (_meta.master_addr,)).fetchone()
     master_result_so_far_str = f"Masters result so far: {master_result_so_far_str[0] if master_result_so_far_str is not None else "No master result so far."}"
 
     fetch = conn.execute("""

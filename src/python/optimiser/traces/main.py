@@ -8,7 +8,7 @@ that the components import and hook and use.
 Also surrounding files should be imported as full modules 
 and their hook functions be accessed with dot notation, for simplicity reasons.
 """
-from ...utils.conn_factory import conn_factory
+from ...utils.conn_factory import conn_factory_raw
 
-conn = conn_factory() # TODO: add retries. 
+conn = conn_factory_raw() # TODO: add retries. 
 

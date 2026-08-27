@@ -3,7 +3,7 @@
 from functools import partial
 from typing import Any, Callable, ParamSpec
 
-from ...executor.cronjobs.main import SysState
+from .types import SysState
 
 P = ParamSpec('P')
 

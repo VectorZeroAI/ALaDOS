@@ -259,7 +259,7 @@ async def async_conn_factory_raw(db_name: str|None = None) -> psycopg.AsyncConne
         host='127.0.0.1',
         dbname = db_name
     )
-    conn.autocommit = True
+    await conn.set_autocommit(True)
 
     return conn
 

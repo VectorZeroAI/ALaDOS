@@ -243,7 +243,8 @@ def conn_factory_raw(db_name: str|None = None) -> Conn:
     db_name = db_name or os.environ.get("ALADOS_DB_NAME", "alados")
 
     conn = Conn.connect(
-        host='/data/data/com.termux/files/usr/tmp',
+        #host='/data/data/com.termux/files/usr/tmp',
+        host='127.0.0.1',
         dbname=db_name,
     )
     conn.autocommit = True
@@ -255,9 +256,9 @@ async def async_conn_factory_raw(db_name: str|None = None) -> psycopg.AsyncConne
 
     conn = await psycopg.AsyncConnection.connect(
         host='/data/data/com.termux/files/usr/tmp',
-        db_name = db_name
+        dbname = db_name
     )
-    conn.autocommit = True # TODO : Make async Conn
+    conn.autocommit = True
 
     return conn
 

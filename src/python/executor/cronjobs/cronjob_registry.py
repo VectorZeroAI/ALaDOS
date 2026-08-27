@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-from typing import Any, Callable, TYPE_CHECKING, ParamSpec
 from functools import partial
+from typing import Any, Callable, ParamSpec
 
-if TYPE_CHECKING:
-    from ...executor.cronjobs.main import SysState
+from ...executor.cronjobs.main import SysState
 
 P = ParamSpec('P')
 

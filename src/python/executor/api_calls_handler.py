@@ -5,7 +5,7 @@ import tomllib
 import httpx
 import time
 
-from python.interrupts.main import InterruptInvokation
+from ..interrupts.main import InterruptInvokation
 
 from ..executor.exceptions import ContextLimitExceededError
 from ..executor.types import Api

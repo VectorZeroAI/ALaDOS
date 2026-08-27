@@ -330,6 +330,18 @@ val3="str" // Re Declaration of variables is not allowed. This raises SyntaxErro
 // Comments like this are also supported, although I dont see how they would be meaningfully used.
 ```
 
+##### Type system specification
+
+There are 3 types in the Tools Language that a variable can have:
+STRING | JSON | LIST
+
+LIST can be refined into LIST STRING or LIST JSON, optionally later on, but not in the first versions.
+
+Function return shape is visible in the header,
+and so an Semantic checker can check return shapes of tools and infer if something works like that or not.
+
+All of the semantic processing required to make that kind of structure work would definetly deserve their own document.
+
 ##### Chain usage example
 Suppose we have the tool "edit_knowledge", and we want to use it to edit a knowledge item.
 Suppose knowledge item is:
@@ -417,19 +429,21 @@ name can not be node, that is invalid and will error.
 
 The graph is constructed from references, which means that every usage of a name of a node is that node, and not a copy of it, and every declared node will be executed exactly once.
 
-Window definition and rmt usage:
+**Window definition and rmt usage:**
 ```RMT DSL
 window create name {
     instruction = "Instruction to creating window"
     scope = ""
 }
 
-window referense name {
-    addr = "12345"
-    name = "ImportantWindow"
+window referense window_reference_name {
+    id = "12345 or string name"
 }
 
-rmt rmt_id invoke as rmt_node_name with arguments {"json": "arguments", "for": {"the": "rmt"}}
+rmt rmt_node_name {
+    id = "12345 or string name"
+    arguments = {"json": "arguments", "for": {"the": "rmt"}}
+}
 
 node example {
     instruction = ""
@@ -437,6 +451,7 @@ node example {
 
 rmt_node_name -> example
 ```
+
 In window create, a temporary window is created and then deleted once the RMT finished executing.
 This is acomplished using the temporary object registration, which is described in its respective section of this document.
 
@@ -447,6 +462,15 @@ The name or addr in window alias is the enviroment address or name.
 One is required.
 
 rmt invokations can be referensed as nodes in the graph composition, and behave like nodes in the graph.
+
+**Key usage**
+The keys of the RMT, e.g. its arguments, are defined like this:
+
+```RMT DSL
+"In any string, including json, you can just do ${{key_name}} and that place will be fully replaced by the string passed as argument."
+```
+
+
 
 ##### Scoped Items
 

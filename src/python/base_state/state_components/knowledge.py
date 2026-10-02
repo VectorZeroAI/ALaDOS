@@ -30,3 +30,14 @@ register(
         name="sr_block explanation"
     )
 )
+
+
+# register(
+#     Knowledge(
+#         description="cronjob system explanation",
+#         content="""
+#         The cronjob
+#         """,
+#         name="sr_block explanation"
+#     )
+# ) TODO : Clean up and understand the cronjob system

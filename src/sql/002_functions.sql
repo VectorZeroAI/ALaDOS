@@ -477,7 +477,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata,
             '{executions,-1,syscalls}',
-            COALESCE(metadata#>ARRAY['executions',-1,'syscalls'], '[]'::JSONB) || p_syscalls
+            COALESCE(metadata#>ARRAY['executions','-1','syscalls'], '[]'::JSONB) || p_syscalls
         )
     WHERE addr = p_slave_addr;
     RETURN;
@@ -512,7 +512,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata,
             '{executions, -1, tool_calls, -1, error}',
-            p_error
+            p_error::JSONB
         )
     WHERE addr = p_slave_addr;
     RETURN;
@@ -529,7 +529,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata, 
             '{executions, -1, error}',
-            p_error
+            p_error::JSONB
         )
     WHERE addr = p_slave_addr;
     RETURN;
@@ -547,8 +547,8 @@ BEGIN
         SET metadata = jsonb_set(
             metadata,
             '{executions, -1, tool_calls}',
-            COALESCE(metadata#>ARRAY['executions', -1, 'tool_calls'], '[]'::JSONB) || jsonb_build_object(
-                'id', p_tool_name,
+            COALESCE(metadata#>ARRAY['executions', '-1', 'tool_calls'], '[]'::JSONB) || jsonb_build_object(
+                'id', p_tool_name::JSONB,
                 'args', p_tool_args
             )
         )

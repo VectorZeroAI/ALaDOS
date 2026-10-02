@@ -88,7 +88,7 @@ def fix_llm_response(slave: Instr, llm_response: str) -> ToolCallsBlock:
     match slave.scope:
         case '_webui':
             tool_calls: ToolCallsBlock = [
-                ToolCall("user.send_message",
+                ToolCall("user.send_message", # TODO : Remove due to _webui deprecation
                          {"text": llm_without_think}
                      )
             ]

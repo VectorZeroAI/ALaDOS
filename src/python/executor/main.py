@@ -150,7 +150,9 @@ Further documentation of the states inlined as docstrings in the match statement
         match state:
             case GetSlaveState():
                 """ This is just the state of awaiting next task. """
+                checkpoint()
                 slave_addr = queue.get()
+                checkpoint()
                 set_next_state(ContextGetState(slave_addr, finish=True))
 
             case ContextGetState():
@@ -164,6 +166,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 """
                 curr = state
                 try:
+                    checkpoint()
                     with conn.transaction():
                         instr = slave_addr_to_instr(curr.slave_addr, conn)
                 except Exception as e:
@@ -175,12 +178,14 @@ Further documentation of the states inlined as docstrings in the match statement
                     })
                     
 
+                    checkpoint()
                     set_error_state(ErrorState(curr.slave_addr))
                     continue
 
 
                 str_instr = " ".join([f"CONTEXT: {instr.context} CONTEXT END", f"INSTRUCTION: {instr.instruction} INSTRUCTION END"])
 
+                checkpoint()
                 set_next_state(ApiCallsState(str_instr, instr, datetime.now(), finish=curr.finish))
 
             case ApiCallsState():
@@ -190,6 +195,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 Passes the finish flag through.
                 """
                 curr = state
+                checkpoint()
                 try:
                     llm_output, next_state = call_llm(curr.str_instr, curr.instr)
                     if next_state:
@@ -207,6 +213,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     set_error_state(ErrorState(curr.instr.slave_addr))
                     continue
 
+                checkpoint()
                 try:
                     tool_calls = llm_to_json(llm_output)
                 except ValueError as e:
@@ -216,7 +223,9 @@ Further documentation of the states inlined as docstrings in the match statement
                         'message': str(e),
                         'state': str(state.tag)
                     })
+                    checkpoint()
                     tool_calls = fix_llm_response(curr.instr, llm_output)
+                    checkpoint()
 
                 set_next_state(ExecuteState(tool_calls, curr.instr, curr.occ_timestamp, finish=curr.finish))
 
@@ -229,6 +238,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 """
                 curr = state
 
+                checkpoint()
                 metadata_c = _ExecToolMetaData(
                         curr.instr.master_addr,
                         conn,
@@ -243,16 +253,19 @@ Further documentation of the states inlined as docstrings in the match statement
                 
                 original_tool_calls_amount = len(curr.tool_calls)
 
-
+                checkpoint()
                 with conn.transaction():
                     trace_hooks.new_execution(metadata_c)
-
+                    
+                    checkpoint()
                     for i, call in enumerate(curr.tool_calls):
                         checkpoint()
                         try:
                             with conn.transaction():
                                 trace_hooks.tool_executing(metadata_c, call)
+                                checkpoint()
                                 results.append(execute_tool(call, metadata_c))
+
                             ## TODO : Think about maybe restructuring this into a more batch styled execution.
                             ## Although error handling may become problematic. Think about it.
                             
@@ -260,6 +273,7 @@ Further documentation of the states inlined as docstrings in the match statement
                         except ParadoxDetected as e:
                             paradox_e: ParadoxDetected = e
                             set_next_state(ParadoxState(paradox_e, curr.instr, datetime.now(), curr.finish))
+                            checkpoint()
                             trace_hooks.execution_aborted(str(paradox_e), metadata_c)
                             break
 
@@ -275,6 +289,7 @@ Further documentation of the states inlined as docstrings in the match statement
                             })
                             curr.error_count += 1
 
+                            checkpoint()
                             if curr.error_count > original_tool_calls_amount:
                                 log_json({
                                     'type': 'core',
@@ -287,6 +302,7 @@ Further documentation of the states inlined as docstrings in the match statement
                                 trace_hooks.execution_aborted("RECURSIVE TOOL CALL ERRORS DETECTED.", metadata_c)
                                 break
 
+                            checkpoint()
                             prompt = f"""The following tool call failed for the following reason: {call}, {e}
                             Your task is to figure out what went wrong there, and create a working tool call.
                             Here is what it attempted to do "{curr.instr.instruction}".
@@ -294,6 +310,7 @@ Further documentation of the states inlined as docstrings in the match statement
                             """ + "\n".join(HEADERS_REGISTRY['general'])
 
                             n_llm_out, n_state = call_llm(prompt, curr.instr)
+                            checkpoint()
                             if n_state:
                                 set_next_state(n_state)
                                 break
@@ -308,9 +325,12 @@ Further documentation of the states inlined as docstrings in the match statement
                                 })
                                 n_tool_calls = fix_llm_response(curr.instr, n_llm_out)
                             for j, ntc in enumerate(n_tool_calls, 1):
+                                checkpoint()
                                 curr.tool_calls.insert(i+j, ntc)
+
                          ## NOTE : This inserts the new tool calls in,
                          ## wich is way better then repeating all the mashienery of execution.
+
                     else:
                         ## NOTE : This only happens if the for-loop wasnt broken out,
                         ## Wich means that all the routes that go to entirely different states actually
@@ -344,6 +364,7 @@ Further documentation of the states inlined as docstrings in the match statement
 
             case ContextShortState():
                 curr = state
+                checkpoint()
                 set_next_state(
                         ApiCallsState(
                             prepare_context_shortening_prompt(curr.error, conn, curr.instr),
@@ -367,11 +388,13 @@ Further documentation of the states inlined as docstrings in the match statement
 
                 items = curr.paradox_e.items
                 addrs_items = conn.resolve_to_addrs(items)
+                checkpoint()
 
                 addrs_types = conn.execute("""
                 SELECT addr, type FROM addrs_tables WHERE addr = ANY(%s);
                              """, (addrs_items,)).fetchall()
 
+                checkpoint()
                 prompt = f"""
                 Your task is to resolve the following paradox in the following items.
                 Your task is to resolve the following paradox in the following items.
@@ -380,6 +403,7 @@ Further documentation of the states inlined as docstrings in the match statement
                 PARADOX: {curr.paradox_e.paradox} PARADOX END.
                 AVAILABLE TOOLS: {HEADERS_REGISTRY['context']} AVAILABLE TOOLS END.
                     """
+                checkpoint()
 
                 set_next_state(
                     ApiCallsState(
@@ -389,10 +413,12 @@ Further documentation of the states inlined as docstrings in the match statement
                         False
                     )
                 )
+                checkpoint()
                 add_state(ContextGetState(curr.instr.slave_addr, curr.finish))
 
             case ErrorState():
                 curr = state
+                checkpoint()
                 with conn.transaction():
                     conn.execute("""
                     UPDATE results
@@ -401,7 +427,12 @@ Further documentation of the states inlined as docstrings in the match statement
                     WHERE s.addr = %s
                         AND results.addr = s.result_addr;
                                  """, (curr.slave_addr,))
+                checkpoint()
                 set_next_state(GetSlaveState())
+
+
+
+
 
 def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
     try:
@@ -409,6 +440,9 @@ def core_thread(queue: Uqueue, apis: Sequence[Api]) -> None:
     except Exception as e:
         print(f"CORE THREAD ERRORED OUT: {e}")
         raise RuntimeError(f"CORE THREAD FAILED: {e}") from e
+
+
+
 
 def startup() -> None:
     """ The startup function that starts up the whole executor system """

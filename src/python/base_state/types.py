@@ -27,7 +27,7 @@ def virtual_new_addr() -> int:
     and when you do need a real addr you insert a real one.
     """
     global virtual_addr_counter
-    virtual_addr_counter =+ 1
+    virtual_addr_counter += 1
     return virtual_addr_counter
     
 

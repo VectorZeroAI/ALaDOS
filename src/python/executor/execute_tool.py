@@ -2,11 +2,13 @@
 
 import asyncio
 import inspect
+import traceback
 import json
 import re
 import subprocess
 import time
 from collections import OrderedDict
+from contextlib import suppress
 from functools import partial
 from tempfile import (
     NamedTemporaryFile,
@@ -82,7 +84,8 @@ def register_tool(name: str|None = None, scope: SlaveScopesList = ['general']):
         SYSCALL_REGISTRY[name or func.__name__] = func
         header = _construct_header(func, name)
         for i in scope:
-            HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header])
+            HEADERS_REGISTRY[i] = "\n\n".join([HEADERS_REGISTRY[i], header]) # BUG : No tool names match because of header resolving hardcoded
+                                                                             # VS Executor resolving the DB name
         HEADERS_REGISTRY['all'] = "\n\n".join([HEADERS_REGISTRY['all'], header])
 
         # Special internal thingis here.
@@ -235,117 +238,128 @@ def _execute_tool(file: _TemporaryFileWrapper, addr: ReferenceTo, kwargs: dict[s
 
     The tool is generally structured the same way as the syscall, except it gets file and not id.
     """
+    try:
 
-    if "timeout" in kwargs:
-        timeout = kwargs.pop("timeout")
-    else:
-        timeout = 5
+        if "timeout" in kwargs:
+            timeout = kwargs.pop("timeout")
+        else:
+            timeout = 5
 
-    kwargs['slave_id'] = _meta.slave_addr
-    kwargs['master_id'] = _meta.master_addr
+        kwargs['slave_id'] = _meta.slave_addr
+        kwargs['master_id'] = _meta.master_addr
 
-    kwargs_str: str = json.dumps(kwargs)
+        kwargs_str: str = json.dumps(kwargs)
 
-    process = subprocess.Popen(
-        ["python3", file.name],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    if process.stdin is not None:
-        process.stdin.write(kwargs_str)
-        process.stdin.close()
-    else:
-        log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": "Process.stdin is None, unable to write."
-        })
-        raise RuntimeError("Unable to execute, process.stdin is none, call the developer!")
+        process = subprocess.Popen(
+            ["python3", file.name],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if process.stdin is not None:
+            process.stdin.write(kwargs_str)
+            process.stdin.close()
+        else:
+            log_json({
+                "type": "core",
+                "subtype": "tool_execution",
+                "status": "error",
+                "msg": "Process.stdin is None, unable to write."
+            })
+            raise RuntimeError("Unable to execute, process.stdin is none, call the developer!")
 
-    start = time.time()
+        start = time.time()
 
-    syscall_queue = _meta.syscalls_queue
-    changed_tool_names, changed_tools_addrs = _meta.changed_tools_names, _meta.changed_tools_addrs
+        syscall_queue = _meta.syscalls_queue
+        changed_tool_names, changed_tools_addrs = _meta.changed_tools_names, _meta.changed_tools_addrs
 
-    loop = asyncio.new_event_loop()
+        loop = asyncio.new_event_loop()
 
-    stdout: str = ""
-    stderr: str = ""
+        stdout: str = ""
+        stderr: str = ""
 
-    syscalls: list[SysCall] = []
+        syscalls: list[SysCall] = []
 
-    while process.poll() is None:
-        if time.time() - start > timeout:
-            process.kill()
-            process.wait()
-            raise TimeoutError("Process Timed out.")
+        while process.poll() is None:
+            if time.time() - start > timeout:
+                process.kill()
+                process.wait()
+                raise TimeoutError("Process Timed out.")
 
-        try:
-            out_chunk, err_chunk = process.communicate(timeout=0.05)
-            stdout = stdout + out_chunk
-            stderr = stderr + err_chunk
-        except subprocess.TimeoutExpired:
-            pass
+            try:
+                out_chunk, err_chunk = process.communicate(timeout=0.05)
+                stdout = stdout + out_chunk
+                stderr = stderr + err_chunk
+            except subprocess.TimeoutExpired:
+                pass
 
-        for i in syscall_queue.get_all():
-            check_invalid_syscall(i[0], changed_tool_names, changed_tools_addrs, _meta.conn)
+            for i in syscall_queue.get_all():
+                check_invalid_syscall(i[0], changed_tool_names, changed_tools_addrs, _meta.conn)
 
-            syscalls.append(i[0])
+                syscalls.append(i[0])
 
-            ret = execute_syscall(i[0], _meta)
+                ret = execute_syscall(i[0], _meta)
 
-            loop.run_until_complete(
-                i[1].respond(ret.encode())
-            )
+                loop.run_until_complete(
+                    i[1].respond(ret.encode())
+                )
 
-            t_name, t_addr = tools_changed(i[0], ret, _meta.conn)
+                t_name, t_addr = tools_changed(i[0], ret, _meta.conn)
 
-            if t_name:
-                changed_tool_names.append(t_name)
-            if t_addr:
-                changed_tools_addrs.append(t_addr)
+                if t_name:
+                    changed_tool_names.append(t_name)
+                if t_addr:
+                    changed_tools_addrs.append(t_addr)
 
-    trace_hooks.bulk_syscalls_trace(_meta, syscalls)
+        trace_hooks.bulk_syscalls_trace(_meta, syscalls)
 
-    loop.close()
+        loop.close()
 
-    out_chunk, err_chunk = process.communicate(timeout=0.3)
+        out_chunk, err_chunk = process.communicate(timeout=0.3)
 
-    stdout = stdout + out_chunk
-    stderr = stderr + err_chunk
+        stdout = stdout + out_chunk
+        stderr = stderr + err_chunk
 
-    if not stdout:
-        log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": "STDOUT IS NONE"
-        })
-        stdout = "<Empty>"
+        if not stdout:
+            log_json({
+                "type": "core",
+                "subtype": "tool_execution",
+                "status": "error",
+                "msg": "STDOUT IS NONE"
+            })
+            stdout = "<Empty>"
 
-    if not stderr:
+        if not stderr:
+            if process.poll() != 0:
+                log_json({
+                    "type": "core",
+                    "subtype": "tool_execution",
+                    "status": "warning",
+                    "msg": "STDERR IS NONE"
+                })
+            stderr = "<Empty>"
+
         if process.poll() != 0:
             log_json({
                 "type": "core",
                 "subtype": "tool_execution",
-                "status": "warning",
-                "msg": "STDERR IS NONE"
+                "status": "error",
+                "msg": f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}."
             })
-        stderr = "<Empty>"
+            raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
 
-    if process.poll() != 0:
+        return f"Executed tool, and got output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
+    except Exception as e:
+        with suppress(Exception):
+            process.kill() # pyright: ignore
+            loop.close()   # pyright: ignore
         log_json({
-            "type": "core",
-            "subtype": "tool_execution",
-            "status": "error",
-            "msg": f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}."
-        })
-        raise RuntimeError(f"Tool failed with exit code {process.poll()}, output: {stdout} and error {stderr}.")
-
-    return f"Executed tool, and got output: {stdout}{f"; and error output: {stderr}" if stderr else ""}."
+            "status": "fatal",
+            "type": "_execute_tool",
+            "exception": str(e),
+            "traceback": str(traceback.format_exception(e))
+            })
 
 
 # register all the tools

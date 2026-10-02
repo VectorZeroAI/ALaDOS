@@ -154,7 +154,7 @@ def construct_final_write(results: list[str], conn: Conn, slave_addr: ReferenceT
 
     ends: list[str] = ["____" for _ in range(len(descriptiors))]
     
-    result_elements = zip(descriptiors, results, ends, strict=True)
+    result_elements = zip(descriptiors, results, ends, strict=True) # TODO : Figure out what claude meant by "raises after every recovered tool error"
     
     result_str = "\n\n".join(
         [

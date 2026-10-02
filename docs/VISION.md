@@ -140,9 +140,8 @@ But that creates the problem of having to make EVERY decision through ->> and no
 So I would say the best way of handling it is to add more metadata tables, like metadata_tools, metadata_knowledge, metadata_views, etc. But they will all be the same structure.
 Or I can make them the same table, and then PARTITION by the type? ........ from speed it will be the same, but I still like the design of splitting by the big types, so I think its better to do it this way... well I will decide later on.
 
-I will also design many SQL functions and python functions for the interactions with the metadata JSONB to avoid raw access interveaning with the logic. TODO: Maybe apply this pattern to more parts of the codebase
-
-I will also design many SQL functions and python functions for the interactions with the metadata JSONB to avoid raw access interveaning with the logic. TODO: Maybe apply this pattern to more parts of the codebase. 
+I will also design many SQL functions and python functions for the interactions with the metadata JSONB to avoid raw access interveaning with the logic. 
+TODO: Maybe apply this pattern to more parts of the codebase
 
 ##### Json structure of the traces on slaves [ ]
 ```json

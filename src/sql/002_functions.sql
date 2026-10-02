@@ -512,7 +512,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata,
             '{executions, -1, tool_calls, -1, error}',
-            p_error
+            to_jsonb(p_error)
         )
     WHERE addr = p_slave_addr;
     RETURN;
@@ -529,7 +529,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata, 
             '{executions, -1, error}',
-            p_error
+            to_jsonb(p_error)
         )
     WHERE addr = p_slave_addr;
     RETURN;

@@ -547,7 +547,7 @@ BEGIN
         SET metadata = jsonb_set(
             metadata,
             '{executions, -1, tool_calls}',
-            COALESCE(metadata#>ARRAY['executions', -1, 'tool_calls'], '[]'::JSONB) || jsonb_build(
+            COALESCE(metadata#>ARRAY['executions', -1, 'tool_calls'], '[]'::JSONB) || jsonb_build_object(
                 'id', p_tool_name,
                 'args', p_tool_args
             )

@@ -54,7 +54,7 @@ from .types import (
 )
 
 config_dir = config_dir_resolver()
-config_file = config_dir / "executor.toml"
+config_file = config_dir / "executor.toml" # TODO : use config loader
 config = tomllib.loads(config_file.read_text())
 
 
@@ -307,7 +307,7 @@ Further documentation of the states inlined as docstrings in the match statement
                             Your task is to figure out what went wrong there, and create a working tool call.
                             Here is what it attempted to do "{curr.instr.instruction}".
                             The following is the tool call format instructions and all the valid tools:
-                            """ + "\n".join(HEADERS_REGISTRY['general'])
+                                      """ + "\n".join(HEADERS_REGISTRY['general']) # BUG : Extremely high bug potential when migrating from hardcoded scopes!!!
 
                             n_llm_out, n_state = call_llm(prompt, curr.instr)
                             checkpoint()

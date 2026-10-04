@@ -70,9 +70,7 @@ CREATE TABLE IF NOT EXISTS addrs (
 
 CREATE TABLE IF NOT EXISTS names(
     addr BIGINT UNIQUE
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     name TEXT PRIMARY KEY,
 
     CONSTRAINT no_address_like_text_allowed CHECK (
@@ -82,17 +80,13 @@ CREATE TABLE IF NOT EXISTS names(
 
 CREATE TABLE IF NOT EXISTS knowledge (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     content TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS executables (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
@@ -101,18 +95,14 @@ CREATE TABLE IF NOT EXISTS executables (
 
 CREATE TABLE IF NOT EXISTS logs (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON UPDATE CASCADE
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()))::BIGINT,
     content JSONB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS results (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     content_str TEXT,
     ready BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT, -- Status, e.g. error, paradox, impossible instruction. TODO : Make ENUM
@@ -132,9 +122,7 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE TABLE IF NOT EXISTS masters (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr)
-            ON DELETE CASCADE 
-            ON UPDATE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     instruction TEXT NOT NULL,
     result_addr BIGINT NOT NULL
         REFERENCES results(addr)
@@ -144,33 +132,25 @@ CREATE TABLE IF NOT EXISTS masters (
 
 
 CREATE TABLE IF NOT EXISTS reusable_master_templates(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW
 );
 
 CREATE TABLE IF NOT EXISTS rmt_slaves(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr)  FOLLOW,
     instruction TEXT NOT NULL,
     scope slave_scope NOT NULL DEFAULT 'general',
     template_addr BIGINT
-        REFERENCES reusable_master_templates
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
+        REFERENCES reusable_master_templates(addr) FOLLOW,
     deps BIGINT[]
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
     addr BIGINT PRIMARY KEY 
-        REFERENCES masters(addr)
-            ON DELETE CASCADE 
-            ON UPDATE CASCADE,
+        REFERENCES masters(addr) FOLLOW,
     window_anchor_exe BIGINT
         REFERENCES executables(addr) 
-            ON DELETE SET NULL 
+            ON DELETE SET NULL
             ON UPDATE CASCADE,
     window_anchor_knowledge BIGINT 
         REFERENCES knowledge(addr) 
@@ -195,64 +175,44 @@ CREATE TABLE IF NOT EXISTS master_context (
 
 CREATE TABLE IF NOT EXISTS master_load (
     master_addr BIGINT 
-        REFERENCES masters(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES masters(addr) FOLLOW,
     item_addr BIGINT 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     PRIMARY KEY (master_addr, item_addr)
 );
 
 
 CREATE TABLE IF NOT EXISTS slaves (
     addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     master_addr BIGINT
-        REFERENCES masters(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES masters(addr) FOLLOW,
     instruction TEXT NOT NULL,
     result_addr BIGINT UNIQUE
-        REFERENCES results(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES results(addr) FOLLOW,
     scope slave_scope NOT NULL DEFAULT 'general'
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (
     slave_addr BIGINT 
-        REFERENCES slaves(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES slaves(addr) FOLLOW,
     req_addr BIGINT
-        REFERENCES results(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES results(addr) FOLLOW,
     PRIMARY KEY (slave_addr, req_addr)
 );
 
 CREATE TABLE IF NOT EXISTS master_req (
     master_addr BIGINT
-        REFERENCES masters(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES masters(addr) FOLLOW,
     req_addr BIGINT
-        REFERENCES results(addr) 
-            ON UPDATE CASCADE 
-            ON DELETE CASCADE,
+        REFERENCES results(addr) FOLLOW,
     PRIMARY KEY (master_addr, req_addr)
 );
 
 
 CREATE TABLE IF NOT EXISTS cronjob_once(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     name TEXT NOT NULL, -- This the cronjob action name, not name of this exact cronjob instance.
     args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
@@ -270,9 +230,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
 
 CREATE TABLE IF NOT EXISTS cronjob_loop(
     addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr)
-            ON DELETE CASCADE
-            ON UPDATE CASCADE,
+        REFERENCES addrs(addr) FOLLOW,
     name TEXT NOT NULL, -- this is cronjob action name.
     args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
@@ -307,45 +265,33 @@ DO $$
 $$;
 
 CREATE TABLE IF NOT EXISTS event_consumers(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW,
     event_path TEXT NOT NULL,
     action_type event_consumers_action_types NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS event_call_rmt(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
     rmt_addr BIGINT REFERENCES reusable_master_templates(addr) NOT NULL,
     args JSONB
 );
 
 CREATE TABLE IF NOT EXISTS event_call_execute_slave(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
     instruction TEXT NOT NULL,
     scope slave_scope
 );
 
 CREATE TABLE IF NOT EXISTS event_call_fill_result(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
     result_addr BIGINT NOT NULL REFERENCES results(addr),
     result_str TEXT NOT NULL
 );
 
 
 CREATE TABLE IF NOT EXISTS metadata_dag(
-    addr_s BIGINT REFERENCES slaves(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    addr_m BIGINT REFERENCES masters(addr)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    addr_s BIGINT REFERENCES slaves(addr) FOLLOW,
+    addr_m BIGINT REFERENCES masters(addr) FOLLOW,
     addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (
         CASE 
             WHEN addr_s IS NOT NULL THEN addr_s
@@ -363,21 +309,21 @@ CREATE TABLE IF NOT EXISTS metadata_dag(
 
 
 CREATE TABLE IF NOT EXISTS scopes(
-    addr BIGINT REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE
+    addr BIGINT REFERENCES addrs(addr) FOLLOW
 );
 
 
 CREATE TABLE IF NOT EXISTS scopes_tools(
-    scope_addr BIGINT REFERENCES scopes(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    tool_addr BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE
+    scope_addr BIGINT REFERENCES scopes(addr) FOLLOW,
+    tool_addr BIGINT REFERENCES executables(addr) FOLLOW
 );
 
 
 CREATE TABLE IF NOT EXISTS vector_ops(
-    addr_exe BIGINT REFERENCES executables(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_k BIGINT REFERENCES knowledge(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_rmt BIGINT REFERENCES reusable_master_templates(addr) ON UPDATE CASCADE ON DELETE CASCADE,
-    addr_scope BIGINT REFERENCES scopes(addr) ON UPDATE CASCADE ON DELETE CASCADE,
+    addr_exe BIGINT REFERENCES executables(addr) FOLLOW,
+    addr_k BIGINT REFERENCES knowledge(addr) FOLLOW,
+    addr_rmt BIGINT REFERENCES reusable_master_templates(addr) FOLLOW,
+    addr_scope BIGINT REFERENCES scopes(addr) FOLLOW,
     addr BIGINT PRIMARY KEY GENERATED ALWAYS AS (COALESCE(addr_exe, addr_k, addr_rmt, addr_scope)) STORED,
     description TEXT NOT NULL,
     position NUMERIC UNIQUE NOT NULL,

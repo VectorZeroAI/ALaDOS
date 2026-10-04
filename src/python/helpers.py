@@ -8,6 +8,7 @@ from pathlib import Path
 import psycopg
 
 from .utils.conn_factory import Conn
+from .utils.sql_preprocesser import process
 
 
 def ensure_schema_applied(conn: Conn) -> None:
@@ -18,7 +19,7 @@ def ensure_schema_applied(conn: Conn) -> None:
 
     for i in sorted(sql_dir.glob("*.sql")):
         try:
-            conn.execute(i.read_text()) # pyright: ignore
+            conn.execute(process(i.read_text())) # pyright: ignore
             print(f"sql file {i.name} was successfully executed")
         except Exception as e:
             raise psycopg.DatabaseError(f"the setup of the db via the sql files failed. reason: {e}") from e

@@ -2,11 +2,11 @@
 
 import asyncio
 import inspect
-import traceback
 import json
 import re
 import subprocess
 import time
+import traceback
 from collections import OrderedDict
 from contextlib import suppress
 from functools import partial
@@ -360,6 +360,7 @@ def _execute_tool(file: _TemporaryFileWrapper, addr: ReferenceTo, kwargs: dict[s
             "exception": str(e),
             "traceback": str(traceback.format_exception(e))
             })
+        raise e
 
 
 # register all the tools

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, Self, TypeAlias, Union
+from typing import Literal, Protocol, TypeAlias, Union
 
 from nats.aio.msg import Msg
 from pydantic import JsonValue
@@ -74,3 +74,7 @@ class CacheManager[T_i, T_o](Protocol):
 
     def __getitem__(self, item: T_i) -> T_o:
         ...
+
+
+Name: TypeAlias = str
+Addr: TypeAlias = int

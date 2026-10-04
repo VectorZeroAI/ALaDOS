@@ -40,6 +40,7 @@ from ..rmt.main import (
     insert_node,
     serialize,
 )
+from ..types import Addr, Name
 from ..utils.conn_factory import NoValue
 from ..utils.logger import log_json
 from ..utils.occ_functions import occ_check, update_timestamp
@@ -50,11 +51,9 @@ from .cronjobs.parser import insert_cronjob
 from .cronjobs.types import Cronjob, CronjobActions
 from .embedder import embedder
 from .exceptions import ParadoxDetected
-from .execute_tool import register_tool, ToolsManager
+from .execute_tool import ToolsManager, register_tool
 from .types import ReferenceTo, SlaveScope, _ExecToolMetaData
 
-Addr: TypeAlias = ReferenceTo
-Name: TypeAlias = str
 ActionConfirmation: TypeAlias = str
 
 ALL = get_args(SlaveScope)

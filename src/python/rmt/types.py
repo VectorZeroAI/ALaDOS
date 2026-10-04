@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass, field
-
 from typing import TypeAlias
 from uuid import uuid4
+
 from ..executor.types import SlaveScope_
 
-Name: TypeAlias = str
 
 @dataclass(slots=True)
 class RmtNode:

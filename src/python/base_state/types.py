@@ -43,6 +43,7 @@ class Executable:
     description: str
     body: str # TODO : Allow passing in a pathlib.Path object.
     header: str # TODO : Refactor the executables to include langauge.
+    scope: int # TODO : Actually implement the handling of insertion into a scope.
     name: str = field()
     addr: int = field(default_factory=virtual_new_addr)
 
@@ -127,4 +128,9 @@ class CustomListener:
     """
     async_coro: Coroutine[None, None, None]
 
-Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers, CustomConsumer, CustomListener]
+@dataclass(slots=True)
+class Scope:
+    name: str = field()
+    addr: int = field(default_factory=virtual_new_addr)
+
+Item: TypeAlias = Union[Knowledge, Executable, Results, Masters, Slaves, Cronjob, Rmt, EventConsumers, CustomConsumer, CustomListener, Scope]

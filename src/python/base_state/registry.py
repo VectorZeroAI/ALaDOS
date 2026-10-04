@@ -8,18 +8,28 @@ The pattern of registering something is like this:
     You instanciate it, and you decorate it with @register
 """
 
-from typing import Callable, Coroutine, TypeAlias
-from psycopg.types.json import Jsonb
 from functools import partial
+from typing import Callable, Coroutine, TypeAlias
 
-from pydantic import Json
+from psycopg.types.json import Jsonb
 
 from ..base_state.custom_consumer import consumer_outer
-
-from ..utils.conn_factory import conn_factory, Conn
 from ..rmt.main import create_from_serial
-
-from .types import Cronjob, CustomConsumer, CustomListener, EventConsumers, Executable, Item, Knowledge, Masters, Results, Rmt, Slaves
+from ..utils.conn_factory import Conn, conn_factory
+from .types import (
+    Cronjob,
+    CustomConsumer,
+    CustomListener,
+    EventConsumers,
+    Executable,
+    Item,
+    Knowledge,
+    Masters,
+    Results,
+    Rmt,
+    Scope,
+    Slaves,
+)
 
 REGISTERERS_REGISTRY = {}
 SYSTEM_ADDRS_LIST: list[int] = []
@@ -74,6 +84,15 @@ def insert_addr(addr: int, conn: Conn) -> None:
     conn.execute("""
     INSERT INTO addrs(addr) VALUES(%s)
                  """, (addr,))
+
+
+@__item_registerer("<class 'python.base_state.types.Scope'>")
+def register_new_scope(item: Scope, conn: Conn) -> None:
+    with conn.transaction():
+        insert_addr(item.addr, conn),
+        conn.execute("""
+        INSERT INTO scopes(addr) VALUES (%s);
+                     """, (item.addr, ))
 
 @__item_registerer("<class 'python.base_state.types.EventConsumers'>")
 def register_event_consumer(item: EventConsumers, conn: Conn) -> None:

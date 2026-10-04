@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS masters (
 
 
 CREATE TABLE IF NOT EXISTS reusable_master_templates(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() 
+        REFERENCES addrs(addr) FOLLOW
 );
 
 CREATE TABLE IF NOT EXISTS rmt_slaves(
@@ -146,7 +147,7 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
-    addr BIGINT PRIMARY KEY 
+    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
         REFERENCES masters(addr) FOLLOW,
     window_anchor_exe BIGINT
         REFERENCES executables(addr) 
@@ -190,7 +191,9 @@ CREATE TABLE IF NOT EXISTS slaves (
     instruction TEXT NOT NULL,
     result_addr BIGINT UNIQUE
         REFERENCES results(addr) FOLLOW,
-    scope slave_scope NOT NULL DEFAULT 'general'
+    scope BIGINT REFERENCES scopes(addr)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (
@@ -271,19 +274,21 @@ CREATE TABLE IF NOT EXISTS event_consumers(
 );
 
 CREATE TABLE IF NOT EXISTS event_call_rmt(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES event_consumers(addr) FOLLOW,
     rmt_addr BIGINT REFERENCES reusable_master_templates(addr) NOT NULL,
     args JSONB
 );
 
 CREATE TABLE IF NOT EXISTS event_call_execute_slave(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES event_consumers(addr) FOLLOW,
     instruction TEXT NOT NULL,
-    scope slave_scope
+    scope BIGINT REFERENCES scopes(addr)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS event_call_fill_result(
-    addr BIGINT PRIMARY KEY REFERENCES event_consumers(addr) FOLLOW,
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES event_consumers(addr) FOLLOW,
     result_addr BIGINT NOT NULL REFERENCES results(addr),
     result_str TEXT NOT NULL
 );
@@ -309,13 +314,14 @@ CREATE TABLE IF NOT EXISTS metadata_dag(
 
 
 CREATE TABLE IF NOT EXISTS scopes(
-    addr BIGINT REFERENCES addrs(addr) FOLLOW
+    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW
 );
 
 
 CREATE TABLE IF NOT EXISTS scopes_tools(
     scope_addr BIGINT REFERENCES scopes(addr) FOLLOW,
     tool_addr BIGINT REFERENCES executables(addr) FOLLOW
+    PRIMARY KEY (scope_addr, tool_scope)
 );
 
 

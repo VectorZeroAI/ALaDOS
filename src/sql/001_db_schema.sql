@@ -301,8 +301,8 @@ CREATE TABLE IF NOT EXISTS scopes(
 
 CREATE TABLE IF NOT EXISTS scopes_tools(
     scope_addr BIGINT REFERENCES scopes(addr) FOLLOW,
-    tool_addr BIGINT REFERENCES executables(addr) FOLLOW
-    PRIMARY KEY (scope_addr, tool_scope)
+    tool_addr BIGINT REFERENCES executables(addr) FOLLOW,
+    PRIMARY KEY (scope_addr, tool_addr)
 );
 
 

@@ -12,57 +12,27 @@ and thus system internal addresses are used, and they are always negative intege
 
 from ..types import Executable
 from ..registry import register
+from pathlib import Path
 
 register(
     Executable(
         description="Read Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import read
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("Id not given.")
-        slave_id = args["slave_id"]  # automatically injected
-        content = asyncio.run(read(id, slave_id))
-        print(json.dumps({"id": id, "content": content}))
-        """,
+        body=Path(__file__) / "executable_files" / "k_read.py.py",
         header="""
         args = {
             "id": "knowledge entry id (int or str)."
         },
         returns = {"id": "id", "content": "content of the knowledge entry."}
         """,
-        name="K.read",
-        scope=
+        name="K.read"
     )
 )
 
-# K.edit
+# k_edit
 register(
     Executable(
         description="Edit Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import edit
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("Id not given.")
-        slave_id = args["slave_id"]
-        content_change = args.get("content_change")
-        description_change = args.get("description_change")
-        if content_change is None and description_change is None:
-            raise ValueError("At least one change must be provided.")
-        asyncio.run(edit(id, slave_id, content_change, description_change))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "k_edit.py",
         header="""
         args = {
             "id": "knowledge entry id (int or str).",
@@ -75,30 +45,11 @@ register(
     )
 )
 
-# K.create
+# k_create
 register(
     Executable(
         description="Create Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import create
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        content = args.get("content")
-        if content is None:
-            raise ValueError("content not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create(slave_id, content, description, name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "k_create.py",
         header="""
         args = {
             "content": "str, the knowledge content.",
@@ -114,31 +65,11 @@ register(
     )
 )
 
-# Tool.execute
+# tool_execute
 register(
     Executable(
         description="Execute a tool (executable) by ID.",
-        body="""
-        from ALaDOS.lib.Executables import execute
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        timeout = args.get("timeout", 10)
-        kwargs = args.get("kwargs", {})
-        output = asyncio.run(execute(slave_id, id, timeout, kwargs))
-        
-        print(json.dumps({
-            "id": id,
-            "output": output
-        }))
-
-        """,
+        body=Path(__file__) / "executable_files" / "tool_execute.py",
         header="""
         args = {
             "id": "tool id (int or str).",
@@ -155,34 +86,11 @@ register(
     )
 )
 
-# Tool.create
+# tool_create
 register(
     Executable(
         description="Create a new Python tool.",
-        body="""
-        from ALaDOS.lib.Executables import create
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        header = args.get("header")
-        if header is None:
-            raise ValueError("header not given.")
-        body = args.get("body")
-        if body is None:
-            raise ValueError("body not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create(slave_id, description, header, body, name))
-        print(json.dumps({
-            "addr": addr,
-            "name": name
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "tool_create.py",
         header="""
         args = {
             "description": "str, tool description.",
@@ -200,29 +108,11 @@ register(
     )
 )
 
-# Tool.edit
+# tool_edit
 register(
     Executable(
         description="Edit an existing tool.",
-        body="""
-        from ALaDOS.lib.Executables import edit
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        header_change = args.get("header_change")
-        body_change = args.get("body_change")
-        new_description = args.get("new_description")
-        if header_change is None and body_change is None and new_description is None:
-            raise ValueError("At least one change must be provided.")
-        asyncio.run(edit(slave_id, id, header_change, body_change, new_description))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "tool_edit.py",
         header="""
         args = {
             "id": "tool id (int or str).",
@@ -239,34 +129,11 @@ register(
     )
 )
 
-# Rmt.create_from_range
+# rmt_create_from_range
 register(
     Executable(
         description="Create RMT from a range of slaves.",
-        body="""
-        from ALaDOS.lib.Rmt import create_from_range
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        start_id = args.get("start_id")
-        if not start_id:
-            raise ValueError("start_id not given.")
-        end_id = args.get("end_id")
-        if not end_id:
-            raise ValueError("end_id not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create_from_range(slave_id, start_id, end_id, description, name))
-        print(json.dumps({
-            "addr": addr,
-            "name": name
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_create_from_range.py",
         header="""
         args = {
             "start_id": "int or str, start slave address.",

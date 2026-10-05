@@ -77,8 +77,11 @@ def __register_item(item: Item, conn: Conn) -> None:
 
 def insert_addr(addr: int, conn: Conn) -> None:
     if conn.execute_fetchval("""
-        SELECT TRUE FROM addrs WHERE addr = %s;
-                             """, (addr,)):
+        SELECT EXISTS(
+            SELECT 1 FROM addrs WHERE addr = %s
+        )
+                             """, (addr,)
+                             ):
         return
 
     conn.execute("""

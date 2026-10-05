@@ -36,7 +36,8 @@ register(
         },
         returns = {"id": "id", "content": "content of the knowledge entry."}
         """,
-        name="K.read"
+        name="K.read",
+        scope=
     )
 )
 

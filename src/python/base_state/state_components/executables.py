@@ -195,7 +195,7 @@ register(
 register(
     Executable(
         description="Create RMT from an existing master.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_create_from_master.py",
         header="""
         args = {
             "master_id": "int or str, master address.",
@@ -215,7 +215,7 @@ register(
 register(
     Executable(
         description="Edit RMT description.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_edit_description.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -232,7 +232,7 @@ register(
 register(
     Executable(
         description="Delete a node from an RMT.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_delete_node.py",
         header="""
         args = {
             "rmt_slave_id": "int or str, node to delete.",
@@ -253,7 +253,7 @@ register(
 register(
     Executable(
         description="Insert a node into an RMT.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_insert_node.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -277,7 +277,7 @@ register(
 register(
     Executable(
         description="Activate an RMT as a master.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_activate_as_master.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -299,7 +299,7 @@ register(
 register(
     Executable(
         description="Edit instruction of an RMT node.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_edit_node_instruction.py",
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
@@ -316,7 +316,7 @@ register(
 register(
     Executable(
         description="Change scope of an RMT node.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_change_node_scope.py",
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
@@ -333,7 +333,7 @@ register(
 register(
     Executable(
         description="Register an RMT as reaction to an event.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_register_reaction_rmt.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -353,7 +353,7 @@ register(
 register(
     Executable(
         description="Register a single slave as reaction to an event.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_register_reaction_slave.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -373,7 +373,7 @@ register(
 register(
     Executable(
         description="Create a result that will be filled by an event.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "rmt_create_result_via_event.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -394,7 +394,7 @@ register(
 register(
     Executable(
         description="Add an item to the current context.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_add.py",
         header="""
         args = {
             "id": "int or str, address or name of item."
@@ -410,7 +410,7 @@ register(
 register(
     Executable(
         description="Land context window on semantically similar item.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_window_semantic_land.py",
         header="""
         args = {
             "query": "str, search query."
@@ -428,7 +428,7 @@ register(
 register(
     Executable(
         description="Land context window directly on an item by address.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_window_land_by_addr.py",
         header="""
         args = {
             "id": "int or str, address or name."
@@ -444,7 +444,7 @@ register(
 register(
     Executable(
         description="Change the size of the context window.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_window_change_size.py",
         header="""
         args = {
             "left": "int (optional, default 0).",
@@ -464,7 +464,7 @@ register(
 register(
     Executable(
         description="Move the context window anchor.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_window_move_anchor.py",
         header="""
         args = {
             "amount": "int, positive moves right, negative left."
@@ -482,7 +482,7 @@ register(
 register(
     Executable(
         description="Unload an item from the context.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "context_unload_item.py",
         header="""
         args = {
             "id": "int or str, address or name."
@@ -498,7 +498,7 @@ register(
 register(
     Executable(
         description="Add a slave step to the current master.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "goal_add_slave.py",
         header="""
         args = {
             "instruction": "str, the slave instruction.",
@@ -522,7 +522,7 @@ register(
 register(
     Executable(
         description="Add a planner slave to incrementally plan the master.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "goal_add_planner_slave",
         header="""
         args = {},
         returns = ""
@@ -536,7 +536,7 @@ register(
 register(
     Executable(
         description="Create a new master goal.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "goal_add_master.py",
         header="""
         args = {
             "instruction": "str, master instruction.",
@@ -556,7 +556,7 @@ register(
 register(
     Executable(
         description="Add a cron job (once or loop).",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "goal_add_cron_job.py",
         header="""
         args = {
             "cronjob_type": "'once' or 'loop'.",
@@ -577,7 +577,7 @@ register(
 register(
     Executable(
         description="Append text to the master result.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "result_add_master_result.py",
         header="""
         args = {
             "text": "str, text to append."
@@ -593,7 +593,7 @@ register(
 register(
     Executable(
         description="Write the result of the current slave instruction.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "result_write.py",
         header="""
         args = {
             "text": "str, result text."
@@ -609,7 +609,7 @@ register(
 register(
     Executable(
         description="Search web and return full text of top pages.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "web_search_fulltext.py",
         header="""
         args = {
             "query": "str, search query.",
@@ -628,7 +628,7 @@ register(
 register(
     Executable(
         description="Search web and return list of URLs with titles and snippets.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "web_search.py",
         header="""
         args = {
             "query": "str, search query.",
@@ -652,7 +652,7 @@ register(
 register(
     Executable(
         description="Perform HTTP GET request.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "web_get.py",
         header="""
         args = {
             "url": "str, URL.",
@@ -673,7 +673,7 @@ register(
 register(
     Executable(
         description="Perform HTTP POST request.",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "web_post.py",
         header="""
         args = {
             "url": "str, URL.",
@@ -695,7 +695,7 @@ register(
 register(
     Executable(
         description="Register an RMT as reaction to an event (Event module).",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "event_register_reaction_rmt.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -715,7 +715,7 @@ register(
 register(
     Executable(
         description="Register a slave as reaction to an event (Event module).",
-        body=Path(__file__) / "executable_files" / "",
+        body=Path(__file__) / "executable_files" / "event_register_reaction_slave.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -731,28 +731,11 @@ register(
     )
 )
 
-# Event.create_result
+# event_create_result
 register(
     Executable(
         description="Create a result filled by an event (Event module).",
-        body="""
-        from ALaDOS.lib.Event import create_result
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        result_str = args.get("result_str")
-        if result_str is None:
-            raise ValueError("result_str not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        result = asyncio.run(create_result(slave_id, event_path, result_str, name))
-        print(json.dumps(result))
-        """,
+        body=Path(__file__) / "executable_files" / "event_create_result.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -769,27 +752,11 @@ register(
     )
 )
 
-# Report.report_paradoxal_information
+# report_report_paradoxal_information
 register(
     Executable(
         description="Report paradoxical information (aborts execution).",
-        body="""
-        from ALaDOS.lib.Report import report_paradoxal_information
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        items = args.get("items")
-        if items is None:
-            raise ValueError("items not given.")
-        paradox = args.get("paradox")
-        if paradox is None:
-            raise ValueError("paradox not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(report_paradoxal_information(slave_id, items, paradox))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "report_report_paradoxal_information.py",
         # NOTE: The error is correctly propagated because syscall is executed in tool
         header="""
         args = {

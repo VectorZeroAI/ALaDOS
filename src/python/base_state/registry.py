@@ -9,6 +9,7 @@ The pattern of registering something is like this:
 """
 
 from functools import partial
+from pathlib import Path
 from typing import Callable, Coroutine, TypeAlias
 
 from psycopg.types.json import Jsonb
@@ -77,8 +78,11 @@ def __register_item(item: Item, conn: Conn) -> None:
 
 def insert_addr(addr: int, conn: Conn) -> None:
     if conn.execute_fetchval("""
-        SELECT TRUE FROM addrs WHERE addr = %s;
-                             """, (addr,)):
+        SELECT EXISTS(
+            SELECT 1 FROM addrs WHERE addr = %s
+        )
+                             """, (addr,)
+                             ):
         return
 
     conn.execute("""
@@ -206,6 +210,9 @@ def register_result(item: Results, conn: Conn) -> None:
 
 @__item_registerer("<class 'python.base_state.types.Executable'>")
 def register_executable(item: Executable, conn: Conn) -> None:
+    if isinstance(item.body, Path):
+        item.body = item.body.read_text()
+    
     with conn.transaction():
         insert_addr(item.addr, conn)
         conn.execute("""

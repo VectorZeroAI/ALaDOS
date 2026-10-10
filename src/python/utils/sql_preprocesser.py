@@ -6,8 +6,8 @@ The processer is extremely dumb, just providing shorthands for repeated SQL stru
 """
 
 DEFS: dict[str, str] = {
-    "FOLLOW": "ON UPDATE CASCADE ON DELETE CASCADE",
-    "ADDR": "REFERENCES addrs(addr) ON UPDATE CASCADE ON DELETE CASCADE"
+    "ADDR": "BIGINT DEFAULT new_addr() PRIMARY KEY REFERENCES addrs(addr) FOLLOW",
+    "FOLLOW": "ON UPDATE CASCADE ON DELETE CASCADE"
 }
 
 def process(input: str) -> str:

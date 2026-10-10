@@ -24,15 +24,15 @@ from traceback import format_exception
 def startup() -> list[Coroutine[None, None, None]]:
     conn = conn_factory()
 
+    from . import state_components # noqa # pyright: ignore
+
     results = conn.execute("""
-    SELECT unnest(%s::BIGINT[])
-    EXCEPT
-    SELECT addr FROM addrs;
+                           SELECT unnest(%s::BIGINT[])
+                           EXCEPT
+                           SELECT addr FROM addrs;
                            """, (SYSTEM_ADDRS_LIST,)).fetchall()
 
     results = [r[0] for r in results]
-
-    from . import state_components # noqa # pyright: ignore
 
     for i in results:
         try:

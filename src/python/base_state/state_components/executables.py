@@ -12,24 +12,12 @@ and thus system internal addresses are used, and they are always negative intege
 
 from ..types import Executable
 from ..registry import register
+from pathlib import Path
 
 register(
     Executable(
         description="Read Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import read
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("Id not given.")
-        slave_id = args["slave_id"]  # automatically injected
-        content = asyncio.run(read(id, slave_id))
-        print(json.dumps({"id": id, "content": content}))
-        """,
+        body=Path(__file__) / "executable_files" / "k_read.py.py",
         header="""
         args = {
             "id": "knowledge entry id (int or str)."
@@ -40,28 +28,11 @@ register(
     )
 )
 
-# K.edit
+# k_edit
 register(
     Executable(
         description="Edit Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import edit
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("Id not given.")
-        slave_id = args["slave_id"]
-        content_change = args.get("content_change")
-        description_change = args.get("description_change")
-        if content_change is None and description_change is None:
-            raise ValueError("At least one change must be provided.")
-        asyncio.run(edit(id, slave_id, content_change, description_change))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "k_edit.py",
         header="""
         args = {
             "id": "knowledge entry id (int or str).",
@@ -74,30 +45,11 @@ register(
     )
 )
 
-# K.create
+# k_create
 register(
     Executable(
         description="Create Knowledge Item.",
-        body="""
-        from ALaDOS.lib.Knowledge import create
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        content = args.get("content")
-        if content is None:
-            raise ValueError("content not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create(slave_id, content, description, name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "k_create.py",
         header="""
         args = {
             "content": "str, the knowledge content.",
@@ -113,31 +65,11 @@ register(
     )
 )
 
-# Tool.execute
+# tool_execute
 register(
     Executable(
         description="Execute a tool (executable) by ID.",
-        body="""
-        from ALaDOS.lib.Executables import execute
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        timeout = args.get("timeout", 10)
-        kwargs = args.get("kwargs", {})
-        output = asyncio.run(execute(slave_id, id, timeout, kwargs))
-        
-        print(json.dumps({
-            "id": id,
-            "output": output
-        }))
-
-        """,
+        body=Path(__file__) / "executable_files" / "tool_execute.py",
         header="""
         args = {
             "id": "tool id (int or str).",
@@ -154,34 +86,11 @@ register(
     )
 )
 
-# Tool.create
+# tool_create
 register(
     Executable(
         description="Create a new Python tool.",
-        body="""
-        from ALaDOS.lib.Executables import create
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        header = args.get("header")
-        if header is None:
-            raise ValueError("header not given.")
-        body = args.get("body")
-        if body is None:
-            raise ValueError("body not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create(slave_id, description, header, body, name))
-        print(json.dumps({
-            "addr": addr,
-            "name": name
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "tool_create.py",
         header="""
         args = {
             "description": "str, tool description.",
@@ -199,29 +108,11 @@ register(
     )
 )
 
-# Tool.edit
+# tool_edit
 register(
     Executable(
         description="Edit an existing tool.",
-        body="""
-        from ALaDOS.lib.Executables import edit
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        header_change = args.get("header_change")
-        body_change = args.get("body_change")
-        new_description = args.get("new_description")
-        if header_change is None and body_change is None and new_description is None:
-            raise ValueError("At least one change must be provided.")
-        asyncio.run(edit(slave_id, id, header_change, body_change, new_description))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "tool_edit.py",
         header="""
         args = {
             "id": "tool id (int or str).",
@@ -238,34 +129,11 @@ register(
     )
 )
 
-# Rmt.create_from_range
+# rmt_create_from_range
 register(
     Executable(
         description="Create RMT from a range of slaves.",
-        body="""
-        from ALaDOS.lib.Rmt import create_from_range
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        start_id = args.get("start_id")
-        if not start_id:
-            raise ValueError("start_id not given.")
-        end_id = args.get("end_id")
-        if not end_id:
-            raise ValueError("end_id not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create_from_range(slave_id, start_id, end_id, description, name))
-        print(json.dumps({
-            "addr": addr,
-            "name": name
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_create_from_range.py",
         header="""
         args = {
             "start_id": "int or str, start slave address.",
@@ -283,28 +151,11 @@ register(
     )
 )
 
-# Rmt.serialize
+# rmt_serialize
 register(
     Executable(
         description="Serialize an RMT into DSL and description.",
-        body="""
-        from ALaDOS.lib.Rmt import serialize
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        result = asyncio.run(serialize(slave_id, id))
-        print(json.dumps({
-            "id": id,
-            "dsl": result["dsl"],
-            "description": result["description"]
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_serialise.py",
         header="""
         args = {
             "id": "RMT id (int or str)."
@@ -320,30 +171,11 @@ register(
     )
 )
 
-# Rmt.create_from_dsl
+# rmt_create_from_dsl
 register(
     Executable(
         description="Create RMT from DSL string.",
-        body="""
-        from ALaDOS.lib.Rmt import create_from_dsl
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        dsl = args.get("dsl")
-        if dsl is None:
-            raise ValueError("dsl not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create_from_dsl(slave_id, dsl, description, name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_create_from_dsl.py",
         header="""
         args = {
             "dsl": "str, DSL representation.",
@@ -359,30 +191,11 @@ register(
     )
 )
 
-# Rmt.create_from_master
+# rmt_create_from_master
 register(
     Executable(
         description="Create RMT from an existing master.",
-        body="""
-        from ALaDOS.lib.Rmt import create_from_master
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        master_id = args.get("master_id")
-        if not master_id:
-            raise ValueError("master_id not given.")
-        description = args.get("description")
-        if description is None:
-            raise ValueError("description not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        addr = asyncio.run(create_from_master(slave_id, master_id, description, name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_create_from_master.py",
         header="""
         args = {
             "master_id": "int or str, master address.",
@@ -398,27 +211,11 @@ register(
     )
 )
 
-# Rmt.edit_description
+# rmt_edit_description
 register(
     Executable(
         description="Edit RMT description.",
-        body="""
-        from ALaDOS.lib.Rmt import edit_description
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        rmt_id = args.get("rmt_id")
-        if not rmt_id:
-            raise ValueError("rmt_id not given.")
-        new_description = args.get("new_description")
-        if new_description is None:
-            raise ValueError("new_description not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(edit_description(slave_id, rmt_id, new_description))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_edit_description.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -431,31 +228,11 @@ register(
     )
 )
 
-# Rmt.delete_node
+# rmt_delete_node
 register(
     Executable(
         description="Delete a node from an RMT.",
-        body="""
-        from ALaDOS.lib.Rmt import delete_node
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        rmt_slave_id = args.get("rmt_slave_id")
-        if not rmt_slave_id:
-            raise ValueError("rmt_slave_id not given.")
-        template_id = args.get("template_id")
-        if not template_id:
-            raise ValueError("template_id not given.")
-        slave_id = args["slave_id"]
-        concatenate = args.get("concatenate", True)
-        asyncio.run(delete_node(slave_id, rmt_slave_id, template_id, concatenate))
-        print(json.dumps({
-            "slave_id": rmt_slave_id,
-            "template_id": template_id
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_delete_node.py",
         header="""
         args = {
             "rmt_slave_id": "int or str, node to delete.",
@@ -472,34 +249,11 @@ register(
     )
 )
 
-# Rmt.insert_node
+# rmt_insert_node
 register(
     Executable(
         description="Insert a node into an RMT.",
-        body="""
-        from ALaDOS.lib.Rmt import insert_node
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        rmt_id = args.get("rmt_id")
-        if not rmt_id:
-            raise ValueError("rmt_id not given.")
-        instruction = args.get("instruction")
-        if instruction is None:
-            raise ValueError("instruction not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        scope = args.get("scope", "general")
-        depends_on = args.get("depends_on", [])
-        required_by = args.get("required_by", [])
-        result = asyncio.run(insert_node(slave_id, rmt_id, instruction, name, scope, depends_on, required_by))
-        print(json.dumps({
-            "node_addr": result["node_addr"],
-            "rmt_addr": result["rmt_addr"]
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_insert_node.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -519,32 +273,11 @@ register(
     )
 )
 
-# Rmt.activate_as_master
+# rmt_activate_as_master
 register(
     Executable(
         description="Activate an RMT as a master.",
-        body="""
-        from ALaDOS.lib.Rmt import activate_as_master
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        rmt_id = args.get("rmt_id")
-        if not rmt_id:
-            raise ValueError("rmt_id not given.")
-        inputs = args.get("inputs")
-        if inputs is None:
-            raise ValueError("inputs not given.")
-        slave_id = args["slave_id"]
-        depends_on = args.get("depends_on", [])
-        required_by = args.get("required_by", [])
-        addr = asyncio.run(activate_as_master(slave_id, rmt_id, inputs, depends_on, required_by))
-        print(json.dumps({
-            "rmt_id": rmt_id,
-            "master_addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_activate_as_master.py",
         header="""
         args = {
             "rmt_id": "int or str, RMT address.",
@@ -562,27 +295,11 @@ register(
     )
 )
 
-# Rmt.edit_node_instruction
+# rmt_edit_node_instruction
 register(
     Executable(
         description="Edit instruction of an RMT node.",
-        body="""
-        from ALaDOS.lib.Rmt import edit_node_instruction
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        node_id = args.get("node_id")
-        if not node_id:
-            raise ValueError("node_id not given.")
-        sr_block = args.get("sr_block")
-        if sr_block is None:
-            raise ValueError("sr_block not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(edit_node_instruction(slave_id, node_id, sr_block))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_edit_node_instruction.py",
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
@@ -595,27 +312,11 @@ register(
     )
 )
 
-# Rmt.change_node_scope
+# rmt_change_node_scope
 register(
     Executable(
         description="Change scope of an RMT node.",
-        body="""
-        from ALaDOS.lib.Rmt import change_node_scope
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        node_id = args.get("node_id")
-        if not node_id:
-            raise ValueError("node_id not given.")
-        new_scope = args.get("new_scope")
-        if new_scope is None:
-            raise ValueError("new_scope not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(change_node_scope(slave_id, node_id, new_scope))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_change_node_scope.py",
         header="""
         args = {
             "node_id": "int or str, RMT slave node address.",
@@ -628,30 +329,11 @@ register(
     )
 )
 
-# Rmt.register_reaction_rmt
+# rmt_register_reaction_rmt
 register(
     Executable(
         description="Register an RMT as reaction to an event.",
-        body="""
-        from ALaDOS.lib.Rmt import register_reaction_rmt
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        rmt_id = args.get("rmt_id")
-        if not rmt_id:
-            raise ValueError("rmt_id not given.")
-        args_dict = args.get("args", {})
-        slave_id = args["slave_id"]
-        consumer_addr = asyncio.run(register_reaction_rmt(slave_id, event_path, rmt_id, args_dict))
-        print(json.dumps({
-            "consumer_addr": consumer_addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_register_reaction_rmt.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -667,30 +349,11 @@ register(
     )
 )
 
-# Rmt.register_reaction_slave
+# rmt_register_reaction_slave
 register(
     Executable(
         description="Register a single slave as reaction to an event.",
-        body="""
-        from ALaDOS.lib.Rmt import register_reaction_slave
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        instruction = args.get("instruction")
-        if instruction is None:
-            raise ValueError("instruction not given.")
-        slave_id = args["slave_id"]
-        scope = args.get("scope", "general")
-        consumer_addr = asyncio.run(register_reaction_slave(slave_id, event_path, instruction, scope))
-        print(json.dumps({
-            "consumer_addr": consumer_addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_register_reaction_slave.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -706,31 +369,11 @@ register(
     )
 )
 
-# Rmt.create_result_via_event
+# rmt_create_result_via_event
 register(
     Executable(
         description="Create a result that will be filled by an event.",
-        body="""
-        from ALaDOS.lib.Rmt import create_result_via_event
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        result_str = args.get("result_str")
-        if result_str is None:
-            raise ValueError("result_str not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        result = asyncio.run(create_result_via_event(slave_id, event_path, result_str, name))
-        print(json.dumps({
-            "result_addr": result["result_addr"],
-            "consumer_addr": result["consumer_addr"]
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "rmt_create_result_via_event.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -747,24 +390,11 @@ register(
     )
 )
 
-# Context.add
+# context_add
 register(
     Executable(
         description="Add an item to the current context.",
-        body="""
-        from ALaDOS.lib.Context import add
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(add(slave_id, id))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "context_add.py",
         header="""
         args = {
             "id": "int or str, address or name of item."
@@ -776,26 +406,11 @@ register(
     )
 )
 
-# Context.window_semantic_land
+# context_window_semantic_land
 register(
     Executable(
         description="Land context window on semantically similar item.",
-        body="""
-        from ALaDOS.lib.Context import window_semantic_land
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        query = args.get("query")
-        if query is None:
-            raise ValueError("query not given.")
-        slave_id = args["slave_id"]
-        anchor = asyncio.run(window_semantic_land(slave_id, query))
-        print(json.dumps({
-            "anchor_addr": anchor
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "context_window_semantic_land.py",
         header="""
         args = {
             "query": "str, search query."
@@ -809,24 +424,11 @@ register(
     )
 )
 
-# Context.window_land_by_addr
+# context_window_land_by_addr
 register(
     Executable(
         description="Land context window directly on an item by address.",
-        body="""
-        from ALaDOS.lib.Context import window_land_by_addr
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(window_land_by_addr(slave_id, id))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "context_window_land_by_addr.py",
         header="""
         args = {
             "id": "int or str, address or name."
@@ -838,28 +440,11 @@ register(
     )
 )
 
-# Context.window_change_size
+# context_window_change_size
 register(
     Executable(
         description="Change the size of the context window.",
-        body="""
-        from ALaDOS.lib.Context import window_change_size
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        slave_id = args["slave_id"]
-        left = args.get("left", 0)
-        right = args.get("right", 0)
-        if left == 0 and right == 0:
-            raise ValueError("Both left and right are 0, which means this is a no op and is assumed as an upstream error. Check intention.")
-        result = asyncio.run(window_change_size(slave_id, left, right))
-        print(json.dumps({
-            "size_left": result["left"],
-            "size_right": result["right"]
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "context_window_change_size.py",
         header="""
         args = {
             "left": "int (optional, default 0).",
@@ -875,26 +460,11 @@ register(
     )
 )
 
-# Context.window_move_anchor
+# context_window_move_anchor
 register(
     Executable(
         description="Move the context window anchor.",
-        body="""
-        from ALaDOS.lib.Context import window_move_anchor
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        slave_id = args["slave_id"]
-        amount = args.get("amount")
-        if amount is None:
-            raise ValueError("amount not given.")
-        new_anchor = asyncio.run(window_move_anchor(slave_id, amount))
-        print(json.dumps({
-            "new_anchor": new_anchor
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "context_window_move_anchor.py",
         header="""
         args = {
             "amount": "int, positive moves right, negative left."
@@ -908,24 +478,11 @@ register(
     )
 )
 
-# Context.unload_item
+# context_unload_item
 register(
     Executable(
         description="Unload an item from the context.",
-        body="""
-        from ALaDOS.lib.Context import unload_item
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        id = args.get("id")
-        if not id:
-            raise ValueError("id not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(unload_item(slave_id, id))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "context_unload_item.py",
         header="""
         args = {
             "id": "int or str, address or name."
@@ -937,30 +494,11 @@ register(
     )
 )
 
-# Goal.add_slave
+# goal_add_slave
 register(
     Executable(
         description="Add a slave step to the current master.",
-        body="""
-        from ALaDOS.lib.Goal import add_slave
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        instruction = args.get("instruction")
-        if instruction is None:
-            raise ValueError("instruction not given.")
-        slave_id = args["slave_id"]
-        slave_type = args.get("slave_type", "general")
-        required_results_ids = args.get("required_results_ids", [])
-        slave_name = args.get("slave_name")
-        result_name = args.get("result_name")
-        addr = asyncio.run(add_slave(slave_id, instruction, slave_type, required_results_ids, slave_name, result_name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "goal_add_slave.py",
         header="""
         args = {
             "instruction": "str, the slave instruction.",
@@ -980,21 +518,11 @@ register(
     )
 )
 
-# Goal.add_planner_slave
+# goal_add_planner_slave
 register(
     Executable(
         description="Add a planner slave to incrementally plan the master.",
-        body="""
-        from ALaDOS.lib.Goal import add_planner_slave
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        slave_id = args["slave_id"]
-        asyncio.run(add_planner_slave(slave_id))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "goal_add_planner_slave",
         header="""
         args = {},
         returns = ""
@@ -1004,28 +532,11 @@ register(
     )
 )
 
-# Goal.add_master
+# goal_add_master
 register(
     Executable(
         description="Create a new master goal.",
-        body="""
-        from ALaDOS.lib.Goal import add_master
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        instruction = args.get("instruction")
-        if instruction is None:
-            raise ValueError("instruction not given.")
-        slave_id = args["slave_id"]
-        required_ids = args.get("required_ids", [])
-        result_name = args.get("result_name")
-        addr = asyncio.run(add_master(slave_id, instruction, required_ids, result_name))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "goal_add_master.py",
         header="""
         args = {
             "instruction": "str, master instruction.",
@@ -1041,33 +552,11 @@ register(
     )
 )
 
-# Goal.add_cron_job
+# goal_add_cron_job
 register(
     Executable(
         description="Add a cron job (once or loop).",
-        body="""
-        from ALaDOS.lib.Goal import add_cron_job
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        cronjob_type = args.get("cronjob_type")
-        if cronjob_type not in ("once", "loop"):
-            raise ValueError("cronjob_type must be 'once' or 'loop'.")
-        action = args.get("action")
-        if action is None:
-            raise ValueError("action not given.")
-        time_between_runs = args.get("time_between_runs")
-        if time_between_runs is None:
-            raise ValueError("time_between_runs not given.")
-        params = args.get("params", {})
-        slave_id = args["slave_id"]
-        addr = asyncio.run(add_cron_job(slave_id, cronjob_type, action, time_between_runs, params))
-        print(json.dumps({
-            "addr": addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "goal_add_cron_job.py",
         header="""
         args = {
             "cronjob_type": "'once' or 'loop'.",
@@ -1084,24 +573,11 @@ register(
     )
 )
 
-# Result.add_master_result
+# result_add_master_result
 register(
     Executable(
         description="Append text to the master result.",
-        body="""
-        from ALaDOS.lib.Result import add_master_result
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        text = args.get("text")
-        if text is None:
-            raise ValueError("text not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(add_master_result(slave_id, text))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "result_add_master_result.py",
         header="""
         args = {
             "text": "str, text to append."
@@ -1113,24 +589,11 @@ register(
     )
 )
 
-# Result.write
+# result_write
 register(
     Executable(
         description="Write the result of the current slave instruction.",
-        body="""
-        from ALaDOS.lib.Result import write
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        text = args.get("text")
-        if text is None:
-            raise ValueError("text not given.")
-        slave_id = args["slave_id"]
-        result = asyncio.run(write(slave_id, text))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "result_write.py",
         header="""
         args = {
             "text": "str, result text."
@@ -1142,27 +605,11 @@ register(
     )
 )
 
-# Web.search_fulltext
+# web_search_fulltext
 register(
     Executable(
         description="Search web and return full text of top pages.",
-        body="""
-        from ALaDOS.lib.Web import search_fulltext
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        query = args.get("query")
-        if query is None:
-            raise ValueError("query not given.")
-        slave_id = args["slave_id"]
-        websites_amount = args.get("websites_amount", 3)
-        content = asyncio.run(search_fulltext(slave_id, query, websites_amount))
-        print(json.dumps({
-            "full_result": content
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "web_search_fulltext.py",
         header="""
         args = {
             "query": "str, search query.",
@@ -1177,27 +624,11 @@ register(
     )
 )
 
-# Web.search
+# web_search
 register(
     Executable(
         description="Search web and return list of URLs with titles and snippets.",
-        body="""
-        from ALaDOS.lib.Web import search
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        query = args.get("query")
-        if query is None:
-            raise ValueError("query not given.")
-        amount_results = args.get("amount_results")
-        if amount_results is None:
-            raise ValueError("amount_results not given.")
-        slave_id = args["slave_id"]
-        results = asyncio.run(search(slave_id, query, amount_results))
-        print(json.dumps(results))
-        """,
+        body=Path(__file__) / "executable_files" / "web_search.py",
         header="""
         args = {
             "query": "str, search query.",
@@ -1217,29 +648,11 @@ register(
     )
 )
 
-# Web.get
+# web_get
 register(
     Executable(
         description="Perform HTTP GET request.",
-        body="""
-        from ALaDOS.lib.Web import get
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        url = args.get("url")
-        if url is None:
-            raise ValueError("url not given.")
-        slave_id = args["slave_id"]
-        timeout = args.get("timeout", 10)
-        return_type = args.get("return_type", "extracted")
-        headers = args.get("headers", {})
-        content = asyncio.run(get(slave_id, url, timeout, return_type, headers))
-        print(json.dumps({
-            "content": content
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "web_get.py",
         header="""
         args = {
             "url": "str, URL.",
@@ -1256,30 +669,11 @@ register(
     )
 )
 
-# Web.post
+# web_post
 register(
     Executable(
         description="Perform HTTP POST request.",
-        body="""
-        from ALaDOS.lib.Web import post
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        url = args.get("url")
-        if url is None:
-            raise ValueError("url not given.")
-        slave_id = args["slave_id"]
-        timeout = args.get("timeout", 10)
-        return_type = args.get("return_type", "extracted")
-        headers = args.get("headers", {})
-        payload = args.get("payload", "")
-        content = asyncio.run(post(slave_id, url, timeout, return_type, headers, payload))
-        print(json.dumps({
-            "content": content
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "web_post.py",
         header="""
         args = {
             "url": "str, URL.",
@@ -1297,30 +691,11 @@ register(
     )
 )
 
-# Event.register_reaction_rmt
+# event_register_reaction_rmt
 register(
     Executable(
         description="Register an RMT as reaction to an event (Event module).",
-        body="""
-        from ALaDOS.lib.Event import register_reaction_rmt
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        rmt_id = args.get("rmt_id")
-        if not rmt_id:
-            raise ValueError("rmt_id not given.")
-        args_dict = args.get("args", {})
-        slave_id = args["slave_id"]
-        consumer_addr = asyncio.run(register_reaction_rmt(slave_id, event_path, rmt_id, args_dict))
-        print(json.dumps({
-            "consumer_addr": consumer_addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "event_register_reaction_rmt.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -1336,30 +711,11 @@ register(
     )
 )
 
-# Event.register_reaction_slave
+# event_register_reaction_slave
 register(
     Executable(
         description="Register a slave as reaction to an event (Event module).",
-        body="""
-        from ALaDOS.lib.Event import register_reaction_slave
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        instruction = args.get("instruction")
-        if instruction is None:
-            raise ValueError("instruction not given.")
-        slave_id = args["slave_id"]
-        scope = args.get("scope", "general")
-        consumer_addr = asyncio.run(register_reaction_slave(slave_id, event_path, instruction, scope))
-        print(json.dumps({
-            "consumer_addr": consumer_addr
-        }))
-        """,
+        body=Path(__file__) / "executable_files" / "event_register_reaction_slave.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -1375,28 +731,11 @@ register(
     )
 )
 
-# Event.create_result
+# event_create_result
 register(
     Executable(
         description="Create a result filled by an event (Event module).",
-        body="""
-        from ALaDOS.lib.Event import create_result
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        event_path = args.get("event_path")
-        if event_path is None:
-            raise ValueError("event_path not given.")
-        result_str = args.get("result_str")
-        if result_str is None:
-            raise ValueError("result_str not given.")
-        slave_id = args["slave_id"]
-        name = args.get("name")
-        result = asyncio.run(create_result(slave_id, event_path, result_str, name))
-        print(json.dumps(result))
-        """,
+        body=Path(__file__) / "executable_files" / "event_create_result.py",
         header="""
         args = {
             "event_path": "str, NATS event subscription.",
@@ -1413,27 +752,11 @@ register(
     )
 )
 
-# Report.report_paradoxal_information
+# report_report_paradoxal_information
 register(
     Executable(
         description="Report paradoxical information (aborts execution).",
-        body="""
-        from ALaDOS.lib.Report import report_paradoxal_information
-        import json
-        import sys
-        import asyncio
-        
-        args = json.load(sys.stdin)
-        items = args.get("items")
-        if items is None:
-            raise ValueError("items not given.")
-        paradox = args.get("paradox")
-        if paradox is None:
-            raise ValueError("paradox not given.")
-        slave_id = args["slave_id"]
-        asyncio.run(report_paradoxal_information(slave_id, items, paradox))
-        print("")
-        """,
+        body=Path(__file__) / "executable_files" / "report_report_paradoxal_information.py",
         # NOTE: The error is correctly propagated because syscall is executed in tool
         header="""
         args = {

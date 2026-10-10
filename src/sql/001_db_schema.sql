@@ -79,14 +79,12 @@ CREATE TABLE IF NOT EXISTS names(
 );
 
 CREATE TABLE IF NOT EXISTS knowledge (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR, 
     content TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
 
 CREATE TABLE IF NOT EXISTS executables (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     header TEXT NOT NULL, -- the usage manual (imperative)
     body TEXT NOT NULL -- NOTE : Names, aka titles, are always stored in names table
 );
@@ -94,15 +92,13 @@ CREATE TABLE IF NOT EXISTS executables (
 
 
 CREATE TABLE IF NOT EXISTS logs (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW()))::BIGINT,
     content JSONB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS results (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     content_str TEXT,
     ready BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT, -- Status, e.g. error, paradox, impossible instruction. TODO : Make ENUM
@@ -121,8 +117,7 @@ CREATE TABLE IF NOT EXISTS results (
 );
 
 CREATE TABLE IF NOT EXISTS masters (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     instruction TEXT NOT NULL,
     result_addr BIGINT NOT NULL
         REFERENCES results(addr)
@@ -132,13 +127,11 @@ CREATE TABLE IF NOT EXISTS masters (
 
 
 CREATE TABLE IF NOT EXISTS reusable_master_templates(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() 
-        REFERENCES addrs(addr) FOLLOW
+    addr ADDR
 );
 
 CREATE TABLE IF NOT EXISTS rmt_slaves(
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr)  FOLLOW,
+    addr ADDR,
     instruction TEXT NOT NULL,
     scope slave_scope NOT NULL DEFAULT 'general',
     template_addr BIGINT
@@ -147,8 +140,7 @@ CREATE TABLE IF NOT EXISTS rmt_slaves(
 );
 
 CREATE TABLE IF NOT EXISTS master_context (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES masters(addr) FOLLOW,
+    addr ADDR,
     window_anchor_exe BIGINT
         REFERENCES executables(addr) 
             ON DELETE SET NULL
@@ -175,47 +167,37 @@ CREATE TABLE IF NOT EXISTS master_context (
 );
 
 CREATE TABLE IF NOT EXISTS master_load (
-    master_addr BIGINT 
-        REFERENCES masters(addr) FOLLOW,
-    item_addr BIGINT 
-        REFERENCES addrs(addr) FOLLOW,
+    master_addr BIGINT REFERENCES masters(addr) FOLLOW,
+    item_addr BIGINT REFERENCES addrs(addr) FOLLOW,
     PRIMARY KEY (master_addr, item_addr)
 );
 
 
 CREATE TABLE IF NOT EXISTS slaves (
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY 
-        REFERENCES addrs(addr) FOLLOW,
-    master_addr BIGINT
-        REFERENCES masters(addr) FOLLOW,
+    addr ADDR,
+    master_addr BIGINT REFERENCES masters(addr) FOLLOW,
     instruction TEXT NOT NULL,
-    result_addr BIGINT UNIQUE
-        REFERENCES results(addr) FOLLOW,
+    result_addr BIGINT UNIQUE REFERENCES results(addr) FOLLOW,
     scope BIGINT REFERENCES scopes(addr)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS slave_req (
-    slave_addr BIGINT 
-        REFERENCES slaves(addr) FOLLOW,
-    req_addr BIGINT
-        REFERENCES results(addr) FOLLOW,
+    slave_addr BIGINT REFERENCES slaves(addr) FOLLOW,
+    req_addr BIGINT REFERENCES results(addr) FOLLOW,
     PRIMARY KEY (slave_addr, req_addr)
 );
 
 CREATE TABLE IF NOT EXISTS master_req (
-    master_addr BIGINT
-        REFERENCES masters(addr) FOLLOW,
-    req_addr BIGINT
-        REFERENCES results(addr) FOLLOW,
+    master_addr BIGINT REFERENCES masters(addr) FOLLOW,
+    req_addr BIGINT REFERENCES results(addr) FOLLOW,
     PRIMARY KEY (master_addr, req_addr)
 );
 
 
 CREATE TABLE IF NOT EXISTS cronjob_once(
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     name TEXT NOT NULL, -- This the cronjob action name, not name of this exact cronjob instance.
     args JSONB NOT NULL,
     start_after INTEGER NOT NULL, -- unix epoch
@@ -232,8 +214,7 @@ CREATE TABLE IF NOT EXISTS cronjob_once(
 );
 
 CREATE TABLE IF NOT EXISTS cronjob_loop(
-    addr BIGINT DEFAULT new_addr() PRIMARY KEY
-        REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     name TEXT NOT NULL, -- this is cronjob action name.
     args JSONB NOT NULL,
     execute_every INTEGER NOT NULL, -- seconds
@@ -268,7 +249,7 @@ DO $$
 $$;
 
 CREATE TABLE IF NOT EXISTS event_consumers(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW,
+    addr ADDR,
     event_path TEXT NOT NULL,
     action_type event_consumers_action_types NOT NULL
 );
@@ -314,14 +295,14 @@ CREATE TABLE IF NOT EXISTS metadata_dag(
 
 
 CREATE TABLE IF NOT EXISTS scopes(
-    addr BIGINT PRIMARY KEY DEFAULT new_addr() REFERENCES addrs(addr) FOLLOW
+    addr ADDR
 );
 
 
 CREATE TABLE IF NOT EXISTS scopes_tools(
     scope_addr BIGINT REFERENCES scopes(addr) FOLLOW,
-    tool_addr BIGINT REFERENCES executables(addr) FOLLOW
-    PRIMARY KEY (scope_addr, tool_scope)
+    tool_addr BIGINT REFERENCES executables(addr) FOLLOW,
+    PRIMARY KEY (scope_addr, tool_addr)
 );
 
 
@@ -364,4 +345,4 @@ CREATE OR REPLACE VIEW addrs_tables AS
     UNION ALL
     SELECT addr, 'cronjob_once' AS type FROM cronjob_once
     UNION ALL
-    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop;
+    SELECT addr, 'cronjob_loop' AS type FROM cronjob_loop; -- TODO : Update this as well Consider using a pre processor to create this shit.

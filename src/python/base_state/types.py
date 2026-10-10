@@ -4,6 +4,7 @@ The types for this subsystem.
 """
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine, Literal, TypeAlias, Union
+from pathlib import Path
 
 from nats.aio.client import Client
 from nats.aio.msg import Msg
@@ -41,9 +42,9 @@ class Knowledge:
 @dataclass(slots=True)
 class Executable:
     description: str
-    body: str # TODO : Allow passing in a pathlib.Path object.
+    body: str|Path
     header: str # TODO : Refactor the executables to include langauge.
-    scope: int # TODO : Actually implement the handling of insertion into a scope.
+#    scope: int # TODO : Actually implement the handling of insertion into a scope.
     name: str = field()
     addr: int = field(default_factory=virtual_new_addr)
 

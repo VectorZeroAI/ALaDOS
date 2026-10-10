@@ -258,7 +258,7 @@ Further documentation of the states inlined as docstrings in the match statement
                     trace_hooks.new_execution(metadata_c)
                     
                     checkpoint()
-                    for i, call in enumerate(curr.tool_calls):
+                    for i, call in enumerate(curr.tool_calls): # TODO : Factor all loops out into states of the state mashine!!!
                         checkpoint()
                         try:
                             with conn.transaction():

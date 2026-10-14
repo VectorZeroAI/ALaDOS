@@ -205,6 +205,7 @@ For cache invalidation use a listener thread that puts in interrupts.
 Also put more checkpoint() into core, its population was cut during core refactor.
 
 Actual implementation pseudocode: 
+~~~python
 
 TOOLS[name: str]: Callable[[], ActionConfirmation]
 TOOLS_LOCK = threading.Lock()
@@ -212,9 +213,10 @@ TOOLS_LOCK = threading.Lock()
 interrupt_invalidate(tool_name: str):
     if tool_name in TOOLS:
         with TOOLS_LOCK:
-            remove!
+            remove(tool_name)
 
-Normal case:
+
+#Normal case:
 try:
     with TOOLS_LOCK:
         tool = TOOLS[name]
@@ -224,11 +226,12 @@ except CorrectExceptionForMissing:
         TOOLS[name] = tool
 
 tool()
+~~~
 
 Optionally use bulk retrieval and then bulk execution, or one at a time looping,
 its going to be slow as fuck because python anyways, so who cares.
 
-Optionally TOOLS_LOCK can be refined into TOOLS_LOCK: dict[str, threading.Lock] for more atomic locks on tools for less blocking.
+Optionally TOOLS_LOCK can be refined into `TOOLS_LOCK: dict[str, threading.Lock]` for more atomic locks on tools for less blocking.
 
 #### DB side tool system rewrite [ ]
 
@@ -240,7 +243,7 @@ Tools that are part of protocolls are not to be invoked directly.
 ##### Omni language tools [ ]
 Design is pretty simple, we first define a language in the DB table "languages"
 **languages**
-addr
+addr ADDR
 compiled BOOLEAN NOT NULL
 extension TEXT NOT NULL
 install_command BashText NOT NULL (Its OS dependant? Well ... write a tool that gives OS in return, and make AI figure it out. But what about built in languages? Python? Well in python it will be empty string cause python is there as dependancy of ALaDOS kernel.)
